@@ -98,3 +98,68 @@ class AccessibleStoresTests(TestCase):
             is_active=False,
         )
         self.assertFalse(get_accessible_stores(admin).exists())
+
+class MyStoresAPITests(TestCase):
+    def setUp(self):
+        self.url = "/api/me/stores/"
+        self.company = Company.objects.create(name="Empresa API")
+
+        self.store = Store.objects.create(
+            company=self.company, code="001", name="Matriz"
+        )
+        self.other_store = Store.objects.create(
+            company=self.company, code="002", name="Filial"
+        )
+
+        self.user = User.objects.create_user(username="vendedor_api")
+
+        self.membership = StoreMembership.objects.create(
+            user=self.user,
+            store=self.store,
+            role=StoreMembership.Role.SELLER,
+        )
+
+    def test_anonymous_request_is_denied(self):
+        response = self.client.get(
+            self.url, HTTP_ACCEPT="application/json"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_returns_only_authorized_store(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.url, HTTP_ACCEPT="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            [
+                {
+                    "id": self.store.pk,
+                    "code": "001",
+                    "name": "Matriz",
+                }
+            ],
+        )
+
+    def test_revocation_applies_to_existing_session(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.url, HTTP_ACCEPT="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 1)
+
+        self.membership.is_active = False
+        self.membership.save()
+
+        # Repete a consulta na mesma sessão, sem novo login.
+        response = self.client.get(
+            self.url, HTTP_ACCEPT="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])        
