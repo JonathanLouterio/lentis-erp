@@ -73,7 +73,7 @@ class MyCustomersAPITests(TestCase):
             f"{self.url}?store_id={self.store.pk}",
             {
                 "name": "Novo Cliente",
-                "cpf": "333.333.333-33",
+                "cpf": "529.982.247-25",
                 "phone": "(41) 99999-0000",
             },
             format="json",
@@ -82,7 +82,7 @@ class MyCustomersAPITests(TestCase):
         self.assertEqual(response.status_code, 201)
         customer = Customer.objects.get(name="Novo Cliente")
         self.assertEqual(customer.store_id, self.store.pk)
-        self.assertEqual(customer.cpf, "33333333333")
+        self.assertEqual(customer.cpf, "52998224725")
 
     def test_cannot_create_customer_in_other_store(self):
         self.client.force_authenticate(self.user)
