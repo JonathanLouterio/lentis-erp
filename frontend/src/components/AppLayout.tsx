@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getMyStores } from '../api'
-import type { AccessibleStore, CurrentUser, ThemePreference } from '../api'
+import type { FormEvent } from 'react'
+import { ApiError, createCustomer, getMyCustomers, getMyStores } from '../api'
+import type { AccessibleStore, CurrentUser, Customer, NewCustomer, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
 import './AppLayout.css'
+import './Customers.css'
 
 type AppLayoutProps = {
   user: CurrentUser
@@ -46,6 +48,16 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [loadingStores, setLoadingStores] = useState(true)
   const [storesError, setStoresError] = useState('')
   const [retry, setRetry] = useState(0)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loadingCustomers, setLoadingCustomers] = useState(false)
+  const [customersError, setCustomersError] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerFormOpen, setCustomerFormOpen] = useState(false)
+  const [savingCustomer, setSavingCustomer] = useState(false)
+  const [customerFormError, setCustomerFormError] = useState('')
+  const [newCustomer, setNewCustomer] = useState<NewCustomer>({
+    name: '', cpf: '', phone: '', email: '',
+  })
 
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
   const initials = displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
@@ -80,6 +92,47 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
   const selectedStore = stores.find((store) => String(store.id) === selectedStoreId)
   const selectedRole = selectedStore?.role_label || 'Sem perfil'
+  const filteredCustomers = customers.filter((customer) => {
+    const query = customerSearch.trim().toLowerCase()
+    if (!query) return true
+    return [customer.name, customer.cpf || '', customer.phone, customer.email]
+      .some((value) => value.toLowerCase().includes(query))
+  })
+
+  useEffect(() => {
+    if (page !== 'Clientes' || !selectedStore) return
+    let ignore = false
+    setLoadingCustomers(true)
+    setCustomersError('')
+    void getMyCustomers(selectedStore.id)
+      .then((result) => { if (!ignore) setCustomers(result) })
+      .catch(() => { if (!ignore) setCustomersError('Não foi possível carregar os clientes.') })
+      .finally(() => { if (!ignore) setLoadingCustomers(false) })
+    return () => { ignore = true }
+  }, [page, selectedStoreId, selectedStore?.id])
+
+  function closeCustomerForm() {
+    setCustomerFormOpen(false)
+    setCustomerFormError('')
+    setNewCustomer({ name: '', cpf: '', phone: '', email: '' })
+  }
+
+  async function handleCreateCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedStore || savingCustomer) return
+    setSavingCustomer(true)
+    setCustomerFormError('')
+    try {
+      const created = await createCustomer(selectedStore.id, newCustomer)
+      setCustomers((current) => [created, ...current])
+      closeCustomerForm()
+    } catch (err) {
+      setCustomerFormError(err instanceof Error ? err.message : 'Não foi possível salvar o cliente.')
+    } finally {
+      setSavingCustomer(false)
+    }
+  }
+
 
   function retryStores() {
     setStoresError('')
@@ -189,6 +242,46 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             <section className="erp-card">
               <h1>Nenhuma unidade disponível</h1>
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
+            </section>
+          ) : page === 'Clientes' ? (
+            <section className="erp-clientes-page">
+              <div className="erp-page-heading erp-list-heading">
+                <div>
+                  <span className="erp-kicker">CADASTROS</span>
+                  <h1>Clientes</h1>
+                  <p>Clientes cadastrados em {selectedStore.name}.</p>
+                </div>
+                <button className="erp-action-button" type="button"
+                  onClick={() => { setCustomerFormError(''); setCustomerFormOpen(true) }}>
+                  Novo cliente
+                </button>
+              </div>
+              {customerFormOpen && (
+                <form className="erp-card erp-customer-form" onSubmit={(event) => void handleCreateCustomer(event)}>
+                  <div className="erp-form-heading">
+                    <div><span className="erp-card-label">NOVO CADASTRO</span><h2>Adicionar cliente</h2></div>
+                    <button type="button" className="erp-secondary-button" onClick={closeCustomerForm}>Cancelar</button>
+                  </div>
+                  <div className="erp-form-grid">
+                    <label>Nome completo<input required value={newCustomer.name} onChange={(event) => setNewCustomer({ ...newCustomer, name: event.target.value })} /></label>
+                    <label>CPF<input placeholder="000.000.000-00" value={newCustomer.cpf} onChange={(event) => setNewCustomer({ ...newCustomer, cpf: event.target.value })} /></label>
+                    <label>Telefone<input value={newCustomer.phone} onChange={(event) => setNewCustomer({ ...newCustomer, phone: event.target.value })} /></label>
+                    <label>E-mail<input type="email" value={newCustomer.email} onChange={(event) => setNewCustomer({ ...newCustomer, email: event.target.value })} /></label>
+                  </div>
+                  {customerFormError && <p className="erp-alert" role="alert">{customerFormError}</p>}
+                  <button className="erp-action-button" type="submit" disabled={savingCustomer}>{savingCustomer ? 'Salvando…' : 'Salvar cliente'}</button>
+                </form>
+              )}
+              <div className="erp-card erp-customer-list-card">
+                <div className="erp-list-toolbar">
+                  <input aria-label="Buscar clientes" placeholder="Buscar por nome, CPF, telefone ou e-mail" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} />
+                  <span className="erp-card-label">{filteredCustomers.length} cliente{filteredCustomers.length === 1 ? '' : 's'}</span>
+                </div>
+                {loadingCustomers ? <p role="status">Carregando clientes…</p>
+                  : customersError ? <p className="erp-alert" role="alert">{customersError}</p>
+                  : filteredCustomers.length === 0 ? <p>Nenhum cliente encontrado nesta unidade.</p>
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td></tr>)}</tbody></table></div>}
+              </div>
             </section>
           ) : page === 'Visão geral' ? (
             <>
