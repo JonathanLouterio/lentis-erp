@@ -1,3 +1,5 @@
+from django.db.models import CharField, F, Value
+
 from organizations.models import Store
 
 
@@ -11,9 +13,11 @@ def get_accessible_stores(user):
     )
 
     if user.is_superuser:
-        return stores
+        return stores.annotate(
+            access_role=Value("superuser", output_field=CharField()),
+        )
 
     return stores.filter(
         memberships__user=user,
         memberships__is_active=True,
-    )
+    ).annotate(access_role=F("memberships__role"))

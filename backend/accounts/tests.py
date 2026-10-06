@@ -140,6 +140,8 @@ class MyStoresAPITests(TestCase):
                     "id": self.store.pk,
                     "code": "001",
                     "name": "Matriz",
+                    "role": "seller",
+                    "role_label": "Vendedor",
                 }
             ],
         )
@@ -162,4 +164,61 @@ class MyStoresAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])        
+        self.assertEqual(response.json(), [])
+
+    def test_roles_are_specific_to_user_and_store(self):
+        StoreMembership.objects.create(
+            user=self.user,
+            store=self.other_store,
+            role=StoreMembership.Role.MANAGER,
+        )
+        other_user = User.objects.create_user(username="outro_perfil")
+        StoreMembership.objects.create(
+            user=other_user,
+            store=self.store,
+            role=StoreMembership.Role.FINANCE,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [(item["id"], item["role"], item["role_label"])
+             for item in response.json()],
+            [
+                (self.store.pk, "seller", "Vendedor"),
+                (self.other_store.pk, "manager", "Gerente"),
+            ],
+        )
+
+    def test_role_change_applies_to_existing_session(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(self.url).json()[0]["role"], "seller")
+
+        self.membership.role = StoreMembership.Role.CASHIER
+        self.membership.save(update_fields=["role"])
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["role"], "cashier")
+        self.assertEqual(response.json()[0]["role_label"], "Caixa")
+
+    def test_superuser_role_with_and_without_membership(self):
+        admin = User.objects.create_superuser(username="admin_perfil")
+        StoreMembership.objects.create(
+            user=admin,
+            store=self.store,
+            role=StoreMembership.Role.SELLER,
+        )
+        self.client.force_login(admin)
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [(item["id"], item["role"], item["role_label"])
+             for item in response.json()],
+            [
+                (self.store.pk, "superuser", "Administrador do sistema"),
+                (self.other_store.pk, "superuser", "Administrador do sistema"),
+            ],
+        )
