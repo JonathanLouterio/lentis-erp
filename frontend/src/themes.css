@@ -1,0 +1,179 @@
+/* Seletor de tema */
+
+.erp-topbar-heading {
+  margin-right: auto;
+}
+
+.erp-theme-control {
+  min-width: 0;
+}
+
+.erp-theme-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.erp-theme-field label,
+.erp-theme-field > span {
+  color: var(--erp-muted);
+  font-size: 12px;
+}
+
+.erp-theme-field select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--erp-border);
+  border-radius: 7px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-size: 12px;
+}
+
+.erp-theme-error {
+  max-width: 240px;
+  margin: 6px 0 0;
+  color: #be123c;
+  font-size: 12px;
+}
+
+/* Área interna no tema escuro */
+
+html[data-theme='dark'] {
+  background: #0f172a;
+}
+
+html[data-theme='dark'] body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .erp-layout {
+  --erp-border: #2b364b;
+  --erp-muted: #a6b2c5;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .erp-sidebar,
+[data-theme='dark'] .erp-topbar,
+[data-theme='dark'] .erp-card {
+  background: #172033;
+}
+
+[data-theme='dark'] .erp-brand {
+  color: #f1eafa;
+}
+
+[data-theme='dark'] .erp-brand small,
+[data-theme='dark'] .erp-kicker {
+  color: #c4a4ed;
+}
+
+[data-theme='dark'] .erp-menu-label {
+  color: #a6b2c5;
+}
+
+[data-theme='dark'] .erp-nav-button,
+[data-theme='dark'] .erp-submenu button,
+[data-theme='dark'] .erp-icon-button {
+  color: #b8c3d5;
+}
+
+[data-theme='dark'] .erp-nav-button:hover,
+[data-theme='dark'] .erp-submenu button:hover,
+[data-theme='dark'] .erp-icon-button:hover {
+  background: #263149;
+  color: #ede5fa;
+}
+
+[data-theme='dark'] .erp-nav-button.is-active,
+[data-theme='dark'] .erp-submenu button.is-active,
+[data-theme='dark'] .erp-avatar,
+[data-theme='dark'] .erp-development-badge {
+  background: #36294e;
+  color: #dbc3fa;
+}
+
+[data-theme='dark'] .erp-store-field select,
+[data-theme='dark'] .erp-theme-field select {
+  background: #111a2c;
+  color: #e2e8f0;
+  border-color: #3a4862;
+}
+
+[data-theme='dark'] .erp-content .erp-alert {
+  background: #442335;
+  color: #fecdd3;
+}
+
+[data-theme='dark'] .erp-theme-error {
+  color: #fda4af;
+}
+
+[data-theme='dark'] .erp-action-button {
+  background: #8055b5;
+  color: #fff;
+}
+
+/* Login no tema escuro */
+
+[data-theme='dark'] .access-panel {
+  background: radial-gradient(
+    ellipse at top left,
+    #1e2940,
+    #111827 65%
+  );
+  color: #e2e8f0;
+}
+
+[data-theme='dark'] .access-panel h1,
+[data-theme='dark'] .access-panel label,
+[data-theme='dark'] .account-summary strong {
+  color: #f1f5f9;
+}
+
+[data-theme='dark'] .intro-text,
+[data-theme='dark'] .session-status,
+[data-theme='dark'] .login-footer,
+[data-theme='dark'] .account-summary span {
+  color: #a6b2c5;
+}
+
+[data-theme='dark'] .eyebrow {
+  color: #c4a4ed;
+}
+
+[data-theme='dark'] .login-footer,
+[data-theme='dark'] .account-summary {
+  border-color: #334155;
+}
+
+[data-theme='dark'] .account-summary {
+  background: #172033;
+}
+
+[data-theme='dark'] .error-message {
+  background: #442335;
+  color: #fecdd3;
+  border-color: #723449;
+}
+
+@media (max-width: 1000px) {
+  .erp-topbar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .erp-theme-field {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .erp-theme-field select {
+    min-width: 0;
+    max-width: 100%;
+  }
+}

@@ -8,10 +8,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from rest_framework.generics import RetrieveAPIView
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.generics import RetrieveAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 
-from .serializers import CurrentUserSerializer
+from .serializers import CurrentUserSerializer, UserPreferencesSerializer
 
 
 @never_cache
@@ -101,3 +102,12 @@ def logout_view(request):
         "detail": "Sessão encerrada.",
         "csrfToken": get_token(request),
     })
+@method_decorator(never_cache, name="dispatch")
+class UserPreferencesView(RetrieveUpdateAPIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserPreferencesSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_object(self):
+        return self.request.user

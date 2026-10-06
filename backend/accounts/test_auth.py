@@ -56,6 +56,7 @@ class SessionAuthTests(TestCase):
                 "username": self.user.username,
                 "first_name": "",
                 "last_name": "",
+                "theme": "system",
             },
         )
 

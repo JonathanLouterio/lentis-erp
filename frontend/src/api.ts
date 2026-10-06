@@ -1,8 +1,11 @@
+export type ThemePreference = 'light' | 'dark' | 'system'
+
 export type CurrentUser = {
   id: number
   username: string
   first_name: string
   last_name: string
+  theme: ThemePreference
 }
 
 export class ApiError extends Error {
@@ -104,4 +107,18 @@ export type AccessibleStore = {
 
 export function getMyStores(): Promise<AccessibleStore[]> {
   return request<AccessibleStore[]>('/api/me/stores/')
+}
+export async function updateTheme(
+  theme: ThemePreference,
+): Promise<{ theme: ThemePreference }> {
+  const token = await getCsrfToken()
+
+  return request<{ theme: ThemePreference }>('/api/me/preferences/', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': token,
+    },
+    body: JSON.stringify({ theme }),
+  })
 }

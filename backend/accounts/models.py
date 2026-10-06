@@ -4,7 +4,17 @@ from django.db import models
 
 
 class User(AbstractUser):
-    pass
+    class Theme(models.TextChoices):
+        LIGHT = "light", "Claro"
+        DARK = "dark", "Escuro"
+        SYSTEM = "system", "Automático"
+
+    theme = models.CharField(
+        "Tema",
+        max_length=10,
+        choices=Theme.choices,
+        default=Theme.SYSTEM,
+    )
 
 
 class StoreMembership(models.Model):
