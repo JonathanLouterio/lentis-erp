@@ -103,6 +103,8 @@ export type AccessibleStore = {
   id: number
   code: string
   name: string
+  role: string
+  role_label: string
 }
 
 export function getMyStores(): Promise<AccessibleStore[]> {

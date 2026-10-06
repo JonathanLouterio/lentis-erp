@@ -79,6 +79,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }, [user.id, retry])
 
   const selectedStore = stores.find((store) => String(store.id) === selectedStoreId)
+  const selectedRole = selectedStore?.role_label || 'Sem perfil'
 
   function retryStores() {
     setStoresError('')
@@ -140,6 +141,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             <div className="erp-profile-info">
               <strong title={displayName}>{displayName}</strong>
               <span title={user.username}>@{user.username}</span>
+              <span className="erp-profile-role">{selectedRole}</span>
             </div>
           )}
           <button type="button" className="erp-icon-button" onClick={() => void onLogout()}
@@ -200,6 +202,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   <span className="erp-card-label">Unidade selecionada</span>
                   <h2>{selectedStore.name}</h2>
                   <p>Código {selectedStore.code}</p>
+                  <p className="erp-store-role">Perfil: {selectedRole}</p>
                 </section>
                 <section className="erp-card">
                   <span className="erp-card-label">Seu acesso</span>
