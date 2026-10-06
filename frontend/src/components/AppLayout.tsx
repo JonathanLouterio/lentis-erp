@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ApiError, createCustomer, getMyCustomers, getMyStores } from '../api'
-import type { AccessibleStore, CurrentUser, Customer, NewCustomer, ThemePreference } from '../api'
+import { ApiError, createCustomer, deleteCustomer, getMyCustomers, getMyStores, updateCustomer } from '../api'
+import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
 import './AppLayout.css'
 import './Customers.css'
@@ -55,9 +55,14 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [customerFormOpen, setCustomerFormOpen] = useState(false)
   const [savingCustomer, setSavingCustomer] = useState(false)
   const [customerFormError, setCustomerFormError] = useState('')
-  const [newCustomer, setNewCustomer] = useState<NewCustomer>({
-    name: '', cpf: '', phone: '', email: '',
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const emptyCustomer = (): CustomerPayload => ({
+    person_type: 'individual', name: '', trade_name: '', cpf: '', cnpj: '', rg: '',
+    state_registration: '', birth_date: '', phone: '', whatsapp: '', email: '',
+    zip_code: '', street: '', address_number: '', address_complement: '',
+    neighborhood: '', city: '', state: '', notes: '',
   })
+  const [customerForm, setCustomerForm] = useState<CustomerPayload>(emptyCustomer)
 
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
   const initials = displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
@@ -95,7 +100,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const filteredCustomers = customers.filter((customer) => {
     const query = customerSearch.trim().toLowerCase()
     if (!query) return true
-    return [customer.name, customer.cpf || '', customer.phone, customer.email]
+    return [customer.name, customer.trade_name, customer.cpf || '', customer.cnpj || '', customer.phone, customer.email]
       .some((value) => value.toLowerCase().includes(query))
   })
 
@@ -114,20 +119,62 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   function closeCustomerForm() {
     setCustomerFormOpen(false)
     setCustomerFormError('')
-    setNewCustomer({ name: '', cpf: '', phone: '', email: '' })
+    setEditingCustomer(null)
+    setCustomerForm(emptyCustomer())
   }
 
-  async function handleCreateCustomer(event: FormEvent<HTMLFormElement>) {
+  function openNewCustomer() {
+    setEditingCustomer(null)
+    setCustomerForm(emptyCustomer())
+    setCustomerFormError('')
+    setCustomerFormOpen(true)
+  }
+
+  function openEditCustomer(customer: Customer) {
+    setEditingCustomer(customer)
+    setCustomerForm({
+      person_type: customer.person_type, name: customer.name, trade_name: customer.trade_name || '',
+      cpf: customer.cpf || '', cnpj: customer.cnpj || '', rg: customer.rg || '',
+      state_registration: customer.state_registration || '', birth_date: customer.birth_date || '',
+      phone: customer.phone || '', whatsapp: customer.whatsapp || '', email: customer.email || '',
+      zip_code: customer.zip_code || '', street: customer.street || '', address_number: customer.address_number || '',
+      address_complement: customer.address_complement || '', neighborhood: customer.neighborhood || '',
+      city: customer.city || '', state: customer.state || '', notes: customer.notes || '',
+    })
+    setCustomerFormError('')
+    setCustomerFormOpen(true)
+  }
+
+  async function handleSaveCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedStore || savingCustomer) return
     setSavingCustomer(true)
     setCustomerFormError('')
     try {
-      const created = await createCustomer(selectedStore.id, newCustomer)
-      setCustomers((current) => [created, ...current])
+      const saved = editingCustomer
+        ? await updateCustomer(selectedStore.id, editingCustomer.id, customerForm)
+        : await createCustomer(selectedStore.id, customerForm)
+      setCustomers((current) => editingCustomer
+        ? current.map((item) => item.id === saved.id ? saved : item)
+        : [saved, ...current])
       closeCustomerForm()
     } catch (err) {
       setCustomerFormError(err instanceof Error ? err.message : 'Não foi possível salvar o cliente.')
+    } finally {
+      setSavingCustomer(false)
+    }
+  }
+
+  async function handleDeleteCustomer(customer: Customer) {
+    if (!selectedStore || savingCustomer) return
+    if (!window.confirm(`Inativar o cliente "${customer.name}"?`)) return
+    setSavingCustomer(true)
+    setCustomersError('')
+    try {
+      await deleteCustomer(selectedStore.id, customer.id)
+      setCustomers((current) => current.filter((item) => item.id !== customer.id))
+    } catch (err) {
+      setCustomersError(err instanceof Error ? err.message : 'Somente administradores podem excluir clientes.')
     } finally {
       setSavingCustomer(false)
     }
@@ -252,24 +299,36 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   <p>Clientes cadastrados em {selectedStore.name}.</p>
                 </div>
                 <button className="erp-action-button" type="button"
-                  onClick={() => { setCustomerFormError(''); setCustomerFormOpen(true) }}>
+                  onClick={openNewCustomer}>
                   Novo cliente
                 </button>
               </div>
               {customerFormOpen && (
-                <form className="erp-card erp-customer-form" onSubmit={(event) => void handleCreateCustomer(event)}>
+                <form className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveCustomer(event)}>
                   <div className="erp-form-heading">
-                    <div><span className="erp-card-label">NOVO CADASTRO</span><h2>Adicionar cliente</h2></div>
+                    <div><span className="erp-card-label">{editingCustomer ? 'EDIÇÃO' : 'NOVO CADASTRO'}</span><h2>{editingCustomer ? 'Editar cliente' : 'Adicionar cliente'}</h2></div>
                     <button type="button" className="erp-secondary-button" onClick={closeCustomerForm}>Cancelar</button>
                   </div>
                   <div className="erp-form-grid">
-                    <label>Nome completo<input required value={newCustomer.name} onChange={(event) => setNewCustomer({ ...newCustomer, name: event.target.value })} /></label>
-                    <label>CPF<input placeholder="000.000.000-00" value={newCustomer.cpf} onChange={(event) => setNewCustomer({ ...newCustomer, cpf: event.target.value })} /></label>
-                    <label>Telefone<input value={newCustomer.phone} onChange={(event) => setNewCustomer({ ...newCustomer, phone: event.target.value })} /></label>
-                    <label>E-mail<input type="email" value={newCustomer.email} onChange={(event) => setNewCustomer({ ...newCustomer, email: event.target.value })} /></label>
+                    <label>Tipo de pessoa<select value={customerForm.person_type} onChange={(event) => setCustomerForm({ ...customerForm, person_type: event.target.value as CustomerPayload['person_type'], cpf: '', cnpj: '' })}><option value="individual">Pessoa Física</option><option value="company">Pessoa Jurídica</option></select></label>
+                    <label>{customerForm.person_type === 'company' ? 'Razão social' : 'Nome completo'}<input required value={customerForm.name} onChange={(event) => setCustomerForm({ ...customerForm, name: event.target.value })} /></label>
+                    {customerForm.person_type === 'company' ? <label>Nome fantasia<input value={customerForm.trade_name} onChange={(event) => setCustomerForm({ ...customerForm, trade_name: event.target.value })} /></label> : <label>RG<input value={customerForm.rg} onChange={(event) => setCustomerForm({ ...customerForm, rg: event.target.value })} /></label>}
+                    <label>{customerForm.person_type === 'company' ? 'CNPJ' : 'CPF'}<input placeholder={customerForm.person_type === 'company' ? '00.000.000/0000-00' : '000.000.000-00'} value={customerForm.person_type === 'company' ? customerForm.cnpj : customerForm.cpf} onChange={(event) => setCustomerForm({ ...customerForm, [customerForm.person_type === 'company' ? 'cnpj' : 'cpf']: event.target.value })} /></label>
+                    {customerForm.person_type === 'company' ? <label>Inscrição estadual<input value={customerForm.state_registration} onChange={(event) => setCustomerForm({ ...customerForm, state_registration: event.target.value })} /></label> : <label>Data de nascimento<input type="date" value={customerForm.birth_date} onChange={(event) => setCustomerForm({ ...customerForm, birth_date: event.target.value })} /></label>}
+                    <label>Telefone<input value={customerForm.phone} onChange={(event) => setCustomerForm({ ...customerForm, phone: event.target.value })} /></label>
+                    <label>WhatsApp<input value={customerForm.whatsapp} onChange={(event) => setCustomerForm({ ...customerForm, whatsapp: event.target.value })} /></label>
+                    <label>E-mail<input type="email" value={customerForm.email} onChange={(event) => setCustomerForm({ ...customerForm, email: event.target.value })} /></label>
+                    <label>CEP<input value={customerForm.zip_code} onChange={(event) => setCustomerForm({ ...customerForm, zip_code: event.target.value })} /></label>
+                    <label className="erp-field-wide">Rua<input value={customerForm.street} onChange={(event) => setCustomerForm({ ...customerForm, street: event.target.value })} /></label>
+                    <label>Número<input value={customerForm.address_number} onChange={(event) => setCustomerForm({ ...customerForm, address_number: event.target.value })} /></label>
+                    <label>Complemento<input value={customerForm.address_complement} onChange={(event) => setCustomerForm({ ...customerForm, address_complement: event.target.value })} /></label>
+                    <label>Bairro<input value={customerForm.neighborhood} onChange={(event) => setCustomerForm({ ...customerForm, neighborhood: event.target.value })} /></label>
+                    <label>Cidade<input value={customerForm.city} onChange={(event) => setCustomerForm({ ...customerForm, city: event.target.value })} /></label>
+                    <label>UF<input maxLength={2} value={customerForm.state} onChange={(event) => setCustomerForm({ ...customerForm, state: event.target.value.toUpperCase() })} /></label>
+                    <label className="erp-field-wide">Observações<textarea value={customerForm.notes} onChange={(event) => setCustomerForm({ ...customerForm, notes: event.target.value })} /></label>
                   </div>
                   {customerFormError && <p className="erp-alert" role="alert">{customerFormError}</p>}
-                  <button className="erp-action-button" type="submit" disabled={savingCustomer}>{savingCustomer ? 'Salvando…' : 'Salvar cliente'}</button>
+                  <button className="erp-action-button" type="submit" disabled={savingCustomer}>{savingCustomer ? 'Salvando…' : editingCustomer ? 'Salvar alterações' : 'Salvar cliente'}</button>
                 </form>
               )}
               <div className="erp-card erp-customer-list-card">
@@ -280,7 +339,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {loadingCustomers ? <p role="status">Carregando clientes…</p>
                   : customersError ? <p className="erp-alert" role="alert">{customersError}</p>
                   : filteredCustomers.length === 0 ? <p>Nenhum cliente encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>CPF</th><th>Telefone</th><th>E-mail</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td></tr>)}</tbody></table></div>}
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button><button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Excluir</button></td></tr>)}</tbody></table></div>}
               </div>
             </section>
           ) : page === 'Visão geral' ? (

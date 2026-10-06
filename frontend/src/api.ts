@@ -20,23 +20,53 @@ export type Customer = {
   id: number
   store: number
   store_name: string
+  person_type: 'individual' | 'company'
   name: string
+  trade_name: string
   cpf: string | null
+  cnpj: string | null
+  rg: string
+  state_registration: string
   birth_date: string | null
   phone: string
+  whatsapp: string
   email: string
+  zip_code: string
+  street: string
+  address_number: string
+  address_complement: string
+  neighborhood: string
+  city: string
+  state: string
   notes: string
   is_active: boolean
   created_at: string
   updated_at: string
 }
 
-export type NewCustomer = {
+export type CustomerPayload = {
+  person_type: 'individual' | 'company'
   name: string
+  trade_name: string
   cpf: string
+  cnpj: string
+  rg: string
+  state_registration: string
+  birth_date: string
   phone: string
+  whatsapp: string
   email: string
+  zip_code: string
+  street: string
+  address_number: string
+  address_complement: string
+  neighborhood: string
+  city: string
+  state: string
+  notes: string
 }
+
+export type NewCustomer = CustomerPayload
 
 export class ApiError extends Error {
   status: number
@@ -69,15 +99,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const data = await response.json().catch(() => null)
   if (!response.ok) {
-    const message =
-      typeof data?.detail === 'string'
-        ? data.detail
-        : typeof data?.store_id?.[0] === 'string'
-          ? data.store_id[0]
-          : typeof data?.name?.[0] === 'string'
-            ? data.name[0]
-            : 'Não foi possível concluir a operação. Tente novamente.'
+    const fieldMessage = ['store_id', 'name', 'cpf', 'cnpj', 'person_type', 'state']
+      .map((field) => data?.[field]?.[0])
+      .find((value) => typeof value === 'string')
+    const message = typeof data?.detail === 'string'
+      ? data.detail
+      : typeof fieldMessage === 'string'
+        ? fieldMessage
+        : 'Não foi possível concluir a operação. Tente novamente.'
     throw new ApiError(message, response.status)
+  }
+  if (response.status === 204) {
+    return undefined as T
   }
   if (data === null) {
     throw new ApiError('O servidor retornou uma resposta inesperada.', 502)
@@ -132,6 +165,27 @@ export async function createCustomer(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
     body: JSON.stringify(customer),
+  })
+}
+
+export async function updateCustomer(
+  storeId: number,
+  customerId: number,
+  customer: Partial<CustomerPayload>,
+): Promise<Customer> {
+  const token = await getCsrfToken()
+  return request<Customer>(`/api/me/customers/${customerId}/?store_id=${storeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify(customer),
+  })
+}
+
+export async function deleteCustomer(storeId: number, customerId: number): Promise<void> {
+  const token = await getCsrfToken()
+  await request(`/api/me/customers/${customerId}/?store_id=${storeId}`, {
+    method: 'DELETE',
+    headers: { 'X-CSRFToken': token },
   })
 }
 
