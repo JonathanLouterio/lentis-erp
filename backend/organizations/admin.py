@@ -9,10 +9,7 @@ class CompanyAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
 
     def has_add_permission(self, request):
-        return (
-            super().has_add_permission(request)
-            and not Company.objects.exists()
-        )
+        return super().has_add_permission(request) and not Company.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -34,14 +31,22 @@ class StoreAdmin(admin.ModelAdmin):
 class CustomerAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "person_type",
         "cpf",
+        "cnpj",
         "store",
-        "phone",
-        "email",
         "is_active",
     )
-    list_filter = ("store", "is_active")
-    search_fields = ("name", "cpf", "phone", "email")
+    list_filter = ("person_type", "store", "is_active")
+    search_fields = (
+        "name",
+        "trade_name",
+        "cpf",
+        "cnpj",
+        "phone",
+        "whatsapp",
+        "email",
+    )
     list_select_related = ("store",)
     autocomplete_fields = ("store",)
     readonly_fields = ("created_at", "updated_at")
@@ -51,8 +56,13 @@ class CustomerAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "store",
+                    "person_type",
                     "name",
+                    "trade_name",
                     "cpf",
+                    "cnpj",
+                    "rg",
+                    "state_registration",
                     "birth_date",
                 )
             },
@@ -62,7 +72,22 @@ class CustomerAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "phone",
+                    "whatsapp",
                     "email",
+                )
+            },
+        ),
+        (
+            "Endereço",
+            {
+                "fields": (
+                    "zip_code",
+                    "street",
+                    "address_number",
+                    "address_complement",
+                    "neighborhood",
+                    "city",
+                    "state",
                 )
             },
         ),
@@ -81,3 +106,4 @@ class CustomerAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+    
