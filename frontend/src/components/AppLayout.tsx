@@ -1,0 +1,354 @@
+import { useEffect, useState } from 'react'
+import { ApiError, getMyStores } from '../api'
+import type { AccessibleStore, CurrentUser } from '../api'
+
+import './AppLayout.css'
+
+type AppLayoutProps = {
+  user: CurrentUser
+  busy: boolean
+  error: string
+  onLogout: () => Promise<void>
+}
+
+const menuGroups = [
+  {
+    title: 'Cadastros',
+    icon: 'cadastros',
+    items: ['Clientes', 'Produtos'],
+  },
+  {
+    title: 'Comercial',
+    icon: 'comercial',
+    items: ['Vendas', 'Orçamentos', 'Caixa'],
+  },
+  {
+    title: 'Operação',
+    icon: 'operacao',
+    items: ['Estoque', 'Ordens de serviço', 'Atendimento domiciliar'],
+  },
+  {
+    title: 'Gestão',
+    icon: 'gestao',
+    items: ['Financeiro', 'Relatórios', 'Administração'],
+  },
+]
+
+function MenuIcon({ name }: { name: string }) {
+  const paths: Record<string, string> = {
+    inicio: 'M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9',
+    cadastros:
+      'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M20 8v6M17 11h6M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+    comercial: 'M3 3h2l3 12h11l2-8H6M9 20h.01M18 20h.01',
+    operacao: 'M3 7 12 3l9 4v10l-9 4-9-4ZM3 7l9 4 9-4M12 11v10',
+    gestao: 'M4 21V11h4v10M10 21V3h4v18M16 21V7h4v14',
+    menu: 'M4 6h16M4 12h16M4 18h16',
+    sair: 'M9 4H4v16h5M13 8l4 4-4 4M8 12h13',
+  }
+
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={paths[name] || paths.inicio} />
+    </svg>
+  )
+}
+
+export default function AppLayout({
+  user,
+  busy,
+  error,
+  onLogout,
+}: AppLayoutProps) {
+  const [collapsed, setCollapsed] = useState(false)
+  const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
+  const [page, setPage] = useState('Visão geral')
+  const [stores, setStores] = useState<AccessibleStore[]>([])
+  const [selectedStoreId, setSelectedStoreId] = useState('')
+  const [loadingStores, setLoadingStores] = useState(true)
+  const [storesError, setStoresError] = useState('')
+  const [retry, setRetry] = useState(0)
+
+  const displayName =
+    [user.first_name, user.last_name].filter(Boolean).join(' ') ||
+    user.username
+
+  const initials = displayName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+
+  useEffect(() => {
+    let ignore = false
+
+    async function loadStores() {
+      try {
+        const result = await getMyStores()
+        if (ignore) return
+
+        setStores(result)
+        setSelectedStoreId((current) =>
+          result.some((store) => String(store.id) === current)
+            ? current
+            : String(result[0]?.id ?? ''),
+        )
+      } catch (err) {
+        if (ignore) return
+
+        setStores([])
+        setSelectedStoreId('')
+        setStoresError(
+          err instanceof ApiError && [401, 403].includes(err.status)
+            ? 'Sua sessão não permite consultar as lojas. Saia e entre novamente.'
+            : 'Não foi possível carregar suas lojas. Tente novamente.',
+        )
+      } finally {
+        if (!ignore) setLoadingStores(false)
+      }
+    }
+
+    void loadStores()
+
+    return () => {
+      ignore = true
+    }
+  }, [user.id, retry])
+
+  const selectedStore = stores.find(
+    (store) => String(store.id) === selectedStoreId,
+  )
+
+  function retryStores() {
+    setStoresError('')
+    setLoadingStores(true)
+    setRetry((value) => value + 1)
+  }
+
+  function toggleGroup(title: string) {
+    if (collapsed) {
+      setCollapsed(false)
+      setOpenGroup(title)
+      return
+    }
+
+    setOpenGroup((current) => (current === title ? null : title))
+  }
+
+  return (
+    <div className={`erp-layout${collapsed ? ' is-collapsed' : ''}`}>
+      <aside className="erp-sidebar" aria-label="Menu principal">
+        <div className="erp-brand">
+          <span>{collapsed ? 'L' : 'LENTIS'}</span>
+          {!collapsed && <small>ERP</small>}
+        </div>
+
+        <nav className="erp-navigation" aria-label="Módulos">
+          <button
+            type="button"
+            className={`erp-nav-button${page === 'Visão geral' ? ' is-active' : ''}`}
+            onClick={() => setPage('Visão geral')}
+            aria-label="Visão geral"
+            aria-current={page === 'Visão geral' ? 'page' : undefined}
+            title={collapsed ? 'Visão geral' : undefined}
+          >
+            <MenuIcon name="inicio" />
+            {!collapsed && <span>Visão geral</span>}
+          </button>
+
+          {!collapsed && <p className="erp-menu-label">ESPAÇO DE TRABALHO</p>}
+
+          {menuGroups.map((group) => (
+            <div className="erp-menu-group" key={group.title}>
+              <button
+                type="button"
+                className="erp-nav-button"
+                onClick={() => toggleGroup(group.title)}
+                aria-label={group.title}
+                aria-expanded={!collapsed && openGroup === group.title}
+                aria-controls={`menu-${group.icon}`}
+                title={collapsed ? group.title : undefined}
+              >
+                <MenuIcon name={group.icon} />
+                {!collapsed && (
+                  <>
+                    <span>{group.title}</span>
+                    <span className="erp-chevron" aria-hidden="true">
+                      {openGroup === group.title ? '−' : '+'}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              <div
+                id={`menu-${group.icon}`}
+                className="erp-submenu"
+                hidden={collapsed || openGroup !== group.title}
+              >
+                {group.items.map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    className={page === item ? 'is-active' : ''}
+                    aria-current={page === item ? 'page' : undefined}
+                    onClick={() => setPage(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="erp-profile">
+          <div className="erp-avatar" title={displayName}>
+            {initials}
+          </div>
+
+          {!collapsed && (
+            <div className="erp-profile-info">
+              <strong title={displayName}>{displayName}</strong>
+              <span title={user.username}>@{user.username}</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="erp-icon-button"
+            onClick={() => void onLogout()}
+            disabled={busy}
+            aria-label={busy ? 'Saindo da conta' : 'Sair da conta'}
+            title="Sair da conta"
+          >
+            <MenuIcon name="sair" />
+          </button>
+        </div>
+      </aside>
+
+      <div className="erp-workspace">
+        <header className="erp-topbar">
+          <div className="erp-topbar-heading">
+            <button
+              type="button"
+              className="erp-icon-button"
+              onClick={() => setCollapsed((value) => !value)}
+              aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+              aria-expanded={!collapsed}
+            >
+              <MenuIcon name="menu" />
+            </button>
+            <span>{page}</span>
+          </div>
+
+          <div className="erp-store-field">
+            <label htmlFor="active-store">Unidade</label>
+            <select
+              id="active-store"
+              value={selectedStoreId}
+              onChange={(event) => setSelectedStoreId(event.target.value)}
+              disabled={loadingStores || !!storesError || stores.length === 0}
+            >
+              {loadingStores ? (
+                <option value="">Carregando…</option>
+              ) : storesError ? (
+                <option value="">Indisponível</option>
+              ) : stores.length === 0 ? (
+                <option value="">Sem unidades</option>
+              ) : (
+                stores.map((store) => (
+                  <option key={store.id} value={String(store.id)}>
+                    {store.code} — {store.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        </header>
+
+        <main className="erp-content">
+          {error && <p className="erp-alert" role="alert">{error}</p>}
+
+          {loadingStores ? (
+            <div className="erp-card" role="status">
+              Carregando suas unidades…
+            </div>
+          ) : storesError ? (
+            <div className="erp-card">
+              <p className="erp-alert" role="alert">{storesError}</p>
+              <button
+                className="erp-action-button"
+                type="button"
+                onClick={retryStores}
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : !selectedStore ? (
+            <section className="erp-card">
+              <h1>Nenhuma unidade disponível</h1>
+              <p>
+                Você ainda não possui acesso a uma unidade ativa.
+                Solicite a liberação ao administrador.
+              </p>
+            </section>
+          ) : page === 'Visão geral' ? (
+            <>
+              <div className="erp-page-heading">
+                <span className="erp-kicker">VISÃO GERAL</span>
+                <h1>Olá, {user.first_name || user.username}!</h1>
+                <p>
+                  Seu espaço de trabalho na unidade {selectedStore.name}.
+                </p>
+              </div>
+
+              <div className="erp-summary-grid">
+                <section className="erp-card">
+                  <span className="erp-card-label">Unidade selecionada</span>
+                  <h2>{selectedStore.name}</h2>
+                  <p>Código {selectedStore.code}</p>
+                </section>
+
+                <section className="erp-card">
+                  <span className="erp-card-label">Seu acesso</span>
+                  <h2>
+                    {stores.length} {stores.length === 1 ? 'unidade' : 'unidades'}
+                  </h2>
+                  <p>Disponíveis para sua conta.</p>
+                </section>
+              </div>
+
+              <section className="erp-card erp-welcome-card">
+                <span className="erp-development-badge">Em construção</span>
+                <h2>O dia a dia da sua ótica, em um só lugar.</h2>
+                <p>
+                  Os indicadores de vendas, estoque e financeiro aparecerão
+                  aqui conforme os módulos forem implementados.
+                </p>
+              </section>
+            </>
+          ) : (
+            <section className="erp-card">
+              <span className="erp-development-badge">Em desenvolvimento</span>
+              <h1>{page}</h1>
+              <p>
+                Este módulo ainda não está disponível.
+                A unidade selecionada é {selectedStore.name}.
+              </p>
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}

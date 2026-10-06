@@ -96,3 +96,12 @@ export async function signOut(): Promise<void> {
     },
   })
 }
+export type AccessibleStore = {
+  id: number
+  code: string
+  name: string
+}
+
+export function getMyStores(): Promise<AccessibleStore[]> {
+  return request<AccessibleStore[]>('/api/me/stores/')
+}

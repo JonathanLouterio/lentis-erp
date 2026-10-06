@@ -11,6 +11,8 @@ import type { CurrentUser } from './api'
 
 import './App.css'
 
+import AppLayout from './components/AppLayout'
+
 function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
@@ -86,6 +88,17 @@ export default function App() {
     } finally {
       setBusy(false)
     }
+  }
+  if (user && !checkingSession) {
+    return (
+      <AppLayout
+        key={user.id}
+        user={user}
+        busy={busy}
+        error={error}
+        onLogout={handleLogout}
+      />
+    )
   }
 
   return (
