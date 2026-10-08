@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -288,3 +289,73 @@ class Product(models.Model):
 
     def __str__(self):
         return f"{self.internal_code} - {self.name}"
+
+
+class StockMovement(models.Model):
+    class MovementType(models.TextChoices):
+        ENTRY = "entry", "Entrada"
+        EXIT = "exit", "Saída"
+        ADJUSTMENT = "adjustment", "Ajuste por contagem"
+
+    store = models.ForeignKey(
+        Store, on_delete=models.PROTECT,
+        related_name="stock_movements", verbose_name="Loja",
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT,
+        related_name="stock_movements", verbose_name="Produto",
+    )
+    movement_type = models.CharField(
+        "Tipo", max_length=10, choices=MovementType.choices,
+    )
+    quantity = models.DecimalField("Quantidade informada", max_digits=12, decimal_places=3)
+    balance_before = models.DecimalField("Saldo anterior", max_digits=12, decimal_places=3)
+    balance_after = models.DecimalField("Saldo posterior", max_digits=12, decimal_places=3)
+    reason = models.CharField("Motivo", max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="stock_movements", verbose_name="Responsável",
+    )
+    created_at = models.DateTimeField("Registrado em", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Movimentação de estoque"
+        verbose_name_plural = "Movimentações de estoque"
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(balance_before__gte=0, balance_after__gte=0),
+                name="stock_movement_non_negative_balances",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(movement_type__in=["entry", "exit"], quantity__gt=0)
+                    | models.Q(movement_type="adjustment", quantity__gte=0)
+                ),
+                name="stock_movement_valid_type_quantity",
+            ),
+        ]
+
+    @property
+    def quantity_change(self):
+        return self.balance_after - self.balance_before
+
+    def clean(self):
+        super().clean()
+        self.reason = self.reason.strip()
+        if not self.reason:
+            raise ValidationError({"reason": "Informe o motivo da movimentação."})
+        if self.product_id and self.store_id:
+            if self.product.store_id != self.store_id:
+                raise ValidationError({"product": "O produto pertence a outra unidade."})
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Movimentações registradas não podem ser editadas.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Movimentações registradas não podem ser excluídas.")
+
+    def __str__(self):
+        return f"{self.product} - {self.get_movement_type_display()} - {self.quantity}"

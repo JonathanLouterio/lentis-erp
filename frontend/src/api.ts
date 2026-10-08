@@ -94,8 +94,51 @@ export type ProductPayload = {
   category: string
   cost_price: string
   sale_price: string
-  stock_quantity: string
   minimum_stock: string
+}
+
+export type StockMovementType = 'entry' | 'exit' | 'adjustment'
+
+export type StockMovement = {
+  id: number
+  store: number
+  store_name: string
+  product: number
+  product_name: string
+  product_code: string
+  movement_type: StockMovementType
+  movement_type_label: string
+  quantity: string
+  quantity_change: string
+  balance_before: string
+  balance_after: string
+  reason: string
+  created_by: number
+  created_by_username: string
+  created_at: string
+}
+
+export type StockMovementPayload = {
+  product_id: number
+  movement_type: StockMovementType
+  quantity: string
+  reason: string
+}
+
+function firstErrorMessage(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = firstErrorMessage(item)
+      if (message) return message
+    }
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) {
+      const message = firstErrorMessage(item)
+      if (message) return message
+    }
+  }
+  return undefined
 }
 
 export class ApiError extends Error {
@@ -129,14 +172,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const data = await response.json().catch(() => null)
   if (!response.ok) {
-    const fieldMessage = ['store_id', 'name', 'cpf', 'cnpj', 'person_type', 'state']
-      .map((field) => data?.[field]?.[0])
-      .find((value) => typeof value === 'string')
     const message = typeof data?.detail === 'string'
       ? data.detail
-      : typeof fieldMessage === 'string'
-        ? fieldMessage
-        : 'Não foi possível concluir a operação. Tente novamente.'
+      : firstErrorMessage(data) || 'Não foi possível concluir a operação. Tente novamente.'
     throw new ApiError(message, response.status)
   }
   if (response.status === 204) {
@@ -250,6 +288,22 @@ export async function deleteProduct(storeId: number, productId: number): Promise
   await request(`/api/me/products/${productId}/?store_id=${storeId}`, {
     method: 'DELETE',
     headers: { 'X-CSRFToken': token },
+  })
+}
+
+export function getStockMovements(storeId: number): Promise<StockMovement[]> {
+  return request<StockMovement[]>(`/api/me/stock-movements/?store_id=${storeId}`)
+}
+
+export async function createStockMovement(
+  storeId: number,
+  movement: StockMovementPayload,
+): Promise<StockMovement> {
+  const token = await getCsrfToken()
+  return request<StockMovement>(`/api/me/stock-movements/?store_id=${storeId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify(movement),
   })
 }
 

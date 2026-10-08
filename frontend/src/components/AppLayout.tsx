@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
 import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
+import StockMovements from './StockMovements'
 import './AppLayout.css'
 import './Customers.css'
 
@@ -71,9 +72,12 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [savingProduct, setSavingProduct] = useState(false)
   const [productFormError, setProductFormError] = useState('')
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [savingStock, setSavingStock] = useState(false)
+  const [stockProductId, setStockProductId] = useState('')
+  const workspaceBusy = busy || savingCustomer || savingProduct || savingStock
   const emptyProduct = (): ProductPayload => ({
     internal_code: '', barcode: '', name: '', brand: '', category: '',
-    cost_price: '0', sale_price: '0', stock_quantity: '0', minimum_stock: '0',
+    cost_price: '0', sale_price: '0', minimum_stock: '0',
   })
   const [productForm, setProductForm] = useState<ProductPayload>(emptyProduct)
 
@@ -230,7 +234,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setProductForm({
       internal_code: product.internal_code, barcode: product.barcode || '', name: product.name,
       brand: product.brand || '', category: product.category || '', cost_price: product.cost_price,
-      sale_price: product.sale_price, stock_quantity: product.stock_quantity, minimum_stock: product.minimum_stock,
+      sale_price: product.sale_price, minimum_stock: product.minimum_stock,
     })
     setProductFormError('')
     setProductFormOpen(true)
@@ -287,6 +291,21 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setOpenGroup((current) => current === title ? null : title)
   }
 
+  function openStock(productId = '') {
+    setStockProductId(productId)
+    setOpenGroup('Operação')
+    setPage('Estoque')
+  }
+
+  function changeStore(storeId: string) {
+    closeCustomerForm()
+    closeProductForm()
+    setCustomers([])
+    setProducts([])
+    setStockProductId('')
+    setSelectedStoreId(storeId)
+  }
+
   return (
     <div className={`erp-layout${collapsed ? ' is-collapsed' : ''}`}>
       <aside className="erp-sidebar" aria-label="Menu principal">
@@ -295,7 +314,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           {!collapsed && <small>ERP</small>}
         </div>
         <nav className="erp-navigation" aria-label="Módulos">
-          <button type="button"
+          <button type="button" disabled={workspaceBusy}
             className={`erp-nav-button${page === 'Visão geral' ? ' is-active' : ''}`}
             onClick={() => setPage('Visão geral')} aria-label="Visão geral"
             aria-current={page === 'Visão geral' ? 'page' : undefined}
@@ -306,7 +325,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           {!collapsed && <p className="erp-menu-label">ESPAÇO DE TRABALHO</p>}
           {menuGroups.map((group) => (
             <div className="erp-menu-group" key={group.title}>
-              <button type="button" className="erp-nav-button" onClick={() => toggleGroup(group.title)}
+              <button type="button" disabled={workspaceBusy} className="erp-nav-button" onClick={() => toggleGroup(group.title)}
                 aria-label={group.title} aria-expanded={!collapsed && openGroup === group.title}
                 aria-controls={`menu-${group.icon}`} title={collapsed ? group.title : undefined}>
                 <MenuIcon name={group.icon} />
@@ -317,8 +336,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               </button>
               <div id={`menu-${group.icon}`} className="erp-submenu" hidden={collapsed || openGroup !== group.title}>
                 {group.items.map((item) => (
-                  <button type="button" key={item} className={page === item ? 'is-active' : ''}
-                    aria-current={page === item ? 'page' : undefined} onClick={() => setPage(item)}>
+                  <button type="button" disabled={workspaceBusy} key={item} className={page === item ? 'is-active' : ''}
+                    aria-current={page === item ? 'page' : undefined} onClick={() => item === 'Estoque' ? openStock() : setPage(item)}>
                     {item}
                   </button>
                 ))}
@@ -336,7 +355,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             </div>
           )}
           <button type="button" className="erp-icon-button" onClick={() => void onLogout()}
-            disabled={busy} aria-label={busy ? 'Saindo da conta' : 'Sair da conta'} title="Sair da conta">
+            disabled={workspaceBusy} aria-label={busy ? 'Saindo da conta' : 'Sair da conta'} title="Sair da conta">
             <MenuIcon name="sair" />
           </button>
         </div>
@@ -351,12 +370,12 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             </button>
             <span>{page}</span>
           </div>
-          <ThemeSelect value={user.theme} disabled={busy} onSaved={onThemeSaved} />
+          <ThemeSelect value={user.theme} disabled={workspaceBusy} onSaved={onThemeSaved} />
           <div className="erp-store-field">
             <label htmlFor="active-store">Unidade</label>
             <select id="active-store" value={selectedStoreId}
-              onChange={(event) => setSelectedStoreId(event.target.value)}
-              disabled={loadingStores || !!storesError || stores.length === 0}>
+              onChange={(event) => changeStore(event.target.value)}
+              disabled={workspaceBusy || loadingStores || !!storesError || stores.length === 0}>
               {loadingStores ? <option value="">Carregando…</option>
                 : storesError ? <option value="">Indisponível</option>
                 : stores.length === 0 ? <option value="">Sem unidades</option>
@@ -381,6 +400,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <h1>Nenhuma unidade disponível</h1>
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
             </section>
+          ) : page === 'Estoque' ? (
+            <StockMovements key={selectedStore.id} store={selectedStore}
+              initialProductId={stockProductId} onSavingChange={setSavingStock} />
           ) : page === 'Produtos' ? (
             <section className="erp-clientes-page">
               <div className="erp-page-heading erp-list-heading">
@@ -405,7 +427,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                     <label>Categoria<input value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} /></label>
                     <label>Preço de custo<input type="number" min="0" step="0.01" value={productForm.cost_price} onChange={(event) => setProductForm({ ...productForm, cost_price: event.target.value })} /></label>
                     <label>Preço de venda<input type="number" min="0" step="0.01" value={productForm.sale_price} onChange={(event) => setProductForm({ ...productForm, sale_price: event.target.value })} /></label>
-                    <label>Estoque atual<input type="number" min="0" step="0.001" value={productForm.stock_quantity} onChange={(event) => setProductForm({ ...productForm, stock_quantity: event.target.value })} /></label>
+                    <label>Estoque atual<input readOnly value={editingProduct?.stock_quantity ?? '0.000'} /><small>Saldo atualizado pelas movimentações de estoque.</small></label>
                     <label>Estoque mínimo<input type="number" min="0" step="0.001" value={productForm.minimum_stock} onChange={(event) => setProductForm({ ...productForm, minimum_stock: event.target.value })} /></label>
                   </div>
                   {productFormError && <p className="erp-alert" role="alert">{productFormError}</p>}
@@ -420,7 +442,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {loadingProducts ? <p role="status">Carregando produtos…</p>
                   : productsError ? <p className="erp-alert" role="alert">{productsError}</p>
                   : filteredProducts.length === 0 ? <p>Nenhum produto encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button><button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button></td></tr>)}</tbody></table></div>}
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions"><button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button><button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openStock(String(product.id))}>Movimentar</button><button type="button" disabled={workspaceBusy} className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button></td></tr>)}</tbody></table></div>}
               </div>
             </section>
           ) : page === 'Clientes' ? (

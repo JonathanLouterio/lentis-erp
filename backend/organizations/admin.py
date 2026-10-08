@@ -1,8 +1,8 @@
 from django.contrib import admin
+from django.db import transaction
 
-from .models import Company, Customer, Store
-
-from .models import Company, Customer, Product, Store
+from .models import Company, Customer, Product, StockMovement, Store
+from accounts.selectors import get_accessible_stores
 
 
 @admin.register(Company)
@@ -130,7 +130,23 @@ class ProductAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ("store",)
     list_select_related = ("store",)
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("stock_quantity", "created_at", "updated_at")
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None:
+            return (*self.readonly_fields, "store")
+        return self.readonly_fields
+
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            if change:
+                locked = Product.objects.select_for_update().get(pk=obj.pk)
+                obj.stock_quantity = locked.stock_quantity
+                obj.store_id = locked.store_id
+            else:
+                obj.stock_quantity = 0
+            super().save_model(request, obj, form, change)
+
     fieldsets = (
         (
             "Identificação",
@@ -167,6 +183,37 @@ class ProductAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockMovement)
+class StockMovementAdmin(admin.ModelAdmin):
+    list_display = (
+        "created_at", "store", "product", "movement_type", "quantity",
+        "balance_before", "balance_after", "created_by",
+    )
+    list_filter = ("store", "movement_type", "created_at")
+    search_fields = ("product__internal_code", "product__name", "reason", "created_by__username")
+    list_select_related = ("store", "product", "created_by")
+    readonly_fields = (
+        "store", "product", "movement_type", "quantity", "quantity_change",
+        "balance_before", "balance_after", "reason", "created_by", "created_at",
+    )
+    fields = readonly_fields
+    actions = None
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            store__in=get_accessible_stores(request.user),
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False
