@@ -193,3 +193,98 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.name
+
+    
+class Product(models.Model):
+    store = models.ForeignKey(
+        Store,
+        on_delete=models.PROTECT,
+        related_name="products",
+        verbose_name="Loja",
+    )
+    internal_code = models.CharField(
+        "Código interno",
+        max_length=30,
+        db_index=True,
+    )
+    barcode = models.CharField(
+        "Código de barras",
+        max_length=30,
+        blank=True,
+    )
+    name = models.CharField("Descrição", max_length=180)
+    brand = models.CharField("Marca", max_length=100, blank=True)
+    category = models.CharField("Categoria", max_length=100, blank=True)
+    cost_price = models.DecimalField(
+        "Preço de custo",
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    sale_price = models.DecimalField(
+        "Preço de venda",
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    stock_quantity = models.DecimalField(
+        "Estoque atual",
+        max_digits=12,
+        decimal_places=3,
+        default=0,
+    )
+    minimum_stock = models.DecimalField(
+        "Estoque mínimo",
+        max_digits=12,
+        decimal_places=3,
+        default=0,
+    )
+    is_active = models.BooleanField("Ativo", default=True)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        verbose_name = "Produto"
+        verbose_name_plural = "Produtos"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["store", "internal_code"],
+                name="unique_product_code_per_store",
+            ),
+            models.UniqueConstraint(
+                fields=["store", "barcode"],
+                condition=~models.Q(barcode=""),
+                name="unique_product_barcode_per_store",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(cost_price__gte=0)
+                & models.Q(sale_price__gte=0)
+                & models.Q(stock_quantity__gte=0)
+                & models.Q(minimum_stock__gte=0),
+                name="product_numeric_values_non_negative",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.internal_code = self.internal_code.strip()
+        self.barcode = self.barcode.strip()
+        self.name = self.name.strip()
+
+        if not self.internal_code:
+            raise ValidationError({"internal_code": "Informe o código interno."})
+        if not self.name:
+            raise ValidationError({"name": "Informe a descrição do produto."})
+
+        for field in (
+            "cost_price",
+            "sale_price",
+            "stock_quantity",
+            "minimum_stock",
+        ):
+            if getattr(self, field) < 0:
+                raise ValidationError({field: "O valor não pode ser negativo."})
+
+    def __str__(self):
+        return f"{self.internal_code} - {self.name}"

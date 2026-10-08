@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from .models import Company, Customer, Store
 
+from .models import Company, Customer, Product, Store
+
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
@@ -106,4 +108,65 @@ class CustomerAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-    
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = (
+        "internal_code",
+        "name",
+        "store",
+        "category",
+        "sale_price",
+        "stock_quantity",
+        "minimum_stock",
+        "is_active",
+    )
+    list_filter = ("store", "category", "is_active")
+    search_fields = (
+        "internal_code",
+        "barcode",
+        "name",
+        "brand",
+    )
+    autocomplete_fields = ("store",)
+    list_select_related = ("store",)
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        (
+            "Identificação",
+            {
+                "fields": (
+                    "store",
+                    "internal_code",
+                    "barcode",
+                    "name",
+                    "brand",
+                    "category",
+                )
+            },
+        ),
+        (
+            "Valores e estoque",
+            {
+                "fields": (
+                    "cost_price",
+                    "sale_price",
+                    "stock_quantity",
+                    "minimum_stock",
+                )
+            },
+        ),
+        (
+            "Controle",
+            {
+                "fields": (
+                    "is_active",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
+
+    def has_delete_permission(self, request, obj=None):
+        return False
