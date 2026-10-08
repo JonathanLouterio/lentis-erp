@@ -77,6 +77,9 @@ class ProductSerializer(ModelCleanMixin, serializers.ModelSerializer):
         read_only_fields = (
             "id", "store", "store_name", "stock_quantity", "created_at", "updated_at",
         )
+        extra_kwargs = {
+            "barcode": {"required": False, "allow_blank": True, "default": ""},
+        }
 
     def validate_internal_code(self, value):
         value = value.strip()
