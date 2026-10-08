@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ApiError, createCustomer, deleteCustomer, getMyCustomers, getMyStores, updateCustomer } from '../api'
-import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, ThemePreference } from '../api'
+import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
+import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
 import './AppLayout.css'
 import './Customers.css'
@@ -63,6 +63,19 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     neighborhood: '', city: '', state: '', notes: '',
   })
   const [customerForm, setCustomerForm] = useState<CustomerPayload>(emptyCustomer)
+  const [products, setProducts] = useState<Product[]>([])
+  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [productsError, setProductsError] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [productFormOpen, setProductFormOpen] = useState(false)
+  const [savingProduct, setSavingProduct] = useState(false)
+  const [productFormError, setProductFormError] = useState('')
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const emptyProduct = (): ProductPayload => ({
+    internal_code: '', barcode: '', name: '', brand: '', category: '',
+    cost_price: '0', sale_price: '0', stock_quantity: '0', minimum_stock: '0',
+  })
+  const [productForm, setProductForm] = useState<ProductPayload>(emptyProduct)
 
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
   const initials = displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
@@ -103,6 +116,12 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return [customer.name, customer.trade_name, customer.cpf || '', customer.cnpj || '', customer.phone, customer.email]
       .some((value) => value.toLowerCase().includes(query))
   })
+  const filteredProducts = products.filter((product) => {
+    const query = productSearch.trim().toLowerCase()
+    if (!query) return true
+    return [product.internal_code, product.barcode, product.name, product.brand, product.category]
+      .some((value) => value.toLowerCase().includes(query))
+  })
 
   useEffect(() => {
     if (page !== 'Clientes' || !selectedStore) return
@@ -113,6 +132,18 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
       .then((result) => { if (!ignore) setCustomers(result) })
       .catch(() => { if (!ignore) setCustomersError('Não foi possível carregar os clientes.') })
       .finally(() => { if (!ignore) setLoadingCustomers(false) })
+    return () => { ignore = true }
+  }, [page, selectedStoreId, selectedStore?.id])
+
+  useEffect(() => {
+    if (page !== 'Produtos' || !selectedStore) return
+    let ignore = false
+    setLoadingProducts(true)
+    setProductsError('')
+    void getMyProducts(selectedStore.id)
+      .then((result) => { if (!ignore) setProducts(result) })
+      .catch((err) => { if (!ignore) setProductsError(err instanceof Error ? err.message : 'Não foi possível carregar os produtos.') })
+      .finally(() => { if (!ignore) setLoadingProducts(false) })
     return () => { ignore = true }
   }, [page, selectedStoreId, selectedStore?.id])
 
@@ -177,6 +208,66 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
       setCustomersError(err instanceof Error ? err.message : 'Somente administradores podem excluir clientes.')
     } finally {
       setSavingCustomer(false)
+    }
+  }
+
+  function closeProductForm() {
+    setProductFormOpen(false)
+    setProductFormError('')
+    setEditingProduct(null)
+    setProductForm(emptyProduct())
+  }
+
+  function openNewProduct() {
+    setEditingProduct(null)
+    setProductForm(emptyProduct())
+    setProductFormError('')
+    setProductFormOpen(true)
+  }
+
+  function openEditProduct(product: Product) {
+    setEditingProduct(product)
+    setProductForm({
+      internal_code: product.internal_code, barcode: product.barcode || '', name: product.name,
+      brand: product.brand || '', category: product.category || '', cost_price: product.cost_price,
+      sale_price: product.sale_price, stock_quantity: product.stock_quantity, minimum_stock: product.minimum_stock,
+    })
+    setProductFormError('')
+    setProductFormOpen(true)
+  }
+
+  async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedStore || savingProduct) return
+    setSavingProduct(true)
+    setProductFormError('')
+    try {
+      const saved = editingProduct
+        ? await updateProduct(selectedStore.id, editingProduct.id, productForm)
+        : await createProduct(selectedStore.id, productForm)
+      setProducts((current) => editingProduct
+        ? current.map((item) => item.id === saved.id ? saved : item)
+        : [saved, ...current])
+      closeProductForm()
+    } catch (err) {
+      setProductFormError(err instanceof Error ? err.message : 'Não foi possível salvar o produto.')
+    } finally {
+      setSavingProduct(false)
+    }
+  }
+
+  async function handleDeleteProduct(product: Product) {
+    if (!selectedStore || savingProduct) return
+    if (!window.confirm(`Inativar o produto "${product.name}"?`)) return
+    setSavingProduct(true)
+    setProductsError('')
+    try {
+      await deleteProduct(selectedStore.id, product.id)
+      setProducts((current) => current.filter((item) => item.id !== product.id))
+    } catch (err) {
+      setProductsError(err instanceof Error ? err.message : 'Somente administradores podem inativar produtos.')
+    } finally {
+      setSavingProduct(false)
     }
   }
 
@@ -289,6 +380,48 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             <section className="erp-card">
               <h1>Nenhuma unidade disponível</h1>
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
+            </section>
+          ) : page === 'Produtos' ? (
+            <section className="erp-clientes-page">
+              <div className="erp-page-heading erp-list-heading">
+                <div>
+                  <span className="erp-kicker">CADASTROS</span>
+                  <h1>Produtos</h1>
+                  <p>Produtos cadastrados em {selectedStore.name}.</p>
+                </div>
+                <button className="erp-action-button" type="button" onClick={openNewProduct}>Novo produto</button>
+              </div>
+              {productFormOpen && (
+                <form className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveProduct(event)}>
+                  <div className="erp-form-heading">
+                    <div><span className="erp-card-label">{editingProduct ? 'EDIÇÃO' : 'NOVO CADASTRO'}</span><h2>{editingProduct ? 'Editar produto' : 'Adicionar produto'}</h2></div>
+                    <button type="button" className="erp-secondary-button" onClick={closeProductForm}>Cancelar</button>
+                  </div>
+                  <div className="erp-form-grid">
+                    <label>Código interno<input required value={productForm.internal_code} onChange={(event) => setProductForm({ ...productForm, internal_code: event.target.value })} /></label>
+                    <label>Código de barras<input value={productForm.barcode} onChange={(event) => setProductForm({ ...productForm, barcode: event.target.value })} /></label>
+                    <label className="erp-field-wide">Descrição<input required value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></label>
+                    <label>Marca<input value={productForm.brand} onChange={(event) => setProductForm({ ...productForm, brand: event.target.value })} /></label>
+                    <label>Categoria<input value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} /></label>
+                    <label>Preço de custo<input type="number" min="0" step="0.01" value={productForm.cost_price} onChange={(event) => setProductForm({ ...productForm, cost_price: event.target.value })} /></label>
+                    <label>Preço de venda<input type="number" min="0" step="0.01" value={productForm.sale_price} onChange={(event) => setProductForm({ ...productForm, sale_price: event.target.value })} /></label>
+                    <label>Estoque atual<input type="number" min="0" step="0.001" value={productForm.stock_quantity} onChange={(event) => setProductForm({ ...productForm, stock_quantity: event.target.value })} /></label>
+                    <label>Estoque mínimo<input type="number" min="0" step="0.001" value={productForm.minimum_stock} onChange={(event) => setProductForm({ ...productForm, minimum_stock: event.target.value })} /></label>
+                  </div>
+                  {productFormError && <p className="erp-alert" role="alert">{productFormError}</p>}
+                  <button className="erp-action-button" type="submit" disabled={savingProduct}>{savingProduct ? 'Salvando…' : editingProduct ? 'Salvar alterações' : 'Salvar produto'}</button>
+                </form>
+              )}
+              <div className="erp-card erp-customer-list-card">
+                <div className="erp-list-toolbar">
+                  <input aria-label="Buscar produtos" placeholder="Buscar por código, nome, marca ou código de barras" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} />
+                  <span className="erp-card-label">{filteredProducts.length} produto{filteredProducts.length === 1 ? '' : 's'}</span>
+                </div>
+                {loadingProducts ? <p role="status">Carregando produtos…</p>
+                  : productsError ? <p className="erp-alert" role="alert">{productsError}</p>
+                  : filteredProducts.length === 0 ? <p>Nenhum produto encontrado nesta unidade.</p>
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button><button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button></td></tr>)}</tbody></table></div>}
+              </div>
             </section>
           ) : page === 'Clientes' ? (
             <section className="erp-clientes-page">

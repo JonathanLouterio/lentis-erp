@@ -68,6 +68,36 @@ export type CustomerPayload = {
 
 export type NewCustomer = CustomerPayload
 
+export type Product = {
+  id: number
+  store: number
+  store_name: string
+  internal_code: string
+  barcode: string
+  name: string
+  brand: string
+  category: string
+  cost_price: string
+  sale_price: string
+  stock_quantity: string
+  minimum_stock: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ProductPayload = {
+  internal_code: string
+  barcode: string
+  name: string
+  brand: string
+  category: string
+  cost_price: string
+  sale_price: string
+  stock_quantity: string
+  minimum_stock: string
+}
+
 export class ApiError extends Error {
   status: number
 
@@ -184,6 +214,40 @@ export async function updateCustomer(
 export async function deleteCustomer(storeId: number, customerId: number): Promise<void> {
   const token = await getCsrfToken()
   await request(`/api/me/customers/${customerId}/?store_id=${storeId}`, {
+    method: 'DELETE',
+    headers: { 'X-CSRFToken': token },
+  })
+}
+
+export function getMyProducts(storeId: number): Promise<Product[]> {
+  return request<Product[]>(`/api/me/products/?store_id=${storeId}`)
+}
+
+export async function createProduct(storeId: number, product: ProductPayload): Promise<Product> {
+  const token = await getCsrfToken()
+  return request<Product>(`/api/me/products/?store_id=${storeId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify(product),
+  })
+}
+
+export async function updateProduct(
+  storeId: number,
+  productId: number,
+  product: Partial<ProductPayload>,
+): Promise<Product> {
+  const token = await getCsrfToken()
+  return request<Product>(`/api/me/products/${productId}/?store_id=${storeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify(product),
+  })
+}
+
+export async function deleteProduct(storeId: number, productId: number): Promise<void> {
+  const token = await getCsrfToken()
+  await request(`/api/me/products/${productId}/?store_id=${storeId}`, {
     method: 'DELETE',
     headers: { 'X-CSRFToken': token },
   })
