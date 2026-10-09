@@ -11,6 +11,17 @@ class PaymentWriteSerializer(serializers.Serializer):
     installment_count = serializers.IntegerField(min_value=1, max_value=12, default=1)
     first_due_date = serializers.DateField()
     confirmed = serializers.BooleanField(default=False)
+    interval_unit = serializers.ChoiceField(choices=["months", "days"], default="months")
+    interval_count = serializers.IntegerField(min_value=1, max_value=365, default=1)
+
+    def validate(self, values):
+        from django.core.exceptions import ValidationError as ModelValidationError
+        from .payment_schedule import validate_terms
+        try:
+            validate_terms(values["method_id"], values["amount"], values["installment_count"], values["first_due_date"], values["interval_unit"], values["interval_count"], values["confirmed"])
+        except ModelValidationError as error:
+            raise serializers.ValidationError(error.message_dict if hasattr(error, "message_dict") else error.messages)
+        return values
 
     def validate_method_id(self, value):
         method = PaymentMethod.objects.filter(pk=value, store=self.context['store'], is_active=True).first()
@@ -59,7 +70,9 @@ class AccountSerializer(serializers.ModelSerializer):
 class MethodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentMethod
-        fields = ['id', 'name', 'kind', 'code']
+        fields = ['id', 'name', 'kind', 'code', 'installment_limit']
+
+    installment_limit = serializers.IntegerField(read_only=True)
 
 
 class EntrySerializer(serializers.ModelSerializer):
@@ -95,4 +108,14 @@ class SalePaymentSerializer(serializers.ModelSerializer):
     installments = ReceivableSerializer(many=True, read_only=True)
     class Meta:
         model = SalePayment
-        fields = ['id', 'method', 'account', 'method_name', 'account_name', 'kind', 'amount', 'installment_count', 'first_due_date', 'confirmed', 'installments']
+        fields = ['id', 'method', 'account', 'method_name', 'account_name', 'kind', 'amount', 'installment_count', 'first_due_date', 'interval_unit', 'interval_count', 'confirmed', 'installments']
+
+
+class PaymentPreviewSerializer(serializers.Serializer):
+    total = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal('0'))
+    payments = PaymentWriteSerializer(many=True, max_length=20)
+
+    def validate(self, values):
+        if sum((payment['amount'] for payment in values['payments']), Decimal('0')) != values['total']:
+            raise serializers.ValidationError({'payments': 'Distribua exatamente o total da venda entre as formas de pagamento.'})
+        return values

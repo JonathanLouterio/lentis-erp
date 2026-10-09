@@ -50,11 +50,20 @@ class PaymentMethod(models.Model):
     kind = models.CharField('Tipo', max_length=20, choices=Kind.choices)
     is_active = models.BooleanField('Ativa', default=True)
 
+    max_installments = models.PositiveSmallIntegerField('Máximo de parcelas', default=12, validators=[MinValueValidator(1), MaxValueValidator(12)], help_text='De 1 a 12 para crédito, boleto e crediário. Dinheiro, Pix, transferência e débito aceitam uma parcela.')
+
+    @property
+    def installment_limit(self):
+        return self.max_installments if self.kind in ('credit', 'store_credit', 'boleto') else 1
+
     class Meta:
         verbose_name = 'Forma de pagamento'
         verbose_name_plural = 'Formas de pagamento'
         ordering = ['pk']
-        constraints = [models.UniqueConstraint(fields=['store', 'code'], name='unique_payment_method_store_code')]
+        constraints = [
+            models.UniqueConstraint(fields=['store', 'code'], name='unique_payment_method_store_code'),
+            models.CheckConstraint(condition=models.Q(max_installments__gte=1, max_installments__lte=12), name='payment_method_installment_limit_valid'),
+        ]
 
     def save(self, *args, **kwargs):
         if self.pk:
@@ -91,13 +100,17 @@ class SalePayment(models.Model):
     amount = models.DecimalField('Valor', max_digits=18, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     installment_count = models.PositiveSmallIntegerField('Parcelas', default=1, validators=[MinValueValidator(1), MaxValueValidator(12)])
     first_due_date = models.DateField('Primeiro vencimento')
+    interval_unit = models.CharField('Unidade do intervalo', max_length=6, choices=[('months', 'Meses'), ('days', 'Dias')], default='months')
+    interval_count = models.PositiveSmallIntegerField('Intervalo entre parcelas', default=1, validators=[MinValueValidator(1), MaxValueValidator(365)])
     confirmed = models.BooleanField('Recebimento confirmado', default=False)
 
     class Meta:
         ordering = ['pk']
         verbose_name = 'Pagamento da venda'
         verbose_name_plural = 'Pagamentos da venda'
-        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0, installment_count__gte=1, installment_count__lte=12), name='sale_payment_values_valid')]
+        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0, installment_count__gte=1, installment_count__lte=12), name='sale_payment_values_valid'),
+            models.CheckConstraint(condition=models.Q(interval_unit='days', interval_count__gte=1, interval_count__lte=365) | models.Q(interval_unit='months', interval_count__gte=1, interval_count__lte=12), name='sale_payment_interval_valid'),
+        ]
 
     def clean(self):
         super().clean()
@@ -109,6 +122,8 @@ class SalePayment(models.Model):
             raise ValidationError({'installment_count': 'Esta forma aceita uma única parcela.'})
         if self.confirmed and self.kind not in ('cash', 'pix', 'transfer'):
             raise ValidationError({'confirmed': 'Cartão, boleto e crediário são registrados como valores a receber.'})
+        from .payment_schedule import schedule
+        schedule(self.amount, self.installment_count, self.first_due_date, self.interval_unit, self.interval_count)
         if self.amount < Decimal(self.installment_count) / 100:
             raise ValidationError({'amount': 'Cada parcela deve ter pelo menos um centavo.'})
 

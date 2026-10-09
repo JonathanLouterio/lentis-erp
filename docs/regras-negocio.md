@@ -13,7 +13,7 @@ Levantamento inicial em 09/10/2026, com referências na documentação oficial d
 | VND-02 | Limitar descontos por perfil/unidade e exigir autorização quando exceder o limite. Registrar solicitante, aprovador, motivo e valores autorizados. | Implementada neste pacote. Limite por perfil/unidade, justificativa, aprovação ou recusa por outra pessoa autorizada e histórico imutável. Sem configuração, permanece o limite de 100% para preservar o comportamento anterior. | [TOTVS: política e autorização de desconto][totvs-desconto]. |
 | FIN-01 | Aceitar recebimento parcial e manter separado o valor já recebido do saldo em aberto. Guardar conta, meio de recebimento, data e operador. | Implementada no fluxo de recebimentos. | [Omie: baixa parcial de receitas][omie-parcial]. |
 | FIN-02 | Separar forma de pagamento acordada na venda, conta de destino e meio usado no recebimento. Diferenciar dívida do cliente de valor a receber da operadora do cartão. | Implementada no checkout atual; conciliação automática e taxas de cartão são futuras. | Decisão do Lentis. |
-| FIN-03 | Oferecer condições cadastráveis de parcelamento, com intervalos e vencimentos próprios, respeitando o fechamento exato dos centavos. | Já há parcelas mensais de 1 a 12, com primeiro vencimento e divisão exata. Cadastro de condições é proposta. | [Omie: opções personalizadas de parcelas][omie-parcelas]. |
+| FIN-03 | Montar entrada e saldo parcelado por venda, com intervalos e vencimentos próprios e fechamento exato dos centavos. | Implementada: entrada opcional, saldo em 1 a 12 parcelas, intervalos em meses ou dias, limite por forma/unidade e conferência calculada no servidor. Modelos reutilizáveis de condições são uma evolução futura. | [Omie: opções personalizadas de parcelas][omie-parcelas]. |
 | SEG-01 | Aplicar autorização por unidade no servidor e reavaliar acesso em cada operação, inclusive em repetições. Uma repetição do mesmo envio não duplica venda, estoque ou recebimento. | Implementada no Lentis. | Decisão do Lentis. |
 | OTC-01 | Distinguir mercadoria pronta, lente sob encomenda e serviço; acompanhar encomendas em ordem de serviço, com prazo e entrega. | Proposta específica para a ótica. Não há criação automática de encomenda neste pacote. | Decisão do Lentis. |
 
@@ -33,12 +33,12 @@ A configuração inicial fica no **Django Admin → Organizações → Lojas →
 ## Próximas evoluções propostas
 
 1. **Condições comerciais adicionais:** regras para margem mínima e alçadas adicionais, a definir. O limite de desconto por perfil/unidade e a autorização registrada já estão implementados.
-2. **Condições de pagamento:** opções cadastradas de entrada + parcelas, intervalos e vencimentos, com limite definido por condição.
+2. **Modelos de condições de pagamento:** salvar combinações reutilizáveis de entrada e parcelamento. A montagem por venda, os intervalos e o limite por forma/unidade já estão implementados.
 3. **Reposição e encomendas:** painel de produtos negativos/abaixo do mínimo e fluxo de pedidos ao fornecedor/laboratório.
 4. **Crédito e cobrança:** política de limite de crédito, análise de atraso e autorização; os valores e exceções devem refletir a operação da ótica.
 5. **Cartões e caixa:** taxas por modalidade, conciliação e fechamento de caixa.
 
-As propostas desta seção ainda não estão implementadas. Estoque negativo configurável e autorização de descontos já fazem parte do Lentis.
+Os itens desta seção descrevem evoluções futuras. Estoque negativo configurável, autorização de descontos e montagem de entrada com saldo parcelado já fazem parte do Lentis.
 
 ## Fontes consultadas
 
@@ -67,3 +67,15 @@ As propostas desta seção ainda não estão implementadas. Estoque negativo con
 - A autorização vale para o solicitante e para os valores registrados. Mudanças de itens, quantidades, preços de referência, descontos, cliente, perfil ou limite impedem reutilizá-la para valores diferentes. Retornar exatamente aos valores autorizados permite reutilizar aquela autorização. Notas e forma de pagamento não alteram os valores de desconto autorizados.
 - Uma recusa pode ser seguida de uma nova solicitação com justificativa. Decisões já registradas não são editadas nem apagadas.
 - O vendedor usa **Atualizar autorização** para consultar a decisão. Não há atualização automática por notificações nesta etapa.
+
+
+## Condições de pagamento da venda
+
+- **Entrada + parcelas** monta duas formas de pagamento: entrada opcional em dinheiro, Pix ou transferência e saldo em cartão de crédito, boleto ou crediário. A entrada pode ser zero; o saldo deve ser positivo. A aplicação substitui os pagamentos atuais, mantendo os produtos e os descontos.
+- A entrada só entra no saldo da conta quando **Entrada já recebida e conferida** estiver marcada. Cartão, boleto e crediário permanecem como valores a receber. Cartão gera recebíveis da operadora; boleto e crediário exigem cliente identificado na conclusão.
+- O limite é definido por forma de pagamento e unidade no Django Admin, em **Vendas → Formas de pagamento → Máximo de parcelas**, entre 1 e 12. As formas já cadastradas recebem o padrão de 12; dinheiro, Pix, transferência e débito continuam aceitando uma parcela, independentemente do número configurado.
+- O intervalo pode ser de 1 a 12 meses ou de 1 a 365 dias. O primeiro vencimento é escolhido na venda. Em meses, o cálculo mantém o dia original e usa o último dia quando necessário: 31/01 → 28 ou 29/02 → 31/03. Um intervalo de 30 dias é contado em dias corridos e pode diferir do mensal. Não há ajuste automático para dia útil.
+- A divisão usa centavos exatos; o resto é distribuído nas primeiras parcelas. Exemplo: R$ 550 em três parcelas resulta em R$ 183,34 + R$ 183,33 + R$ 183,33.
+- A prévia no formulário é imediata. Ao clicar em **Concluir venda**, a conferência consulta o servidor para validar as formas, limites, intervalos, valores e vencimentos. Essa consulta não salva venda nem gera estoque, parcelas ou recebimentos. A confirmação revalida os dados e grava a operação completa.
+- Os intervalos ficam registrados nos pagamentos da venda e são preservados na reabertura. Pagamentos antigos usam um mês de intervalo. Reduzir o limite de uma forma bloqueia novos planos acima do limite e a conclusão de rascunhos que o ultrapassem; não altera parcelas de vendas já finalizadas.
+- A entrada e os intervalos não calculam juros, taxas de cartão, correção por atraso ou cobrança bancária. Essas regras continuam futuras. Também não há cadastro de modelos reutilizáveis ou vencimento manual diferente para cada parcela nesta etapa.

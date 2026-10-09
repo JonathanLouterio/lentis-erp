@@ -439,7 +439,7 @@ export function cancelSale(storeId: number, saleId: number, reason: string): Pro
 }
 
 export type PaymentKind = 'cash' | 'pix' | 'transfer' | 'debit' | 'credit' | 'store_credit' | 'boleto'
-export type PaymentMethod = { id: number; name: string; code: string; kind: PaymentKind }
+export type PaymentMethod = { id: number; name: string; code: string; kind: PaymentKind; installment_limit: number }
 export type FinancialAccount = { id: number; name: string; code: string; balance: string }
 export type PaymentOptions = { methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean; discount_limit_percentage: string; discount_policy_configured: boolean; can_approve_discount: boolean; discount_role: string }
 export type FinancialEntry = {
@@ -454,11 +454,11 @@ export type Receivable = {
 }
 export type SalePayment = {
   id: number; method: number; account: number; method_name: string; account_name: string; kind: PaymentKind
-  amount: string; installment_count: number; first_due_date: string; confirmed: boolean; installments: Receivable[]
+  amount: string; installment_count: number; first_due_date: string; interval_unit: 'months' | 'days'; interval_count: number; confirmed: boolean; installments: Receivable[]
 }
 export type CheckoutPayment = {
   method_id: number; account_id: number; amount: string; installment_count: number
-  first_due_date: string; confirmed: boolean
+  first_due_date: string; confirmed: boolean; interval_unit?: 'months' | 'days'; interval_count?: number
 }
 export type CheckoutPayload = {
   request_id: string; sale_id: number | null; action: 'draft' | 'complete'; customer_id: number | null
@@ -497,4 +497,17 @@ export function requestDiscountAuthorization(storeId: number, saleId: number, re
 }
 export function decideDiscountAuthorization(storeId: number, saleId: number, requestId: number, action: 'approve' | 'reject', reason: string): Promise<Sale> {
   return saleWrite(storeId, `${saleId}/discount/${requestId}/decision/`, 'POST', { action, reason })
+}
+
+
+export type PaymentPreview = {
+  total: string
+  payments: { method_name: string; account_name: string; kind: PaymentKind; amount: string; confirmed: boolean; installments: { number: number; due_date: string; amount: string }[] }[]
+}
+export async function getPaymentPreview(storeId: number, total: string, payments: CheckoutPayment[]): Promise<PaymentPreview> {
+  const token = await getCsrfToken()
+  return request(`/api/me/sales/payment-preview/?store_id=${storeId}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify({ total, payments }),
+  })
 }

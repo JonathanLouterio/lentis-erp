@@ -11,7 +11,11 @@ class AccountAdmin(admin.ModelAdmin):
 
 @admin.register(PaymentMethod)
 class MethodAdmin(admin.ModelAdmin):
-    list_display = ['name', 'kind', 'store', 'is_active']
+    @admin.display(description='Limite de parcelas')
+    def effective_installment_limit(self, obj):
+        return obj.installment_limit
+
+    list_display = ['name', 'kind', 'store', 'effective_installment_limit', 'is_active']
     list_filter = ['store', 'kind', 'is_active']
     search_fields = ['name', 'code']
 

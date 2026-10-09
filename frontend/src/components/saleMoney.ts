@@ -22,14 +22,19 @@ export function today(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
 }
 export function displayDate(value: string): string { return value.split('-').reverse().join('/') }
-export function paymentSchedule(amount: bigint, count: number, firstDueDate: string): { date: string; amount: bigint }[] {
-  if (!Number.isInteger(count) || count < 1 || count > 12 || !/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate)) return []
+export function paymentSchedule(amount: bigint, count: number, firstDueDate: string, unit: 'months' | 'days' = 'months', interval = 1): { date: string; amount: bigint }[] {
+  if (!Number.isInteger(count) || count < 1 || count > 12 || amount < BigInt(count) || !/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate) || !['months', 'days'].includes(unit) || !Number.isInteger(interval) || interval < 1 || interval > (unit === 'months' ? 12 : 365)) return []
   const [year, month, day] = firstDueDate.split('-').map(Number)
+  const makeDate = (y: number, m: number, d: number) => { const value = new Date(0); value.setUTCFullYear(y, m, d); value.setUTCHours(0, 0, 0, 0); return value }
+  const origin = makeDate(year, month - 1, day)
+  if (year < 1 || origin.getUTCFullYear() !== year || origin.getUTCMonth() !== month - 1 || origin.getUTCDate() !== day) return []
   const result = []
   for (let index = 0; index < count; index++) {
-    const first = new Date(year, month - 1 + index, 1)
-    const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
-    const due = `${first.getFullYear()}-${String(first.getMonth()+1).padStart(2,'0')}-${String(Math.min(day,lastDay)).padStart(2,'0')}`
+    const first = makeDate(year, month - 1 + index * interval, 1)
+    const lastDay = makeDate(first.getUTCFullYear(), first.getUTCMonth() + 1, 0).getUTCDate()
+    const value = unit === 'days' ? new Date(origin.getTime() + index * interval * 86400000) : makeDate(first.getUTCFullYear(), first.getUTCMonth(), Math.min(day, lastDay))
+    if (value.getUTCFullYear() > 9999) return []
+    const due = `${String(value.getUTCFullYear()).padStart(4, '0')}-${String(value.getUTCMonth()+1).padStart(2,'0')}-${String(value.getUTCDate()).padStart(2,'0')}`
     result.push({ date: due, amount: amount / BigInt(count) + (BigInt(index) < amount % BigInt(count) ? 1n : 0n) })
   }
   return result

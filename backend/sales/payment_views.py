@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from .models import FinancialAccount, PaymentMethod, Receivable
-from .payment_serializers import AccountSerializer, CheckoutSerializer, MethodSerializer, ReceiptWriteSerializer, ReceivableSerializer
+from .payment_serializers import AccountSerializer, CheckoutSerializer, MethodSerializer, ReceiptWriteSerializer, ReceivableSerializer, PaymentPreviewSerializer
 from .payment_services import checkout, receive_installment
 from .views import SalesBaseView, SalesPagination, model_errors
 
@@ -83,3 +83,27 @@ class ReceiveInstallmentView(SalesBaseView):
                 account=values.pop('account_id'), method=values.pop('method_id'), **values,
             )
             return Response(ReceivableSerializer(receivable, context={'request': request}).data)
+
+
+class PaymentPreviewView(SalesBaseView):
+    def post(self, request):
+        from .payment_schedule import schedule
+        store = self._selected_store()
+        values = self.write_serializer(PaymentPreviewSerializer, request.data, store).validated_data
+        result = []
+        with model_errors():
+            for payment in values['payments']:
+                method, account = payment['method_id'], payment['account_id']
+                result.append({
+                    'method_name': method.name, 'account_name': account.name,
+                    'kind': method.kind, 'amount': str(payment['amount']),
+                    'confirmed': payment['confirmed'],
+                    'installments': [
+                        {'number': number, 'due_date': due.isoformat(), 'amount': f'{amount:.2f}'}
+                        for number, (due, amount) in enumerate(schedule(
+                            payment['amount'], payment['installment_count'], payment['first_due_date'],
+                            payment['interval_unit'], payment['interval_count'],
+                        ), 1)
+                    ],
+                })
+        return Response({'total': str(values['total']), 'payments': result})

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getMyCustomers, getMyProducts, getPaymentOptions, getSale, getSales, submitCheckout } from '../api'
-import type { AccessibleStore, CheckoutPayload, Customer, PaymentOptions, Product, Sale, SaleStatus, SalesPage } from '../api'
+import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getMyCustomers, getMyProducts, getPaymentOptions, getPaymentPreview, getSale, getSales, submitCheckout } from '../api'
+import type { AccessibleStore, CheckoutPayload, Customer, PaymentOptions, PaymentPreview, Product, Sale, SaleStatus, SalesPage } from '../api'
 import { brl, dateTime, decimal, decimalText, displayDate, failure, money, paymentSchedule, signedDecimal, today } from './saleMoney'
 import CheckoutModal from './CheckoutModal'
+import PaymentPlanBuilder from './PaymentPlanBuilder'
+import type { PaymentPlanRow } from './PaymentPlanBuilder'
 import './Sales.css'
 
 type Props = { store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
 type Line = { referencePrice: string; productId: number; name: string; code: string; quantity: string; price: string; discount: string }
-type Payment = { key: string; methodId: string; accountId: string; amount: string; auto: boolean; count: number; due: string; confirmed: boolean }
+type Payment = PaymentPlanRow
 const emptyOptions: PaymentOptions = { methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" }
 const emptyPage: SalesPage = { count: 0, next: null, previous: null, results: [] }
 const immediate = ['cash', 'pix', 'transfer']
@@ -39,6 +41,8 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [review, setReview] = useState(false)
+  const [preview, setPreview] = useState<PaymentPreview | null>(null)
+  const [builder, setBuilder] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [approvalReason, setApprovalReason] = useState('')
@@ -99,7 +103,7 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
   const customerSummary = readOnly ? recordedInstallments.filter((item) => item.debtor === "customer").reduce((sum,item) => sum + (decimal(item.remaining_amount) ?? 0n),0n) : allocated - received - operator
   const paymentsValid = payments.every((payment, index) => {
     const amount = paymentAmounts[index], method = options.methods.find((value) => String(value.id) === payment.methodId)
-    return amount !== null && amount > 0n && amount <= 999999999999999999n && !!method && options.accounts.some((value) => String(value.id) === payment.accountId) && payment.due.length === 10 && payment.count >= 1 && payment.count <= 12 && amount >= BigInt(payment.count) && (credit.includes(method.kind) || payment.count === 1) && (!payment.confirmed || immediate.includes(method.kind))
+    return amount !== null && amount > 0n && amount <= 999999999999999999n && !!method && options.accounts.some((value) => String(value.id) === payment.accountId) && payment.due.length === 10 && payment.count >= 1 && payment.count <= (method?.installment_limit ?? 12) && paymentSchedule(amount, payment.count, payment.due, payment.intervalUnit, payment.intervalCount).length === payment.count && amount >= BigInt(payment.count) && (credit.includes(method.kind) || payment.count === 1) && (!payment.confirmed || immediate.includes(method.kind))
   })
   const needsCustomer = payments.some((payment) => ['store_credit','boleto'].includes(options.methods.find((value) => String(value.id) === payment.methodId)?.kind || ''))
   const predictedNegativeStock = lines.flatMap((line,index) => {
@@ -122,8 +126,8 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
   const approvedDiscount = selected?.discount_control?.state === 'approved' && !dirty && referenceUnchanged
   const discountAllowed = !overDiscountLimit || approvedDiscount
   const discountPercentage = referenceSubtotal > 0n ? Number(consideredDiscount * 10000n / referenceSubtotal)/100 : 0
-  const canComplete = discountAllowed && itemValid && lines.length > 0 && paymentsValid && allocated === total && (!needsCustomer || !!customerId) && !catalogLoading && !catalogError && (options.allow_negative_stock || predictedNegativeStock.length === 0)
-  const canDraft = itemValid && (paymentsValid || payments.length === 0) && !catalogLoading && !catalogError
+  const canComplete = !builder && discountAllowed && itemValid && lines.length > 0 && paymentsValid && allocated === total && (!needsCustomer || !!customerId) && !catalogLoading && !catalogError && (options.allow_negative_stock || predictedNegativeStock.length === 0)
+  const canDraft = !builder && itemValid && (paymentsValid || payments.length === 0) && !catalogLoading && !catalogError
   const chosenCustomer = customers.find((customer) => String(customer.id) === customerId)
 
   function allowedToLeave() { return !blocked && (!dirty || window.confirm('Sair sem salvar as alterações desta venda?')) }
@@ -131,12 +135,12 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
     setSelected(sale); setEditor(true); setCustomerId(sale.customer === null ? '' : String(sale.customer)); setNotes(sale.notes)
     setLines(sale.items.map((item) => ({ productId: item.product, referencePrice: item.reference_price ?? item.unit_price, name: item.product_name, code: item.product_code, quantity: item.quantity, price: item.unit_price, discount: item.discount_amount })))
     setDiscount(sale.discount_amount || '0')
-    setPayments((sale.payments || []).map((payment) => ({ key: crypto.randomUUID(), methodId: String(payment.method), accountId: String(payment.account), amount: payment.amount, auto: false, count: payment.installment_count, due: payment.first_due_date, confirmed: payment.confirmed })))
-    setDirty(false); setCancelOpen(false); setReason(''); setReview(false); setProductId('')
+    setPayments((sale.payments || []).map((payment) => ({ key: crypto.randomUUID(), methodId: String(payment.method), accountId: String(payment.account), amount: payment.amount, auto: false, count: payment.installment_count, due: payment.first_due_date, confirmed: payment.confirmed, intervalUnit: payment.interval_unit ?? 'months', intervalCount: payment.interval_count ?? 1 })))
+    setDirty(false); setCancelOpen(false); setReason(''); setReview(false); setPreview(null); setBuilder(false); setProductId('')
   }
   function newSale() {
     if (!allowedToLeave()) return
-    setSelected(null); setEditor(true); setLines([]); setPayments([]); setCustomerId(''); setNotes(''); setDiscount('0'); setDirty(false); setError(''); setSuccess(''); setCancelOpen(false); setReason(''); setProductId(''); setSearch(''); setApprovalReason(''); setDecisionReasons({})
+    setBuilder(false); setPreview(null); setSelected(null); setEditor(true); setLines([]); setPayments([]); setCustomerId(''); setNotes(''); setDiscount('0'); setDirty(false); setError(''); setSuccess(''); setCancelOpen(false); setReason(''); setProductId(''); setSearch(''); setApprovalReason(''); setDecisionReasons({})
   }
   async function openSale(id: number) {
     if (!allowedToLeave()) return
@@ -149,7 +153,7 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
   function defaultPayment(): Payment {
     const method = options.methods.find((value) => value.kind === 'pix') || options.methods[0]
     const account = options.accounts.find((value) => value.code === 'bank') || options.accounts[0]
-    return { key: crypto.randomUUID(), methodId: method ? String(method.id) : '', accountId: account ? String(account.id) : '', amount: '0', auto: true, count: 1, due: today(), confirmed: false }
+    return { key: crypto.randomUUID(), methodId: method ? String(method.id) : '', accountId: account ? String(account.id) : '', amount: '0', auto: true, count: 1, due: today(), confirmed: false, intervalUnit: 'months', intervalCount: 1 }
   }
   function addProduct() {
     const product = products.find((value) => String(value.id) === productId)
@@ -166,8 +170,15 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
   function buildPayload(action: 'draft' | 'complete'): CheckoutPayload {
     return { request_id: crypto.randomUUID(), sale_id: selected?.id ?? null, action, customer_id: customerId ? Number(customerId) : null, notes, discount_amount: decimalText(globalDiscount ?? 0n),
       items: lines.map((line, index) => ({ product_id: line.productId, quantity: decimalText(values[index].quantity ?? 0n, 3), unit_price: decimalText(values[index].price ?? 0n), discount_amount: decimalText(values[index].off ?? 0n) })),
-      payments: payments.map((payment, index) => ({ method_id: Number(payment.methodId), account_id: Number(payment.accountId), amount: decimalText(paymentAmounts[index] ?? 0n), installment_count: payment.count, first_due_date: payment.due, confirmed: payment.confirmed })),
+      payments: payments.map((payment, index) => ({ method_id: Number(payment.methodId), account_id: Number(payment.accountId), amount: decimalText(paymentAmounts[index] ?? 0n), installment_count: payment.count, first_due_date: payment.due, confirmed: payment.confirmed, interval_unit: payment.intervalUnit, interval_count: payment.intervalCount })),
     }
+  }
+  async function reviewPayments() {
+    if (blocked || !canComplete) return
+    setBusy(true); setError(''); setPreview(null)
+    try { setPreview(await getPaymentPreview(store.id, decimalText(total), buildPayload('complete').payments)); setReview(true) }
+    catch (err) { setError(failure(err)); setReload(value => value + 1) }
+    finally { setBusy(false) }
   }
   async function persist(payload: CheckoutPayload) {
     if (busy) return
@@ -238,24 +249,27 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
         </div>
         <div className="erp-card"><div className="erp-checkout-section"><span>03</span><h2>Pagamento</h2><small>Combine formas e condições</small></div>
           {!options.methods.length || !options.accounts.length ? <p className="erp-alert">Configure as formas de pagamento e contas de recebimento antes de concluir a venda.</p> : null}
+          {!readOnly && <div className="erp-sales-actions"><button className="erp-secondary-button" aria-expanded={builder} disabled={blocked || catalogLoading || total <= 0n || !options.methods.length || !options.accounts.length} onClick={() => setBuilder(value => !value)}>{builder ? 'Fechar montagem do plano' : 'Entrada + parcelas'}</button></div>}
+          {builder && !readOnly && <PaymentPlanBuilder options={options} total={total} blocked={blocked || catalogLoading} onApply={rows => { setPayments(rows); setBuilder(false); setDirty(true); setError(''); setSuccess('Condições aplicadas. Confira os vencimentos antes de concluir.') }} />}
           {payments.map((payment, index) => {
             const method = options.methods.find((value) => String(value.id) === payment.methodId)
             const amount = paymentAmounts[index] ?? 0n
-            const schedule = paymentSchedule(amount, payment.count, payment.due)
+            const schedule = paymentSchedule(amount, payment.count, payment.due, payment.intervalUnit, payment.intervalCount)
             return <div className="erp-checkout-payment" key={payment.key}>
               <div className="erp-checkout-payment-title"><strong>Pagamento {index + 1}</strong>{!readOnly && <button className="erp-table-button is-danger" disabled={blocked} onClick={() => { setPayments((items) => items.filter((item) => item.key !== payment.key)); setDirty(true) }}>Remover pagamento {index + 1}</button>}</div>
-              <div className="erp-checkout-payment-fields"><label>Forma<select aria-label={`Forma ${index+1}`} value={payment.methodId} disabled={blocked || readOnly} onChange={(event) => { const next = options.methods.find((value) => String(value.id) === event.target.value); changePayment(payment.key, { methodId: event.target.value, count: 1, confirmed: false, ...(next?.kind === 'cash' ? { accountId: String(options.accounts.find((value) => value.code === 'cash')?.id || options.accounts[0]?.id || '') } : {}) }) }}><option value="">Selecione</option>{readOnly && !method && <option value={payment.methodId}>{selected?.payments[index]?.method_name || 'Forma registrada'}</option>}{options.methods.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>
+              <div className="erp-checkout-payment-fields"><label>Forma<select aria-label={`Forma ${index+1}`} value={payment.methodId} disabled={blocked || readOnly} onChange={(event) => { const next = options.methods.find((value) => String(value.id) === event.target.value); changePayment(payment.key, { methodId: event.target.value, count: 1, confirmed: false, intervalUnit: 'months', intervalCount: 1, ...(next?.kind === 'cash' ? { accountId: String(options.accounts.find((value) => value.code === 'cash')?.id || options.accounts[0]?.id || '') } : {}) }) }}><option value="">Selecione</option>{readOnly && !method && <option value={payment.methodId}>{selected?.payments[index]?.method_name || 'Forma registrada'}</option>}{options.methods.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>
                 <label>Valor (R$)<input aria-label={`Valor do pagamento ${index+1}`} inputMode="decimal" value={payment.auto ? decimalText(amount) : payment.amount} disabled={blocked || readOnly} onChange={(event) => changePayment(payment.key,{ amount: event.target.value, auto: false })} /></label>
                 <label>Conta de recebimento<select aria-label={`Conta ${index+1}`} value={payment.accountId} disabled={blocked || readOnly} onChange={(event) => changePayment(payment.key,{accountId:event.target.value})}>{readOnly && !options.accounts.some((value) => String(value.id) === payment.accountId) && <option value={payment.accountId}>{selected?.payments[index]?.account_name || 'Conta registrada'}</option>}<option value="">Selecione</option>{options.accounts.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>
               </div>
-              <div className="erp-checkout-payment-extra"><label>Parcelas<select aria-label={`Parcelas ${index+1}`} value={payment.count} disabled={blocked || readOnly || !credit.includes(method?.kind || selected?.payments[index]?.kind || '')} onChange={(event) => changePayment(payment.key,{ count: Number(event.target.value) })}>{Array.from({length:12},(_,i) => <option key={i} value={i+1}>{i+1}x sem juros</option>)}</select></label><label>{['credit','debit'].includes(method?.kind || '') ? 'Primeiro repasse previsto' : 'Primeiro vencimento'}<input aria-label={`Vencimento ${index+1}`} type="date" value={payment.due} disabled={blocked || readOnly} onChange={(event) => changePayment(payment.key,{due:event.target.value})} /></label>
+              <div className="erp-checkout-payment-extra"><label>Parcelas<select aria-label={`Parcelas ${index+1}`} value={payment.count} disabled={blocked || readOnly || !credit.includes(method?.kind || selected?.payments[index]?.kind || '')} onChange={(event) => changePayment(payment.key,{ count: Number(event.target.value) })}>{!readOnly && payment.count > (method?.installment_limit ?? 12) && <option value={payment.count}>{payment.count}x · acima do limite atual</option>}{Array.from({length:readOnly ? payment.count : method?.installment_limit ?? 12},(_,i) => <option key={i} value={i+1}>{i+1}x sem juros</option>)}</select></label><label>{['credit','debit'].includes(method?.kind || '') ? 'Primeiro repasse previsto' : 'Primeiro vencimento'}<input aria-label={`Vencimento ${index+1}`} type="date" value={payment.due} disabled={blocked || readOnly} onChange={(event) => changePayment(payment.key,{due:event.target.value})} /></label>
                 {immediate.includes(method?.kind || selected?.payments[index]?.kind || '') ? <label className="erp-checkout-checkbox"><input type="checkbox" aria-label={`Recebido agora ${index+1}`} checked={payment.confirmed} disabled={blocked || readOnly} onChange={(event) => changePayment(payment.key,{confirmed:event.target.checked})} />Recebimento confirmado</label> : <p className="erp-sales-hint">{['credit','debit'].includes(method?.kind || selected?.payments[index]?.kind || '') ? 'Repasse da operadora a receber.' : 'Parcelas a receber do cliente.'}</p>}
               </div>
+              <div className="erp-payment-interval"><label>Intervalo entre parcelas<select aria-label={`Unidade do intervalo ${index+1}`} value={payment.intervalUnit} disabled={blocked || readOnly || payment.count === 1} onChange={event => changePayment(payment.key, { intervalUnit: event.target.value as 'months' | 'days', intervalCount: event.target.value === 'days' ? 30 : 1 })}><option value="months">Meses</option><option value="days">Dias</option></select></label><label>{payment.intervalUnit === 'months' ? 'A cada quantos meses' : 'A cada quantos dias'}<input aria-label={`Intervalo ${index+1}`} type="number" min={1} max={payment.intervalUnit === 'months' ? 12 : 365} value={payment.intervalCount} disabled={blocked || readOnly || payment.count === 1} onChange={event => changePayment(payment.key, { intervalCount: Number(event.target.value) })} /></label>{!readOnly && <p className="erp-sales-hint">Limite da forma: {method?.installment_limit ?? 12} parcela(s).</p>}</div>
               {schedule.length > 0 && <div className="erp-checkout-installments" aria-label={`Prévia das parcelas ${index+1}`}>{schedule.map((installment, number) => <span key={number}><strong>{number+1}/{payment.count} · {brl(installment.amount)}</strong><small>{displayDate(installment.date)}</small></span>)}</div>}
               {readOnly && selected?.payments[index]?.installments.map((installment) => <p className="erp-sales-hint" key={installment.id}>Parcela {installment.number}: {installment.status === 'cancelled' ? 'Cancelada' : `Recebido ${money.format(Number(installment.paid_amount))} · Saldo ${money.format(Number(installment.remaining_amount))}`}</p>)}
             </div>
           })}
-          {!!payments.length && !paymentsValid && !readOnly && <p className="erp-alert" role="alert">Confira a forma, a conta, o valor positivo e o vencimento de cada pagamento. Cada parcela deve ter pelo menos um centavo.</p>}
+          {!!payments.length && !paymentsValid && !readOnly && <p className="erp-alert" role="alert">Confira a forma, a conta, o valor, o limite de parcelas, o intervalo e os vencimentos de cada pagamento. Cada parcela deve ter pelo menos um centavo.</p>}
           {!payments.length && <p className="erp-sales-hint">Defina como o valor será pago. Uma entrada pode usar Pix e o restante, crediário.</p>}
           {!readOnly && <button className="erp-secondary-button" disabled={blocked || catalogLoading || !options.methods.length || !options.accounts.length || payments.length >= 20} onClick={addPayment}>+ Adicionar forma de pagamento</button>}
           {selected?.financial_status === 'legacy' && <p className="erp-alert">Esta venda foi registrada antes do financeiro. Nenhum recebimento foi presumido para ela.</p>}
@@ -271,12 +285,12 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
         {((!readOnly && predictedNegativeStock.length > 0) || (readOnly && recordedNegativeStock.length > 0)) && <div className="erp-sales-warning" role="status"><strong>{readOnly ? 'Esta venda deixou produtos com estoque negativo.' : options.allow_negative_stock ? 'A venda poderá ser concluída com estoque negativo.' : 'Esta unidade bloqueia vendas com estoque negativo.'}</strong><ul>{readOnly ? recordedNegativeStock.map((item) => <li key={item.product}>{item.product_name}: saldo após a venda {Number(item.balance_after).toLocaleString('pt-BR',{maximumFractionDigits:3})}</li>) : predictedNegativeStock.map((item) => <li key={item.name}>{item.name}: saldo previsto {(Number(item.after)/1000).toLocaleString("pt-BR",{maximumFractionDigits:3})}</li>)}</ul></div>}
         {!readOnly && <div className="erp-discount-control"><p>Limite do seu perfil: <strong>{options.discount_limit_percentage}%</strong></p><p>Desconto considerado: {brl(consideredDiscount)} ({discountPercentage.toLocaleString('pt-BR',{maximumFractionDigits:2})}%)</p>{referenceSubtotal > subtotal && <p>A redução do preço unitário também conta como desconto.</p>}{overDiscountLimit && <><p className={approvedDiscount ? 'erp-sales-success' : 'erp-alert'} role="status">{approvedDiscount ? 'Desconto autorizado para estes valores.' : !dirty && selected?.discount_control?.state === 'pending' ? 'Aguardando autorização de outra pessoa com permissão.' : !dirty && selected?.discount_control?.state === 'rejected' ? 'Desconto recusado. Você pode revisar os valores ou enviar uma nova justificativa.' : 'O desconto excede o limite. Solicite autorização para concluir.'}</p>{!approvedDiscount && <><label>Justificativa do desconto<textarea aria-label="Justificativa do desconto" maxLength={255} disabled={blocked} value={approvalReason} onChange={event=>setApprovalReason(event.target.value)} /></label><button className="erp-secondary-button" disabled={blocked || !canDraft || !approvalReason.trim() || (!dirty && selected?.discount_control?.state === 'pending')} onClick={()=>void askApproval()}>Solicitar autorização</button></>}{selected && <button className="erp-secondary-button" disabled={blocked || dirty} onClick={()=>void openSale(selected.id)}>Atualizar autorização</button>}</>}</div>}
         {error && <p className="erp-alert" role="alert">{error}</p>}
-        {!readOnly && <><button className="erp-action-button" disabled={blocked || !canComplete} onClick={() => setReview(true)}>{busy ? 'Registrando…' : 'Concluir venda'}</button><button className="erp-secondary-button" disabled={blocked || !canDraft} onClick={() => void persist(buildPayload('draft'))}>Salvar rascunho</button><p className="erp-sales-hint">O rascunho mantém o atendimento sem baixar o estoque.</p></>}
+        {!readOnly && <><button className="erp-action-button" disabled={blocked || !canComplete} onClick={() => void reviewPayments()}>{busy ? 'Registrando…' : 'Concluir venda'}</button><button className="erp-secondary-button" disabled={blocked || !canDraft} onClick={() => void persist(buildPayload('draft'))}>Salvar rascunho</button><p className="erp-sales-hint">O rascunho mantém o atendimento sem baixar o estoque.</p></>}
         {selected?.status === 'cancelled' && <p className="erp-alert">Venda cancelada: {selected.cancellation_reason}</p>}
         {selected?.can_cancel && <button className="erp-table-button is-danger" disabled={blocked} onClick={() => setCancelOpen((value) => !value)}>Cancelar venda</button>}
         {cancelOpen && <div className="erp-checkout-cancel"><label>Motivo do cancelamento<textarea aria-label="Motivo do cancelamento" maxLength={255} value={reason} disabled={blocked} onChange={(event) => setReason(event.target.value)} /></label><p className="erp-sales-hint">Os recebimentos serão estornados no registro do sistema. Uma devolução de dinheiro ao cliente deve ser realizada e conferida separadamente.</p><button className="erp-action-button" disabled={blocked || !reason.trim()} onClick={() => void cancel()}>Confirmar cancelamento</button></div>}
       </aside>
     </div>}
-    {review && <CheckoutModal titleId="checkout-review-title" busy={busy} onClose={() => setReview(false)}><div className="erp-card erp-checkout-modal"><span className="erp-kicker">CONFERÊNCIA</span><h2 id="checkout-review-title">Conferir e concluir</h2><p>{chosenCustomer?.name || 'Venda balcão'} · {store.name}</p><strong className="erp-checkout-review-total">{brl(total)}</strong><p>{lines.length} itens · Recebido agora: {brl(received)}</p>{payments.map((payment,index) => <p key={payment.key}>{options.methods.find((value) => String(value.id) === payment.methodId)?.name}: {brl(paymentAmounts[index] ?? 0n)} em {payment.count}x</p>)}{predictedNegativeStock.length > 0 && <div className="erp-sales-warning" role="status"><strong>Atenção: estoque negativo</strong><ul>{predictedNegativeStock.map((item) => <li key={item.name}>{item.name}: saldo previsto {(Number(item.after)/1000).toLocaleString("pt-BR",{maximumFractionDigits:3})}</li>)}</ul><p>A venda será registrada e este saldo ficará no histórico.</p></div>}<p className="erp-sales-hint">Ao confirmar, a venda será concluída com a baixa do estoque e o registro financeiro.</p><div className="erp-sales-actions"><button className="erp-secondary-button" autoFocus onClick={() => setReview(false)}>Voltar à edição</button><button className="erp-action-button" disabled={busy || !canComplete} onClick={() => void persist(buildPayload('complete'))}>Confirmar venda</button></div></div></CheckoutModal>}
+    {review && <CheckoutModal titleId="checkout-review-title" busy={busy} onClose={() => setReview(false)}><div className="erp-card erp-checkout-modal"><span className="erp-kicker">CONFERÊNCIA</span><h2 id="checkout-review-title">Conferir e concluir</h2><p>{chosenCustomer?.name || 'Venda balcão'} · {store.name}</p><strong className="erp-checkout-review-total">{brl(total)}</strong><p>{lines.length} itens · Recebido agora: {brl(received)}</p>{preview?.payments.map((payment,index) => <div className="erp-payment-review" key={index}><strong>{payment.method_name} · {brl(decimal(payment.amount) ?? 0n)}</strong><p>{payment.account_name} · {payment.confirmed ? 'Recebimento confirmado' : ['credit', 'debit'].includes(payment.kind) ? 'A receber da operadora' : 'A receber do cliente'}</p><div className="erp-customer-table-wrap"><table className="erp-payment-review-table"><thead><tr><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>{payment.installments.map(item => <tr key={item.number}><td>{item.number}/{payment.installments.length}</td><td>{displayDate(item.due_date)}</td><td>{brl(decimal(item.amount) ?? 0n)}</td></tr>)}</tbody></table></div></div>)}{predictedNegativeStock.length > 0 && <div className="erp-sales-warning" role="status"><strong>Atenção: estoque negativo</strong><ul>{predictedNegativeStock.map((item) => <li key={item.name}>{item.name}: saldo previsto {(Number(item.after)/1000).toLocaleString("pt-BR",{maximumFractionDigits:3})}</li>)}</ul><p>A venda será registrada e este saldo ficará no histórico.</p></div>}<p className="erp-sales-hint">Ao confirmar, a venda será concluída com a baixa do estoque e o registro financeiro.</p><div className="erp-sales-actions"><button className="erp-secondary-button" autoFocus onClick={() => setReview(false)}>Voltar à edição</button><button className="erp-action-button" disabled={busy || !canComplete || !preview} onClick={() => void persist(buildPayload('complete'))}>Confirmar venda</button></div></div></CheckoutModal>}
   </section>
 }

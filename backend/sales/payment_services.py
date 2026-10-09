@@ -1,6 +1,4 @@
 """Parcelas e recebimentos locais. Não executa cobranças ou transferências bancárias."""
-import calendar
-from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -11,26 +9,13 @@ from django.utils import timezone
 from accounts.selectors import get_accessible_stores
 from .models import CheckoutRequest, FinancialAccount, FinancialEntry, PaymentMethod, Receivable, Sale, SaleItem, SalePayment
 from .services import _locked_sale
+from .payment_schedule import schedule, validate_terms
 
 
 IMMEDIATE_KINDS = {'cash', 'pix', 'transfer'}
 CUSTOMER_CREDIT_KINDS = {'store_credit', 'boleto'}
 CARD_KINDS = {'credit', 'debit'}
 
-
-def schedule(amount, count, first_date):
-    cents = int(amount * 100)
-    base, remainder = divmod(cents, count)
-    result = []
-    for index in range(count):
-        month_index = first_date.year * 12 + first_date.month - 1 + index
-        year, month = divmod(month_index, 12)
-        month += 1
-        if year > 9999:
-            raise ValidationError({'first_due_date': 'Os vencimentos ultrapassam o limite de datas.'})
-        day = min(first_date.day, calendar.monthrange(year, month)[1])
-        result.append((date(year, month, day), Decimal(base + (index < remainder)) / 100))
-    return result
 
 
 def validate_payments(sale):
@@ -45,7 +30,7 @@ def validate_payments(sale):
             raise ValidationError({'payments': 'Selecione formas e contas de recebimento ativas.'})
         if payment.kind in CUSTOMER_CREDIT_KINDS and (not sale.customer_id or not sale.customer.is_active):
             raise ValidationError({'customer_id': 'Identifique um cliente ativo para boleto ou crediário.'})
-        schedule(payment.amount, payment.installment_count, payment.first_due_date)
+        validate_terms(payment.method, payment.amount, payment.installment_count, payment.first_due_date, payment.interval_unit, payment.interval_count, payment.confirmed)
     return payments
 
 
@@ -54,7 +39,7 @@ def book_sale_payments(sale, user):
     if sale.payments.filter(installments__isnull=False).exists():
         raise ValidationError('Esta venda já possui parcelas registradas.')
     for payment in sale.payments.select_related('method', 'account'):
-        for number, (due_date, amount) in enumerate(schedule(payment.amount, payment.installment_count, payment.first_due_date), 1):
+        for number, (due_date, amount) in enumerate(schedule(payment.amount, payment.installment_count, payment.first_due_date, payment.interval_unit, payment.interval_count), 1):
             receivable = Receivable.objects.create(
                 payment=payment, number=number, due_date=due_date, amount=amount,
                 debtor=Receivable.Debtor.OPERATOR if payment.kind in CARD_KINDS else Receivable.Debtor.CUSTOMER,

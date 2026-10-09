@@ -5,13 +5,14 @@ from .views import (
     MySaleItemDetailView, MySaleItemsView, MySalesView,
 )
 
-from .payment_views import PaymentOptionsView, SaleCheckoutView, ReceivablesView, ReceiveInstallmentView
+from .payment_views import PaymentOptionsView, SaleCheckoutView, ReceivablesView, ReceiveInstallmentView, PaymentPreviewView
 
 from .commercial_views import RequestDiscountView, DecideDiscountView
 
 app_name = "sales"
 
 urlpatterns = [
+    path("me/sales/payment-preview/", PaymentPreviewView.as_view(), name="payment-preview"),
     path("me/sales/<int:sale_id>/discount/request/", RequestDiscountView.as_view(), name="discount-request"),
     path("me/sales/<int:sale_id>/discount/<int:request_id>/decision/", DecideDiscountView.as_view(), name="discount-decision"),
     path("me/sales/payment-options/", PaymentOptionsView.as_view(), name="payment-options"),
