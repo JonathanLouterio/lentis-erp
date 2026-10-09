@@ -39,3 +39,40 @@ class EntryAdmin(ReadOnlyFinancialAdmin):
 
 admin.site.register(SalePayment, ReadOnlyFinancialAdmin)
 admin.site.register(CheckoutRequest, ReadOnlyFinancialAdmin)
+
+
+from .models import DiscountPolicy, DiscountAuthorization
+
+
+@admin.register(DiscountPolicy)
+class DiscountPolicyAdmin(admin.ModelAdmin):
+    list_display = ['store','role','limit_percentage']
+    list_filter = ['store','role']
+
+    def get_queryset(self, request):
+        from accounts.selectors import get_accessible_stores
+        return super().get_queryset(request).filter(store__in=get_accessible_stores(request.user))
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'store':
+            from accounts.selectors import get_accessible_stores
+            kwargs['queryset'] = get_accessible_stores(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        from accounts.selectors import get_accessible_stores
+        from django.core.exceptions import PermissionDenied
+        if not get_accessible_stores(request.user).filter(pk=obj.store_id).exists():
+            raise PermissionDenied('Você não possui acesso a esta unidade.')
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(DiscountAuthorization)
+class DiscountAuthorizationAdmin(ReadOnlyFinancialAdmin):
+    list_display = ['id','sale','action','created_by','discount_amount','limit_percentage','created_at']
+    list_filter = ['action','sale__store']
+    search_fields = ['reason','created_by__username']
+
+    def get_queryset(self, request):
+        from accounts.selectors import get_accessible_stores
+        return super().get_queryset(request).filter(sale__store__in=get_accessible_stores(request.user))

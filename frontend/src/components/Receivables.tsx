@@ -13,7 +13,7 @@ const states = { pending: 'Pendente', partial: 'Parcial', paid: 'Recebida', canc
 export default function Receivables({ store, userId, onSavingChange, onDirtyChange }: Props) {
   const storageKey = `lentis.receipt.${userId}.${store.id}`
   const [data, setData] = useState<ReceivablesPage>({ count: 0, results: [], next: null, previous: null })
-  const [options, setOptions] = useState<PaymentOptions>({ methods: [], accounts: [], can_receive: false, allow_negative_stock: false })
+  const [options, setOptions] = useState<PaymentOptions>({ methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" })
   const [state, setState] = useState('pending')
   const [debtor, setDebtor] = useState('')
   const [page, setPage] = useState(1)

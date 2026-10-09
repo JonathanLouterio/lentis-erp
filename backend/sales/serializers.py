@@ -13,7 +13,7 @@ class SaleItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SaleItem
-        fields = ["id", "product", "product_code", "product_name", "quantity", "unit_price", "discount_amount", "subtotal", "total"]
+        fields = ["id", "product", "product_code", "product_name", "quantity", "unit_price", "reference_price", "discount_amount", "subtotal", "total"]
         read_only_fields = fields
 
 
@@ -40,6 +40,8 @@ class SaleSerializer(serializers.ModelSerializer):
     payments = serializers.SerializerMethodField()
     financial_status = serializers.SerializerMethodField()
     stock_warnings = serializers.SerializerMethodField()
+    discount_control = serializers.SerializerMethodField()
+    discount_requests = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
     can_finalize = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
@@ -50,7 +52,7 @@ class SaleSerializer(serializers.ModelSerializer):
             "id", "store", "store_name", "customer", "customer_name", "created_by", "creator_username",
             "status", "status_label", "notes", "created_at", "updated_at", "completed_at", "cancelled_at",
             "cancellation_reason", "items", "events", "subtotal", "discount_total", "total",
-            "can_edit", "can_finalize", "can_cancel", "discount_amount", "payments", "financial_status", "stock_warnings",
+            "can_edit", "can_finalize", "can_cancel", "discount_amount", "payments", "financial_status", "stock_warnings", "discount_control", "discount_requests",
         ]
         read_only_fields = fields
 
@@ -64,6 +66,14 @@ class SaleSerializer(serializers.ModelSerializer):
         if sale.completed_at is None:
             return "none"
         return "recorded" if sale.payments.exists() or sale.total == 0 else "legacy"
+
+    def get_discount_control(self, sale):
+        from .commercial_services import discount_control
+        return discount_control(sale, self.context['request'].user)
+
+    def get_discount_requests(self, sale):
+        from .commercial_services import authorization_history
+        return authorization_history(sale, self.context['request'].user)
 
     def get_stock_warnings(self, sale):
         # Os valores são da movimentação original, inclusive após uma reposição.
@@ -86,7 +96,8 @@ class SaleSerializer(serializers.ModelSerializer):
         return sale.status == Sale.Status.DRAFT
 
     def get_can_finalize(self, sale):
-        return sale.status == Sale.Status.DRAFT and bool(sale.items.all())
+        control = self.get_discount_control(sale)
+        return sale.status == Sale.Status.DRAFT and bool(sale.items.all()) and (not control['required'] or control['state'] == 'approved')
 
     def get_can_cancel(self, sale):
         user = self.context["request"].user

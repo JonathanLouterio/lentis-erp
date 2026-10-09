@@ -134,6 +134,7 @@ class SaleItem(models.Model):
         "Preço unitário", max_digits=12, decimal_places=2,
         validators=[MinValueValidator(ZERO)],
     )
+    reference_price = models.DecimalField("Preço de referência", max_digits=12, decimal_places=2, null=True, blank=True, editable=False, validators=[MinValueValidator(ZERO)])
     discount_amount = models.DecimalField(
         "Desconto do item (R$)", max_digits=12, decimal_places=2,
         default=0, validators=[MinValueValidator(ZERO)],
@@ -146,6 +147,7 @@ class SaleItem(models.Model):
         verbose_name_plural = "Itens da venda"
         ordering = ["pk"]
         constraints = [
+            models.CheckConstraint(condition=models.Q(reference_price__isnull=True) | models.Q(reference_price__gte=0), name="sale_item_reference_price_valid"),
             models.UniqueConstraint(fields=["sale", "product"], name="unique_product_per_sale"),
             models.CheckConstraint(
                 condition=models.Q(quantity__gt=0) & models.Q(unit_price__gte=0) & models.Q(discount_amount__gte=0),
@@ -185,12 +187,13 @@ class SaleItem(models.Model):
                 raise ValidationError("Um item não pode ser transferido para outra venda.")
             self.sale = sale
             if previous is None or previous.product_id != self.product_id:
+                self.reference_price = self.product.sale_price
                 self.product_code = self.product.internal_code
                 self.product_name = self.product.name
                 if self.unit_price is None:
                     self.unit_price = self.product.sale_price
                 if kwargs.get("update_fields") is not None:
-                    kwargs["update_fields"] = set(kwargs["update_fields"]) | {"product_code", "product_name", "unit_price"}
+                    kwargs["update_fields"] = set(kwargs["update_fields"]) | {"product_code", "product_name", "unit_price", "reference_price"}
             self.full_clean()
             super().save(*args, **kwargs)
 
@@ -291,3 +294,5 @@ class SaleStockMovement(models.Model):
 
 # Estes modelos pertencem ao mesmo app; o arquivo separado mantém o módulo legível.
 from .payment_models import FinancialAccount, PaymentMethod, SalePayment, Receivable, FinancialEntry, CheckoutRequest  # noqa: E402,F401
+
+from .commercial_models import DiscountPolicy, DiscountAuthorization  # noqa: E402,F401

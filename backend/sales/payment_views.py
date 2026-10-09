@@ -16,10 +16,16 @@ from .views import SalesBaseView, SalesPagination, model_errors
 class PaymentOptionsView(SalesBaseView):
     def get(self, request):
         store = self._selected_store()
+        from .commercial_services import current_policy, can_approve
+        role, limit, configured = current_policy(request.user, store)
         return Response({
             'methods': MethodSerializer(PaymentMethod.objects.filter(store=store, is_active=True), many=True).data,
             'accounts': AccountSerializer(FinancialAccount.objects.filter(store=store, is_active=True), many=True).data,
             'allow_negative_stock': store.allow_negative_stock,
+            'discount_limit_percentage': str(limit),
+            'discount_policy_configured': configured,
+            'can_approve_discount': can_approve(request.user, store),
+            'discount_role': role,
             'can_receive': request.user.is_staff or request.user.is_superuser,
         })
 

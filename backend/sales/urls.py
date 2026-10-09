@@ -7,9 +7,13 @@ from .views import (
 
 from .payment_views import PaymentOptionsView, SaleCheckoutView, ReceivablesView, ReceiveInstallmentView
 
+from .commercial_views import RequestDiscountView, DecideDiscountView
+
 app_name = "sales"
 
 urlpatterns = [
+    path("me/sales/<int:sale_id>/discount/request/", RequestDiscountView.as_view(), name="discount-request"),
+    path("me/sales/<int:sale_id>/discount/<int:request_id>/decision/", DecideDiscountView.as_view(), name="discount-decision"),
     path("me/sales/payment-options/", PaymentOptionsView.as_view(), name="payment-options"),
     path("me/sales/checkout/", SaleCheckoutView.as_view(), name="sale-checkout"),
     path("me/receivables/", ReceivablesView.as_view(), name="receivables"),

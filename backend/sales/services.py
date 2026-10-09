@@ -63,6 +63,8 @@ def finalize_sale(*, user, sale_id):
             if product.stock_quantity < item.quantity and not sale.store.allow_negative_stock:
                 raise ValidationError({"items": f"Estoque insuficiente para {item.product_code} — {item.product_name}."})
 
+        from .commercial_services import validate_discount
+        validate_discount(sale, user)
         event = SaleEvent.objects.create(sale=sale, event_type=SaleEvent.EventType.COMPLETED, created_by=user)
         for item in items:
             movement = register_stock_movement(

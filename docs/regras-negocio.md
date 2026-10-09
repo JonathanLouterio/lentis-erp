@@ -10,7 +10,7 @@ Levantamento inicial em 09/10/2026, com referências na documentação oficial d
 | EST-02 | Registrar entrada, saída e ajuste com autor, motivo e saldos anterior/posterior. Reposição soma ao saldo atual; nunca zera automaticamente um saldo negativo. | Implementada no Lentis; ampliada para saldos negativos neste pacote. | Decisão do Lentis. |
 | EST-03 | Mostrar produtos no estoque mínimo ou abaixo dele. Evoluir para uma lista de reposição e aviso no painel da unidade. | A contagem básica já existe na tela de movimentações; painel e lista de reposição são propostas. | Decisão do Lentis. |
 | VND-01 | Rascunho não movimenta estoque nem lança recebimentos. Conclusão registra estoque e financeiro em uma operação. Cancelamento preserva a venda e gera movimentos inversos. | Implementada no fluxo atual. | [Bling: transições com lançamento e estorno][bling-transicoes]. |
-| VND-02 | Limitar descontos por perfil/unidade e exigir autorização quando exceder o limite. Registrar solicitante, aprovador, motivo e valores autorizados. | Proposta; o limite atual apenas impede desconto maior que o valor da venda. Percentuais e perfis ainda precisam ser definidos. | [TOTVS: política e autorização de desconto][totvs-desconto]. |
+| VND-02 | Limitar descontos por perfil/unidade e exigir autorização quando exceder o limite. Registrar solicitante, aprovador, motivo e valores autorizados. | Implementada neste pacote. Limite por perfil/unidade, justificativa, aprovação ou recusa por outra pessoa autorizada e histórico imutável. Sem configuração, permanece o limite de 100% para preservar o comportamento anterior. | [TOTVS: política e autorização de desconto][totvs-desconto]. |
 | FIN-01 | Aceitar recebimento parcial e manter separado o valor já recebido do saldo em aberto. Guardar conta, meio de recebimento, data e operador. | Implementada no fluxo de recebimentos. | [Omie: baixa parcial de receitas][omie-parcial]. |
 | FIN-02 | Separar forma de pagamento acordada na venda, conta de destino e meio usado no recebimento. Diferenciar dívida do cliente de valor a receber da operadora do cartão. | Implementada no checkout atual; conciliação automática e taxas de cartão são futuras. | Decisão do Lentis. |
 | FIN-03 | Oferecer condições cadastráveis de parcelamento, com intervalos e vencimentos próprios, respeitando o fechamento exato dos centavos. | Já há parcelas mensais de 1 a 12, com primeiro vencimento e divisão exata. Cadastro de condições é proposta. | [Omie: opções personalizadas de parcelas][omie-parcelas]. |
@@ -32,13 +32,13 @@ A configuração inicial fica no **Django Admin → Organizações → Lojas →
 
 ## Próximas evoluções propostas
 
-1. **Configurações comerciais por unidade:** limite de desconto por perfil e autorização registrada.
+1. **Condições comerciais adicionais:** regras para margem mínima e alçadas adicionais, a definir. O limite de desconto por perfil/unidade e a autorização registrada já estão implementados.
 2. **Condições de pagamento:** opções cadastradas de entrada + parcelas, intervalos e vencimentos, com limite definido por condição.
 3. **Reposição e encomendas:** painel de produtos negativos/abaixo do mínimo e fluxo de pedidos ao fornecedor/laboratório.
 4. **Crédito e cobrança:** política de limite de crédito, análise de atraso e autorização; os valores e exceções devem refletir a operação da ótica.
 5. **Cartões e caixa:** taxas por modalidade, conciliação e fechamento de caixa.
 
-Estas propostas ainda não estão implementadas. A prioridade inicial deste pacote é liberar a venda com saldo negativo, manter os avisos e preservar o histórico.
+As propostas desta seção ainda não estão implementadas. Estoque negativo configurável e autorização de descontos já fazem parte do Lentis.
 
 ## Fontes consultadas
 
@@ -55,3 +55,15 @@ Estas propostas ainda não estão implementadas. A prioridade inicial deste paco
 [totvs-desconto]: https://centraldeatendimento.totvs.com/hc/pt-br/articles/41233748851991-WINT-Como-definir-um-percentual-m%C3%A1ximo-de-desconto-na-venda
 [omie-parcial]: https://ajuda.omie.com.br/pt-BR/articles/499024-realizando-uma-baixa-parcial-receita
 [omie-parcelas]: https://ajuda.omie.com.br/pt-BR/articles/10760883-cadastrando-um-novo-numero-de-parcelas
+
+## Detalhes da autorização de desconto
+
+- Limites são configurados no Django Admin em **Vendas → Limites de desconto por perfil**, vinculados a uma unidade e ao perfil do vínculo do usuário. Sem linha cadastrada para aquele perfil, o limite é 100%. O superusuário tem limite de 100%.
+- O desconto considerado inclui descontos nos itens, desconto geral e redução do preço unitário em relação ao preço de referência. Os preços de referência de novos itens são capturados no servidor; o cliente não escolhe esse valor.
+- Itens anteriores a esta atualização não possuem preço de referência; para esses registros, o valor unitário já negociado é usado como referência. Ao substituir os itens no checkout, a referência passa a ser o preço atual do cadastro.
+- A comparação usa valores exatos antes de arredondar o percentual para exibição.
+- A solicitação é criada em uma venda em rascunho e não registra estoque ou financeiro. A aprovação também não conclui a venda: o operador ainda precisa conferir e confirmar o atendimento.
+- O superusuário pode autorizar. Outros usuários precisam da permissão **Pode autorizar descontos acima do limite**, de acesso ativo à unidade e de ser uma pessoa diferente do solicitante. Marcar apenas **Membro da equipe** não concede essa autorização.
+- A autorização vale para o solicitante e para os valores registrados. Mudanças de itens, quantidades, preços de referência, descontos, cliente, perfil ou limite impedem reutilizá-la para valores diferentes. Retornar exatamente aos valores autorizados permite reutilizar aquela autorização. Notas e forma de pagamento não alteram os valores de desconto autorizados.
+- Uma recusa pode ser seguida de uma nova solicitação com justificativa. Decisões já registradas não são editadas nem apagadas.
+- O vendedor usa **Atualizar autorização** para consultar a decisão. Não há atualização automática por notificações nesta etapa.

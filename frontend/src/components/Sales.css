@@ -128,3 +128,11 @@
 .erp-sales-warning ul { margin: 8px 0 0; padding-left: 18px; }
 .erp-sales-warning li { overflow-wrap: anywhere; }
 [data-theme='dark'] .erp-sales-warning { background: #3b3020; color: #f7d892; border-color: #8f7236; }
+
+.erp-discount-control { margin: 16px 0; padding-top: 12px; border-top: 1px solid var(--border-color, #d8dfed); font-size: .85rem; }
+.erp-discount-control p { margin: 8px 0; }
+.erp-discount-control textarea, .erp-discount-request textarea { width: 100%; min-height: 76px; resize: vertical; }
+.erp-discount-control button { width: 100%; margin-top: 8px; }
+.erp-discount-request { padding: 16px 0; border-top: 1px solid var(--border-color, #d8dfed); }
+.erp-discount-request p { font-size: .85rem; }
+.erp-discount-request .erp-sales-actions { margin-top: 12px; }

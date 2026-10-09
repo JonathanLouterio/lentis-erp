@@ -321,6 +321,7 @@ export async function updateTheme(
 export type SaleStatus = 'draft' | 'completed' | 'cancelled'
 
 export type SaleItem = {
+  reference_price: string | null
   id: number
   product: number
   product_code: string
@@ -366,6 +367,8 @@ export type Sale = {
   discount_amount: string
   payments: SalePayment[]
   stock_warnings: { product: number; product_code: string; product_name: string; balance_before: string; balance_after: string }[]
+  discount_control: { required: boolean; limit_percentage: string; discount_percentage: string; reference_subtotal: string; discount_amount: string; state: "not_required" | "required" | "pending" | "approved" | "rejected"; request_id: number | null } | null
+  discount_requests: DiscountRequest[]
   financial_status: "planned" | "none" | "recorded" | "legacy"
   can_edit: boolean
   can_finalize: boolean
@@ -438,7 +441,7 @@ export function cancelSale(storeId: number, saleId: number, reason: string): Pro
 export type PaymentKind = 'cash' | 'pix' | 'transfer' | 'debit' | 'credit' | 'store_credit' | 'boleto'
 export type PaymentMethod = { id: number; name: string; code: string; kind: PaymentKind }
 export type FinancialAccount = { id: number; name: string; code: string; balance: string }
-export type PaymentOptions = { methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean }
+export type PaymentOptions = { methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean; discount_limit_percentage: string; discount_policy_configured: boolean; can_approve_discount: boolean; discount_role: string }
 export type FinancialEntry = {
   id: number; account: number; account_name: string; method_name: string; amount: string
   created_at: string; creator_username: string; reason: string; reversal_of: number | null
@@ -481,4 +484,17 @@ export async function receiveInstallment(storeId: number, receivableId: number, 
   return request(`/api/me/receivables/${receivableId}/receive/?store_id=${storeId}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(data),
   })
+}
+
+
+export type DiscountRequest = {
+  id: number; requester: string; reason: string; created_at: string; limit_percentage: string
+  reference_subtotal: string; discount_amount: string; state: 'pending' | 'approve' | 'reject'
+  current: boolean; can_decide: boolean; decided_by: string | null; decision_reason: string | null; decided_at: string | null
+}
+export function requestDiscountAuthorization(storeId: number, saleId: number, reason: string): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/discount/request/`, 'POST', { reason })
+}
+export function decideDiscountAuthorization(storeId: number, saleId: number, requestId: number, action: 'approve' | 'reject', reason: string): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/discount/${requestId}/decision/`, 'POST', { action, reason })
 }
