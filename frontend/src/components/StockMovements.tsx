@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createStockMovement, getMyProducts, getStockMovements } from '../api'
+import { createStockMovement, getMyProducts, getStockMovements, getPaymentOptions } from '../api'
 import type { AccessibleStore, Product, StockMovement, StockMovementType } from '../api'
 import './StockMovements.css'
 
@@ -29,6 +29,7 @@ function readQuantity(value: string): number | null {
 
 export default function StockMovements({ store, initialProductId = '', onSavingChange }: Props) {
   const [products, setProducts] = useState<Product[]>([])
+  const [allowNegative, setAllowNegative] = useState(false)
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -48,11 +49,12 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
     let ignore = false
     setLoading(true)
     setLoadError('')
-    void Promise.all([getMyProducts(store.id), getStockMovements(store.id)])
-      .then(([currentProducts, history]) => {
+    void Promise.all([getMyProducts(store.id), getStockMovements(store.id), getPaymentOptions(store.id)])
+      .then(([currentProducts, history, policy]) => {
         if (ignore) return
         setProducts(currentProducts)
         setMovements(history)
+        setAllowNegative(policy.allow_negative_stock)
         setProductId((current) => currentProducts.some((item) => String(item.id) === current) ? current : '')
       })
       .catch((err: unknown) => {
@@ -68,7 +70,8 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
   const preview = balance !== null && amount !== null
     ? movementType === 'entry' ? balance + amount : movementType === 'exit' ? balance - amount : amount
     : null
-  const invalidPreview = preview !== null && (preview < 0 || preview > 999999999.999)
+  const negativeBlocked = preview !== null && preview < 0 && movementType === "exit" && !allowNegative
+  const invalidPreview = preview !== null && (negativeBlocked || Math.abs(preview) > 999999999.999)
   const lowStock = products.filter((product) => Number(product.stock_quantity) <= Number(product.minimum_stock)).length
   const historyProducts = new Map<number, string>()
   products.forEach((product) => historyProducts.set(product.id, `${product.internal_code} — ${product.name}`))
@@ -99,7 +102,7 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
       return
     }
     if (invalidPreview) {
-      setFormError(preview !== null && preview < 0 ? 'Estoque insuficiente para esta saída.' : 'O saldo resultante excede o limite permitido.')
+      setFormError(negativeBlocked ? 'Estoque insuficiente para esta saída.' : 'O saldo resultante excede o limite permitido.')
       return
     }
     if (!reason.trim()) {
@@ -194,8 +197,9 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
                   <span className={invalidPreview ? 'is-invalid' : ''}>Saldo previsto <strong>{preview === null ? '—' : quantityFormat.format(preview)}</strong></span>
                 </div>}
                 <p className="erp-stock-hint">O saldo será conferido novamente ao registrar.</p>
-                {invalidPreview && !formError && <p className="erp-alert" role="alert">{preview !== null && preview < 0
+                {invalidPreview && !formError && <p className="erp-alert" role="alert">{negativeBlocked
                   ? 'Estoque insuficiente para esta saída.' : 'O saldo resultante excede o limite permitido.'}</p>}
+                {preview !== null && preview < 0 && !invalidPreview && <p className="erp-alert" role="status">A movimentação será registrada com saldo negativo: {quantityFormat.format(preview)}.</p>}
                 {formError && <p className="erp-alert" role="alert">{formError}</p>}
                 <button type="submit" className="erp-action-button" disabled={saving || !selectedProduct || invalidPreview}>
                   {saving ? 'Registrando…' : movementType === 'adjustment' ? 'Registrar ajuste' : 'Registrar movimentação'}

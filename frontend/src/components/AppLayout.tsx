@@ -4,6 +4,8 @@ import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct,
 import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
 import StockMovements from './StockMovements'
+import Sales from './Sales'
+import Receivables from './Receivables'
 import './AppLayout.css'
 import './Customers.css'
 
@@ -73,8 +75,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [productFormError, setProductFormError] = useState('')
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [savingStock, setSavingStock] = useState(false)
+  const [savingSale, setSavingSale] = useState(false)
+  const [saleDirty, setSaleDirty] = useState(false)
   const [stockProductId, setStockProductId] = useState('')
-  const workspaceBusy = busy || savingCustomer || savingProduct || savingStock
+  const workspaceBusy = busy || savingCustomer || savingProduct || savingStock || savingSale
   const emptyProduct = (): ProductPayload => ({
     internal_code: '', barcode: '', name: '', brand: '', category: '',
     cost_price: '0', sale_price: '0', minimum_stock: '0',
@@ -297,7 +301,17 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setPage('Estoque')
   }
 
+  function leaveSaleAllowed() {
+    return !['Vendas', 'Financeiro'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+  }
+
+  function changePage(nextPage: string) {
+    if (nextPage === page || !leaveSaleAllowed()) return
+    setPage(nextPage)
+  }
+
   function changeStore(storeId: string) {
+    if (!leaveSaleAllowed()) return
     closeCustomerForm()
     closeProductForm()
     setCustomers([])
@@ -316,7 +330,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
         <nav className="erp-navigation" aria-label="Módulos">
           <button type="button" disabled={workspaceBusy}
             className={`erp-nav-button${page === 'Visão geral' ? ' is-active' : ''}`}
-            onClick={() => setPage('Visão geral')} aria-label="Visão geral"
+            onClick={() => changePage('Visão geral')} aria-label="Visão geral"
             aria-current={page === 'Visão geral' ? 'page' : undefined}
             title={collapsed ? 'Visão geral' : undefined}>
             <MenuIcon name="inicio" />
@@ -337,7 +351,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <div id={`menu-${group.icon}`} className="erp-submenu" hidden={collapsed || openGroup !== group.title}>
                 {group.items.map((item) => (
                   <button type="button" disabled={workspaceBusy} key={item} className={page === item ? 'is-active' : ''}
-                    aria-current={page === item ? 'page' : undefined} onClick={() => item === 'Estoque' ? openStock() : setPage(item)}>
+                    aria-current={page === item ? 'page' : undefined} onClick={() => {
+                      if (item === 'Estoque') { if (leaveSaleAllowed()) openStock() }
+                      else changePage(item)
+                    }}>
                     {item}
                   </button>
                 ))}
@@ -354,7 +371,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <span className="erp-profile-role">{selectedRole}</span>
             </div>
           )}
-          <button type="button" className="erp-icon-button" onClick={() => void onLogout()}
+          <button type="button" className="erp-icon-button" onClick={() => { if (leaveSaleAllowed()) void onLogout() }}
             disabled={workspaceBusy} aria-label={busy ? 'Saindo da conta' : 'Sair da conta'} title="Sair da conta">
             <MenuIcon name="sair" />
           </button>
@@ -400,6 +417,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <h1>Nenhuma unidade disponível</h1>
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
             </section>
+          ) : page === 'Vendas' ? (
+            <Sales key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+          ) : page === 'Financeiro' ? (
+            <Receivables key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Estoque' ? (
             <StockMovements key={selectedStore.id} store={selectedStore}
               initialProductId={stockProductId} onSavingChange={setSavingStock} />

@@ -141,7 +141,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
     store_name = serializers.CharField(source="store.name", read_only=True)
     created_by_username = serializers.CharField(source="created_by.username", read_only=True)
     movement_type_label = serializers.CharField(source="get_movement_type_display", read_only=True)
-    quantity_change = serializers.DecimalField(max_digits=12, decimal_places=3, read_only=True)
+    quantity_change = serializers.DecimalField(max_digits=13, decimal_places=3, read_only=True)
 
     class Meta:
         model = StockMovement

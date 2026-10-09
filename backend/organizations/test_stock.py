@@ -15,7 +15,7 @@ class StockMovementTests(TestCase):
             username="stock_admin", email="stock@example.com", password="test-only-password",
         )
         company = Company.objects.create(name="Empresa teste")
-        self.store = Store.objects.create(company=company, code="01", name="Matriz")
+        self.store = Store.objects.create(company=company, code="01", name="Matriz", allow_negative_stock=False)
         self.other_store = Store.objects.create(company=company, code="02", name="Filial")
         self.product = Product.objects.create(
             store=self.store, internal_code="P001", name="Armação teste",

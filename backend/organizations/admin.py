@@ -19,7 +19,7 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(Store)
 class StoreAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "company", "is_active")
+    list_display = ("code", "name", "company", "is_active", "allow_negative_stock")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
     list_select_related = ("company",)

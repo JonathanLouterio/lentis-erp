@@ -8,7 +8,7 @@ from accounts.selectors import get_accessible_stores
 from .models import Product, StockMovement
 
 
-def register_stock_movement(*, user, store_id, product_id, movement_type, quantity, reason):
+def register_stock_movement(*, user, store_id, product_id, movement_type, quantity, reason, _allow_inactive=False):
     """Registra o histórico e atualiza o saldo em uma única transação.
 
     Entrada/saída: quantity é a quantidade movimentada, sempre positiva.
@@ -21,6 +21,8 @@ def register_stock_movement(*, user, store_id, product_id, movement_type, quanti
 
     if movement_type not in StockMovement.MovementType.values:
         raise ValidationError({"movement_type": "Informe um tipo de movimentação válido."})
+    if _allow_inactive and movement_type != StockMovement.MovementType.ENTRY:
+        raise ValidationError("A devolução em produto inativo deve ser uma entrada.")
 
     try:
         amount = Decimal(str(quantity))
@@ -40,11 +42,12 @@ def register_stock_movement(*, user, store_id, product_id, movement_type, quanti
 
     with transaction.atomic():
         # Serializa operações simultâneas no mesmo produto no PostgreSQL.
-        product = Product.objects.select_for_update().filter(
-            pk=product_id, store_id=store_id, is_active=True,
-        ).first()
+        products = Product.objects.select_for_update(of=("self",)).select_related("store").filter(pk=product_id, store_id=store_id)
+        if not _allow_inactive:
+            products = products.filter(is_active=True)
+        product = products.first()
         if product is None:
-            raise ValidationError({"product": "Produto ativo não encontrado nesta unidade."})
+            raise ValidationError({"product": "Produto permitido não encontrado nesta unidade."})
 
         before = product.stock_quantity
         if movement_type == StockMovement.MovementType.ENTRY:
@@ -53,9 +56,9 @@ def register_stock_movement(*, user, store_id, product_id, movement_type, quanti
             after = before - amount
         else:
             after = amount
-        if after < 0:
-            raise ValidationError({"quantity": "Estoque insuficiente para esta saída."})
-        if after > Decimal("999999999.999"):
+        if after < 0 and movement_type == StockMovement.MovementType.EXIT and not product.store.allow_negative_stock:
+            raise ValidationError({"quantity": "Estoque insuficiente: esta unidade está configurada para bloquear saldo negativo."})
+        if abs(after) > Decimal("999999999.999"):
             raise ValidationError({"quantity": "O saldo resultante excede o limite permitido."})
 
         movement = StockMovement(

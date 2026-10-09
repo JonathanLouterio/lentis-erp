@@ -317,3 +317,168 @@ export async function updateTheme(
     body: JSON.stringify({ theme }),
   })
 }
+
+export type SaleStatus = 'draft' | 'completed' | 'cancelled'
+
+export type SaleItem = {
+  id: number
+  product: number
+  product_code: string
+  product_name: string
+  quantity: string
+  unit_price: string
+  discount_amount: string
+  subtotal: string
+  total: string
+}
+
+export type SaleEvent = {
+  id: number
+  event_type: 'completed' | 'cancelled'
+  event_label: string
+  created_by: number
+  creator_username: string
+  reason: string
+  created_at: string
+}
+
+export type Sale = {
+  id: number
+  store: number
+  store_name: string
+  customer: number | null
+  customer_name: string | null
+  created_by: number
+  creator_username: string
+  status: SaleStatus
+  status_label: string
+  notes: string
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  cancelled_at: string | null
+  cancellation_reason: string
+  items: SaleItem[]
+  events: SaleEvent[]
+  subtotal: string
+  discount_total: string
+  total: string
+  discount_amount: string
+  payments: SalePayment[]
+  stock_warnings: { product: number; product_code: string; product_name: string; balance_before: string; balance_after: string }[]
+  financial_status: "planned" | "none" | "recorded" | "legacy"
+  can_edit: boolean
+  can_finalize: boolean
+  can_cancel: boolean
+}
+
+export type SalesPage = {
+  count: number
+  next: string | null
+  previous: string | null
+  results: Sale[]
+}
+
+export type SaleItemPayload = {
+  product_id: number
+  quantity: string
+  unit_price: string
+  discount_amount: string
+}
+
+export function getSales(storeId: number, page = 1, status: SaleStatus | '' = ''): Promise<SalesPage> {
+  const query = new URLSearchParams({ store_id: String(storeId), page: String(page) })
+  if (status) query.set('status', status)
+  return request<SalesPage>(`/api/me/sales/?${query}`)
+}
+
+export function getSale(storeId: number, saleId: number): Promise<Sale> {
+  return request<Sale>(`/api/me/sales/${saleId}/?store_id=${storeId}`)
+}
+
+async function saleWrite(
+  storeId: number, suffix: string, method: 'POST' | 'PATCH' | 'DELETE', data?: unknown,
+): Promise<Sale> {
+  const token = await getCsrfToken()
+  return request<Sale>(`/api/me/sales/${suffix}?store_id=${storeId}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    ...(data === undefined ? {} : { body: JSON.stringify(data) }),
+  })
+}
+
+export function createSale(storeId: number): Promise<Sale> {
+  return saleWrite(storeId, '', 'POST', {})
+}
+
+export function updateSale(storeId: number, saleId: number, data: { customer_id: number | null; notes: string }): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/`, 'PATCH', data)
+}
+
+export function addSaleItem(storeId: number, saleId: number, item: SaleItemPayload): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/items/`, 'POST', item)
+}
+
+export function updateSaleItem(storeId: number, saleId: number, itemId: number, item: SaleItemPayload): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/items/${itemId}/`, 'PATCH', item)
+}
+
+export function removeSaleItem(storeId: number, saleId: number, itemId: number): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/items/${itemId}/`, 'DELETE')
+}
+
+export function finalizeSale(storeId: number, saleId: number): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/finalize/`, 'POST', {})
+}
+
+export function cancelSale(storeId: number, saleId: number, reason: string): Promise<Sale> {
+  return saleWrite(storeId, `${saleId}/cancel/`, 'POST', { reason })
+}
+
+export type PaymentKind = 'cash' | 'pix' | 'transfer' | 'debit' | 'credit' | 'store_credit' | 'boleto'
+export type PaymentMethod = { id: number; name: string; code: string; kind: PaymentKind }
+export type FinancialAccount = { id: number; name: string; code: string; balance: string }
+export type PaymentOptions = { methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean }
+export type FinancialEntry = {
+  id: number; account: number; account_name: string; method_name: string; amount: string
+  created_at: string; creator_username: string; reason: string; reversal_of: number | null
+}
+export type Receivable = {
+  id: number; sale_id: number; number: number; installment_count: number; due_date: string
+  amount: string; paid_amount: string; remaining_amount: string; status: 'pending' | 'partial' | 'paid' | 'cancelled'
+  debtor: 'customer' | 'operator'; customer_name: string; method_name: string; account_name: string
+  can_receive: boolean; entries: FinancialEntry[]
+}
+export type SalePayment = {
+  id: number; method: number; account: number; method_name: string; account_name: string; kind: PaymentKind
+  amount: string; installment_count: number; first_due_date: string; confirmed: boolean; installments: Receivable[]
+}
+export type CheckoutPayment = {
+  method_id: number; account_id: number; amount: string; installment_count: number
+  first_due_date: string; confirmed: boolean
+}
+export type CheckoutPayload = {
+  request_id: string; sale_id: number | null; action: 'draft' | 'complete'; customer_id: number | null
+  notes: string; discount_amount: string; items: SaleItemPayload[]; payments: CheckoutPayment[]
+}
+export type ReceivablesPage = { count: number; next: string | null; previous: string | null; results: Receivable[] }
+
+export function getPaymentOptions(storeId: number): Promise<PaymentOptions> {
+  return request(`/api/me/sales/payment-options/?store_id=${storeId}`)
+}
+export function submitCheckout(storeId: number, data: CheckoutPayload): Promise<Sale> {
+  return saleWrite(storeId, 'checkout/', 'POST', data)
+}
+export function getReceivables(storeId: number, page = 1, status = 'pending', debtor = ''): Promise<ReceivablesPage> {
+  const query = new URLSearchParams({ store_id: String(storeId), page: String(page), status })
+  if (debtor) query.set('debtor', debtor)
+  return request(`/api/me/receivables/?${query}`)
+}
+export async function receiveInstallment(storeId: number, receivableId: number, data: {
+  request_id: string; account_id: number; method_id: number; amount: string
+}): Promise<Receivable> {
+  const token = await getCsrfToken()
+  return request(`/api/me/receivables/${receivableId}/receive/?store_id=${storeId}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(data),
+  })
+}

@@ -10,4 +10,6 @@ urlpatterns = [
         "api-auth/",
         include("rest_framework.urls", namespace="rest_framework"),
     ),
+    path("api/", include("sales.urls")),
+    
 ]

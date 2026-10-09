@@ -1,0 +1,130 @@
+.erp-sales-page,
+.erp-sales-detail { display: grid; gap: 20px; min-width: 0; }
+.erp-sales-page .erp-card { min-width: 0; }
+.erp-sales-toolbar,
+.erp-sales-inline,
+.erp-sales-actions,
+.erp-sales-pagination,
+.erp-sales-item-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.erp-sales-toolbar { justify-content: space-between; margin-bottom: 20px; }
+.erp-sales-toolbar > span,
+.erp-sales-hint { color: var(--erp-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.erp-sales-hint { margin: 12px 0; }
+.erp-sales-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.erp-sales-pagination { justify-content: flex-end; margin-top: 18px; font-size: 12px; color: var(--erp-muted); }
+.erp-sales-item-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; }
+.erp-sales-page label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--erp-muted); font-size: 12px; font-weight: 600; }
+.erp-sales-page :is(input, select, textarea) { width: 100%; min-width: 0; min-height: 40px; border: 1px solid var(--erp-border); border-radius: 7px; padding: 9px 12px; background: #fff; color: #334155; font: inherit; font-size: 13px; }
+.erp-sales-page textarea { min-height: 84px; resize: vertical; }
+.erp-sales-page :is(input, select, textarea):focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.erp-sales-page button:disabled { opacity: .55; cursor: not-allowed; }
+.erp-sales-page :is(input, select, textarea):disabled { opacity: .8; }
+.erp-sales-item-footer { justify-content: space-between; margin: 12px 0 18px; }
+.erp-sales-item-footer strong { font-size: 16px; }
+.erp-sales-item-name { display: block; margin-top: 5px; color: var(--erp-muted); font-weight: 400; }
+.erp-sale-badge { display: inline-block; padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.erp-sale-badge.is-draft { background: #f0eafa; color: #7146a4; }
+.erp-sale-badge.is-completed { background: #e5f5ec; color: #17603d; }
+.erp-sale-badge.is-cancelled { background: #fff0ed; color: #b42318; }
+.erp-sales-list tr.is-selected { background: #f5f3fa; }
+.erp-sales-totals { display: grid; gap: 12px; max-width: 390px; margin: 24px 0 24px auto; }
+.erp-sales-totals > div { display: flex; justify-content: space-between; gap: 24px; font-size: 14px; }
+.erp-sales-totals dd { margin: 0; font-weight: 600; }
+.erp-sales-totals dt { color: var(--erp-muted); }
+.erp-sales-totals .is-total { border-top: 1px solid var(--erp-border); padding-top: 16px; font-size: 22px; }
+.erp-sales-totals .is-total dt { color: inherit; }
+.erp-sales-danger { color: #b42318; border-color: #e7b9b5; }
+.erp-sales-success { margin: 0; padding: 14px 18px; background: #ecfdf3; color: #17603d; border: 1px solid #a7d8bc; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+.erp-sales-cancel { border-color: #e7b9b5; }
+.erp-sales-cancel .erp-sales-actions { margin-top: 16px; }
+.erp-sales-history { display: grid; gap: 16px; margin: 18px 0 0; padding-left: 20px; }
+.erp-sales-history li { padding-left: 5px; }
+.erp-sales-history strong { display: block; font-size: 13px; }
+.erp-sales-history span { display: block; margin-top: 6px; color: var(--erp-muted); font-size: 12px; }
+.erp-sales-history p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.erp-sales-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+[data-theme='dark'] .erp-sales-page :is(input, select, textarea) { background: #111a2c; color: #e2e8f0; border-color: #3a4862; }
+[data-theme='dark'] .erp-sales-list tr.is-selected { background: #263149; }
+[data-theme='dark'] .erp-sales-page .erp-table-button { color: #e0c6ff; }
+[data-theme='dark'] .erp-sales-page .erp-table-button.is-danger { color: #ffb4a8; }
+[data-theme='dark'] .erp-sale-badge.is-draft { background: #38284f; color: #e0c6ff; }
+[data-theme='dark'] .erp-sale-badge.is-completed,
+[data-theme='dark'] .erp-sales-success { background: #173b2d; color: #b4f1cf; border-color: #337652; }
+[data-theme='dark'] .erp-sale-badge.is-cancelled { background: #4c2424; color: #ffb4a8; }
+[data-theme='dark'] .erp-sales-danger { color: #ffb4a8; border-color: #855353; }
+[data-theme='dark'] .erp-sales-cancel { border-color: #855353; }
+@media (max-width: 1050px) { .erp-sales-item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .erp-sales-product-field { grid-column: 1 / -1; } }
+@media (max-width: 760px) {
+  .erp-sales-item-grid { grid-template-columns: 1fr; }
+  .erp-sales-toolbar { align-items: stretch; flex-direction: column; }
+  .erp-sales-inline { justify-content: space-between; }
+  .erp-sales-totals { max-width: none; margin-left: 0; }
+  .erp-sales-totals .is-total { font-size: 19px; }
+}
+.erp-checkout-grid { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 22px; align-items: start; }
+.erp-checkout-main { display: grid; gap: 20px; min-width: 0; }
+.erp-checkout-section { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+.erp-checkout-section > span:first-child { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #f1eaff; color: #7146a4; font-size: 12px; font-weight: 700; }
+.erp-checkout-section h2 { margin: 0; font-size: 17px; }
+.erp-checkout-section small { margin-left: auto; color: var(--erp-muted); font-size: 12px; }
+.erp-checkout-notes { margin-top: 18px; }
+.erp-checkout-notes textarea { min-height: 56px; }
+.erp-checkout-product-picker { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.5fr) auto; gap: 12px; align-items: end; margin-bottom: 18px; }
+.erp-checkout-product-picker button { min-height: 40px; }
+.erp-checkout-empty { padding: 32px 20px; text-align: center; color: var(--erp-muted); border: 1px dashed var(--erp-border); border-radius: 10px; font-size: 13px; }
+.erp-checkout-lines { display: grid; }
+.erp-checkout-line { padding: 18px 0; border-top: 1px solid var(--erp-border); }
+.erp-checkout-line-name { margin-bottom: 12px; }
+.erp-checkout-line-name strong { display: block; font-size: 14px; }
+.erp-checkout-line-name small { display: block; margin-top: 6px; color: var(--erp-muted); font-size: 11px; }
+.erp-checkout-line-fields { display: grid; grid-template-columns: minmax(65px,.6fr) minmax(85px,.8fr) minmax(85px,.8fr) auto auto; gap: 12px; align-items: end; }
+.erp-checkout-line-fields > strong { align-self: center; font-size: 14px; white-space: nowrap; }
+.erp-checkout-line-fields > button { margin-bottom: 10px; }
+.erp-checkout-payment { padding: 18px; margin: 14px 0; border: 1px solid var(--erp-border); border-radius: 12px; }
+.erp-checkout-payment-title { display: flex; gap: 15px; align-items: center; justify-content: space-between; margin-bottom: 18px; font-size: 13px; }
+.erp-checkout-payment-fields { display: grid; grid-template-columns: 1.2fr .8fr 1fr; gap: 12px; }
+.erp-checkout-payment-extra { display: grid; grid-template-columns: .7fr 1fr 1fr; gap: 12px; align-items: end; margin-top: 16px; }
+.erp-sales-page .erp-checkout-checkbox { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 40px; }
+.erp-sales-page .erp-checkout-checkbox input { width: 17px; min-height: 17px; accent-color: #7847b4; }
+.erp-checkout-installments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.erp-checkout-installments > span { min-width: 115px; flex: 1; background: #f7f5fb; border-radius: 8px; padding: 11px; }
+.erp-checkout-installments strong { display: block; font-size: 12px; }
+.erp-checkout-installments small { display: block; color: var(--erp-muted); margin-top: 6px; font-size: 11px; }
+.erp-checkout-summary { position: sticky; top: 20px; display: grid; gap: 14px; }
+.erp-checkout-summary h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.erp-checkout-summary .erp-sales-hint { margin: 0; }
+.erp-checkout-summary .erp-sales-totals { width: 100%; margin: 3px 0; font-size: 12px; }
+.erp-checkout-summary .erp-sales-totals > div { font-size: 12px; gap: 12px; }
+.erp-checkout-grand-total { display: grid; gap: 8px; border-block: 1px solid var(--erp-border); padding: 18px 0; }
+.erp-checkout-grand-total span { color: var(--erp-muted); font-size: 12px; }
+.erp-checkout-grand-total strong { font-size: 30px; color: #7541ae; letter-spacing: -1px; }
+.erp-checkout-financial-summary { padding: 8px 0; }
+.erp-checkout-financial-summary .is-balanced { padding-top: 12px; border-top: 1px solid var(--erp-border); color: #17603d; }
+.erp-checkout-financial-summary .is-unbalanced { padding-top: 12px; border-top: 1px solid var(--erp-border); color: #b42318; }
+.erp-checkout-summary .erp-action-button, .erp-checkout-summary .erp-secondary-button { width: 100%; }
+.erp-checkout-cancel { display: grid; gap: 14px; border-top: 1px solid var(--erp-border); padding-top: 15px; }
+.erp-checkout-modal-backdrop { position: fixed; inset: 0; background: rgb(15 23 42 / .55); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
+.erp-checkout-modal { max-width: 470px; width: 100%; max-height: calc(100dvh - 48px); overflow: auto; box-shadow: 0 24px 80px rgb(0 0 0 / .2); }
+.erp-checkout-review-total { display: block; font-size: 34px; margin: 20px 0; color: #7541ae; }
+.erp-checkout-recovery { border-color: #a78bfa; }
+[data-theme='dark'] .erp-checkout-section > span:first-child { background: #38284f; color: #e0c6ff; }
+[data-theme='dark'] .erp-checkout-installments > span { background: #263149; }
+[data-theme='dark'] :is(.erp-checkout-grand-total strong,.erp-checkout-review-total) { color: #d6b4ff; }
+[data-theme='dark'] .erp-checkout-financial-summary .is-balanced { color: #b4f1cf; }
+[data-theme='dark'] .erp-checkout-financial-summary .is-unbalanced { color: #ffb4a8; }
+@media (max-width: 1250px) { .erp-checkout-grid { grid-template-columns: minmax(0,1fr) 260px; } .erp-checkout-product-picker { grid-template-columns: minmax(0,1fr) auto; } .erp-checkout-product-picker label:first-child { grid-column: 1 / -1; } .erp-checkout-line-fields { grid-template-columns: repeat(3,minmax(0,1fr)); } .erp-checkout-payment-fields { grid-template-columns: repeat(2,minmax(0,1fr)); } .erp-checkout-payment-fields > label:last-child { grid-column: 1 / -1; } .erp-checkout-payment-extra { grid-template-columns: repeat(2,minmax(0,1fr)); } .erp-checkout-payment-extra > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 1000px) { .erp-checkout-grid { grid-template-columns: minmax(0,1fr); } .erp-checkout-summary { position: static; } .erp-checkout-financial-summary, .erp-checkout-summary .erp-sales-totals { max-width: none; } }
+@media (max-width: 630px) { .erp-checkout-payment-fields, .erp-checkout-payment-extra { grid-template-columns: minmax(0,1fr); } .erp-checkout-product-picker { grid-template-columns: minmax(0,1fr); } .erp-checkout-payment { padding: 14px; } .erp-checkout-line-fields { gap: 8px; } .erp-checkout-line-fields :is(label,input) { font-size: 11px; } .erp-checkout-line-fields input { padding: 8px; } .erp-checkout-section small { margin-left: 44px; } .erp-checkout-modal-backdrop { padding: 12px; } .erp-checkout-modal .erp-sales-actions { flex-direction: column-reverse; align-items: stretch; } }
+.erp-receiving-accounts { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 16px; }
+.erp-receivables-page .erp-checkout-modal { display: grid; gap: 15px; }
+.erp-receivables-page .erp-checkout-modal h2, .erp-receivables-page .erp-checkout-modal p { margin: 0; }
+.erp-checkout-native-dialog { border: 0; padding: 0; background: transparent; color: inherit; width: min(470px,calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: visible; }
+.erp-checkout-native-dialog::backdrop { background: rgb(15 23 42 / .55); }
+.erp-checkout-native-dialog .erp-checkout-modal { margin: 0; }
+.erp-checkout-notes summary { color: var(--erp-muted); font-size: 12px; cursor: pointer; }
+.erp-checkout-notes[open] summary { margin-bottom: 12px; }
+.erp-sales-warning { padding: 14px; border: 1px solid #e4be6e; border-radius: 9px; background: #fff8e8; color: #785010; font-size: 12px; line-height: 1.6; }
+.erp-sales-warning strong { display: block; }
+.erp-sales-warning ul { margin: 8px 0 0; padding-left: 18px; }
+.erp-sales-warning li { overflow-wrap: anywhere; }
+[data-theme='dark'] .erp-sales-warning { background: #3b3020; color: #f7d892; border-color: #8f7236; }

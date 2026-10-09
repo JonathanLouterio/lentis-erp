@@ -83,7 +83,8 @@ class Store(models.Model):
         related_name="stores",
         verbose_name="Empresa",
     )
-    code = models.CharField("CÃ³digo", max_length=10, unique=True)
+    allow_negative_stock = models.BooleanField("Permitir estoque negativo", default=True)
+    code = models.CharField("Código", max_length=10, unique=True)
     name = models.CharField("Nome da loja", max_length=150)
     phone = models.CharField("Telefone", max_length=30, blank=True)
     email = models.EmailField("E-mail", blank=True)
@@ -117,7 +118,7 @@ class Customer(models.Model):
         choices=PersonType.choices,
         default=PersonType.INDIVIDUAL,
     )
-    name = models.CharField("Nome completo / RazÃ£o social", max_length=150)
+    name = models.CharField("Nome completo / Razão social", max_length=150)
     trade_name = models.CharField("Nome fantasia", max_length=150, blank=True)
     cpf = models.CharField("CPF", max_length=14, blank=True, null=True)
     cnpj = models.CharField("CNPJ", max_length=18, blank=True, null=True)
@@ -261,7 +262,6 @@ class Product(models.Model):
             models.CheckConstraint(
                 condition=models.Q(cost_price__gte=0)
                 & models.Q(sale_price__gte=0)
-                & models.Q(stock_quantity__gte=0)
                 & models.Q(minimum_stock__gte=0),
                 name="product_numeric_values_non_negative",
             ),
@@ -281,7 +281,6 @@ class Product(models.Model):
         for field in (
             "cost_price",
             "sale_price",
-            "stock_quantity",
             "minimum_stock",
         ):
             if getattr(self, field) < 0:
@@ -323,10 +322,6 @@ class StockMovement(models.Model):
         verbose_name_plural = "Movimentações de estoque"
         ordering = ["-created_at", "-id"]
         constraints = [
-            models.CheckConstraint(
-                condition=models.Q(balance_before__gte=0, balance_after__gte=0),
-                name="stock_movement_non_negative_balances",
-            ),
             models.CheckConstraint(
                 condition=(
                     models.Q(movement_type__in=["entry", "exit"], quantity__gt=0)

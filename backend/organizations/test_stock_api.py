@@ -16,7 +16,7 @@ class StockMovementAPITests(TestCase):
             username="stock_api_admin", email="stock-api@example.com", password="test-only-password",
         )
         company = Company.objects.create(name="Empresa API")
-        self.store = Store.objects.create(company=company, code="01", name="Matriz")
+        self.store = Store.objects.create(company=company, code="01", name="Matriz", allow_negative_stock=False)
         self.other_store = Store.objects.create(company=company, code="02", name="Filial")
         self.product = Product.objects.create(
             store=self.store, internal_code="API001", name="Produto API", stock_quantity=Decimal("10"),
