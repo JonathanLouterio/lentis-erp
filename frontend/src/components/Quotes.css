@@ -1,0 +1,4 @@
+.erp-quote-header-fields { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; margin-bottom: 18px; }
+.erp-quote-product-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 20px; }
+.erp-quotes-page .erp-checkout-summary { gap: 16px; }
+@media (max-width: 760px) { .erp-quote-header-fields, .erp-quote-product-picker { grid-template-columns: 1fr; } }

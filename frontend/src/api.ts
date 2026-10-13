@@ -559,3 +559,24 @@ export function getDashboard(storeId: number, period: DashboardPeriod): Promise<
   if (period.preset === 'custom') { query.set('start', period.start ?? ''); query.set('end', period.end ?? '') }
   return request(`/api/me/dashboard/?${query}`)
 }
+
+export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted'
+export type Quote = {
+  id: number; store: number; customer: number | null; customer_name: string | null; creator_username: string
+  status: QuoteStatus; status_label: string; is_expired: boolean; valid_until: string; notes: string
+  discount_amount: string; version: number; sale: number | null; created_at: string; updated_at: string
+  subtotal: string; total: string
+  items: { id: number; product: number; product_name: string; product_code: string; quantity: string; unit_price: string; discount_amount: string; subtotal: string; total: string }[]
+  events: { id: number; action: string; creator_username: string; reason: string; created_at: string; version: number }[]
+}
+export type QuotePayload = { request_id: string; expected_version?: number; customer_id: number | null; valid_until: string; notes: string; discount_amount: string; items: SaleItemPayload[] }
+export type QuoteAttempt =
+  | { action: 'save'; quoteId: number | null; payload: QuotePayload }
+  | { action: 'send' | 'accept' | 'reject' | 'convert'; quoteId: number; payload: { request_id: string; expected_version: number; reason: string } }
+export function getQuotes(storeId: number, page = 1, status = 'all'): Promise<CashPage<Quote>> { return request(`/api/me/quotes/?store_id=${storeId}&page=${page}&status=${status}`) }
+export function getQuote(storeId: number, id: number): Promise<Quote> { return request(`/api/me/quotes/${id}/?store_id=${storeId}`) }
+export async function submitQuoteOperation(storeId: number, attempt: QuoteAttempt): Promise<Quote> {
+  const token = await getCsrfToken()
+  const suffix = attempt.action === 'save' ? attempt.quoteId ? `${attempt.quoteId}/` : '' : `${attempt.quoteId}/${attempt.action}/`
+  return request(`/api/me/quotes/${suffix}?store_id=${storeId}`, { method: attempt.action === 'save' && attempt.quoteId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(attempt.payload) })
+}

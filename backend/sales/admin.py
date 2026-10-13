@@ -107,3 +107,24 @@ class CashSessionAdmin(CashHistoryAdmin):
 class CashPostingAdmin(CashHistoryAdmin):
     list_display = ['id', 'session', 'kind', 'amount', 'created_by', 'created_at']
     list_filter = ['kind', 'session__account__store']
+
+
+from .models import Quote, QuoteItem, QuoteEvent, QuoteOperation
+
+
+class QuoteHistoryAdmin(ReadOnlyFinancialAdmin):
+    def get_queryset(self, request):
+        from accounts.selectors import get_accessible_stores
+        field = 'store' if self.model is Quote else 'quote__store'
+        return super().get_queryset(request).filter(**{field + '__in': get_accessible_stores(request.user)})
+
+
+@admin.register(Quote)
+class QuoteAdmin(QuoteHistoryAdmin):
+    list_display = ['id','store','customer','status','valid_until','created_by','sale']
+    list_filter = ['store','status']
+
+
+admin.site.register(QuoteItem, QuoteHistoryAdmin)
+admin.site.register(QuoteEvent, QuoteHistoryAdmin)
+admin.site.register(QuoteOperation, QuoteHistoryAdmin)

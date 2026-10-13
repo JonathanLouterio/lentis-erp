@@ -13,9 +13,14 @@ from .cash_views import CashSessionsView, CashDetailView, CashPostingsView, Cash
 
 from .dashboard_views import DashboardView
 
+from .quote_views import QuotesView, QuoteDetailView, QuoteTransitionView
+
 app_name = "sales"
 
 urlpatterns = [
+    path('me/quotes/', QuotesView.as_view(), name='quotes'),
+    path('me/quotes/<int:quote_id>/', QuoteDetailView.as_view(), name='quote-detail'),
+    path('me/quotes/<int:quote_id>/<str:action>/', QuoteTransitionView.as_view(), name='quote-action'),
     path("me/dashboard/", DashboardView.as_view(), name="dashboard"),
     path('me/cash/options/', CashOptionsView.as_view(), name='cash-options'),
     path('me/cash/', CashSessionsView.as_view(), name='cash-sessions'),

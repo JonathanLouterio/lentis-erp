@@ -107,3 +107,19 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - O painel consulta dados reais e não gera registros. Detalhes são limitados aos cinco primeiros itens e levam aos módulos completos.
 - Atalhos para nova venda/cliente e atendimento recente; reposição abre o produto na movimentação. Recebimentos abrem o módulo financeiro, onde se escolhe a parcela.
 - Metas, margem, rankings, relatórios exportáveis e notificações automáticas não foram introduzidos nesta etapa.
+
+
+## Orçamentos
+
+- O orçamento pertence à unidade selecionada e exige acesso ativo a ela. Cliente e produtos devem ser da mesma unidade. Cliente é opcional nesta etapa.
+- Rascunhos podem ter zero itens. Preparar a proposta exige itens e validade vigente; o dia da validade ainda é válido, no fuso America/Sao_Paulo.
+- Fluxo: rascunho → proposta pronta → aceite registrado → convertido em venda. Preparar não envia mensagem ao cliente. O aceite é registrado pelo operador; não equivale a assinatura digital.
+- Cada produto aparece uma vez; quantidades, preços negociados e descontos são preservados na conversão. Valores monetários usam Decimal e arredondamento por item para centavos.
+- Revisar uma proposta pronta ou aceita retorna ao rascunho, incrementa a versão e exige nova preparação e novo aceite. Edições concorrentes com versão antiga são rejeitadas.
+- Recusa exige motivo; propostas recusadas e convertidas preservam o registro e não são editadas ou excluídas. O histórico identifica operador, data, ação e versão.
+- Criar, preparar ou aceitar não reserva nem baixa estoque, não recebe pagamentos e não gera parcelas. Converter cria uma única venda em rascunho; também não movimenta estoque ou financeiro.
+- A conversão revalida produtos e cliente ativos. Estoque insuficiente não impede criar o rascunho. Ao concluir a venda, aplicam-se as regras existentes de estoque negativo, pagamento, caixa e autorização de desconto.
+- O preço de referência para controle de desconto na venda é o preço atual do cadastro na conversão; o preço negociado do orçamento é mantido. Registrar o aceite não concede autorização de desconto.
+- Identificadores de operação permitem repetir um envio sem duplicar o orçamento ou a venda. A conversão de uma proposta já convertida retorna sua venda existente. Respostas incertas são recuperadas na tela com o mesmo identificador.
+- O vínculo com a proposta permanece mesmo se a venda gerada for posteriormente cancelada. Uma nova negociação exige novo orçamento.
+- PDF, envio por WhatsApp/e-mail, assinatura do cliente e reserva de estoque não fazem parte desta etapa.

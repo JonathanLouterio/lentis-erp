@@ -298,3 +298,5 @@ from .payment_models import FinancialAccount, PaymentMethod, SalePayment, Receiv
 from .commercial_models import DiscountPolicy, DiscountAuthorization  # noqa: E402,F401
 
 from .cash_models import CashSession, CashPosting  # noqa: E402,F401
+
+from .quote_models import Quote, QuoteItem, QuoteEvent, QuoteOperation  # noqa: E402,F401
