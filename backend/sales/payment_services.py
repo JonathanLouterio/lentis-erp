@@ -78,7 +78,7 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
     # O lock do usuário serializa inclusive duas tentativas de criar a mesma nova venda.
     # O identificador é único; uma resposta perdida pode ser repetida com segurança.
     with transaction.atomic():
-        get_user_model().objects.select_for_update().get(pk=user.pk)
+        get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
         if not get_accessible_stores(user).filter(pk=store.pk).exists():
             raise PermissionDenied('O acesso à unidade não está mais disponível.')
         previous = CheckoutRequest.objects.select_related('sale').filter(request_id=request_id).first()
@@ -127,7 +127,7 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
 
 def receive_installment(*, user, store, receivable_id, account, method, amount, request_id):
     with transaction.atomic():
-        get_user_model().objects.select_for_update().get(pk=user.pk)
+        get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
         if not user.is_active or not get_accessible_stores(user).filter(pk=store.pk).exists():
             raise PermissionDenied('Entre com uma conta ativa com acesso à unidade.')
         if not (user.is_staff or user.is_superuser):

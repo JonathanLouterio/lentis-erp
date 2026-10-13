@@ -440,7 +440,7 @@ export function cancelSale(storeId: number, saleId: number, reason: string): Pro
 
 export type PaymentKind = 'cash' | 'pix' | 'transfer' | 'debit' | 'credit' | 'store_credit' | 'boleto'
 export type PaymentMethod = { id: number; name: string; code: string; kind: PaymentKind; installment_limit: number }
-export type FinancialAccount = { id: number; name: string; code: string; balance: string }
+export type FinancialAccount = { id: number; name: string; code: string; balance: string; cash_box: boolean; cash_control_enabled: boolean; cash_is_open: boolean }
 export type PaymentOptions = { methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean; discount_limit_percentage: string; discount_policy_configured: boolean; can_approve_discount: boolean; discount_role: string }
 export type FinancialEntry = {
   id: number; account: number; account_name: string; method_name: string; amount: string
@@ -510,4 +510,30 @@ export async function getPaymentPreview(storeId: number, total: string, payments
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
     body: JSON.stringify({ total, payments }),
   })
+}
+
+export type CashSession = {
+  id: number; account: number; account_name: string; opened_by: number; owner_username: string
+  opened_at: string; opening_amount: string; opening_note: string; closed_at: string | null
+  closer_username: string | null; counted_amount: string | null; expected_cash: string
+  difference: string | null; closing_note: string; can_operate: boolean
+}
+export type CashPosting = {
+  id: number; kind: 'supply' | 'withdrawal' | 'receipt' | 'refund'; kind_label: string
+  amount: string; reason: string; created_at: string; creator_username: string
+  financial_entry: number | null; sale_id: number | null
+}
+export type CashPage<T> = { count: number; results: T[]; next: string | null; previous: string | null }
+export type CashAttempt =
+  | { action: 'open'; payload: { request_id: string; account_id: number; amount: string; note: string } }
+  | { action: 'move'; sessionId: number; payload: { request_id: string; kind: 'supply' | 'withdrawal'; amount: string; reason: string } }
+  | { action: 'close'; sessionId: number; payload: { request_id: string; counted_amount: string; note: string } }
+export function getCashOptions(storeId: number): Promise<{ accounts: FinancialAccount[] }> { return request(`/api/me/cash/options/?store_id=${storeId}`) }
+export function getCashSessions(storeId: number, page = 1, status = 'all'): Promise<CashPage<CashSession>> { return request(`/api/me/cash/?store_id=${storeId}&page=${page}&status=${status}`) }
+export function getCashSession(storeId: number, id: number): Promise<CashSession> { return request(`/api/me/cash/${id}/?store_id=${storeId}`) }
+export function getCashPostings(storeId: number, id: number, page = 1): Promise<CashPage<CashPosting>> { return request(`/api/me/cash/${id}/postings/?store_id=${storeId}&page=${page}`) }
+export async function submitCashOperation(storeId: number, attempt: CashAttempt): Promise<CashSession | CashPosting> {
+  const token = await getCsrfToken()
+  const suffix = attempt.action === 'open' ? '' : `${attempt.sessionId}/${attempt.action === 'move' ? 'postings/' : 'close/'}`
+  return request(`/api/me/cash/${suffix}?store_id=${storeId}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(attempt.payload) })
 }

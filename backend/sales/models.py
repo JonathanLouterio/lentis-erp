@@ -296,3 +296,5 @@ class SaleStockMovement(models.Model):
 from .payment_models import FinancialAccount, PaymentMethod, SalePayment, Receivable, FinancialEntry, CheckoutRequest  # noqa: E402,F401
 
 from .commercial_models import DiscountPolicy, DiscountAuthorization  # noqa: E402,F401
+
+from .cash_models import CashSession, CashPosting  # noqa: E402,F401

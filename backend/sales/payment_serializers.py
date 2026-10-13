@@ -64,7 +64,14 @@ class AccountSerializer(serializers.ModelSerializer):
     balance = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
     class Meta:
         model = FinancialAccount
-        fields = ['id', 'name', 'code', 'balance']
+        fields = ['id', 'name', 'code', 'balance', 'cash_box', 'cash_control_enabled', 'cash_is_open']
+    cash_box = serializers.BooleanField(read_only=True)
+    cash_control_enabled = serializers.SerializerMethodField()
+    cash_is_open = serializers.SerializerMethodField()
+    def get_cash_control_enabled(self, obj):
+        return obj.cash_sessions.exists()
+    def get_cash_is_open(self, obj):
+        return obj.cash_sessions.filter(closed_at__isnull=True).exists()
 
 
 class MethodSerializer(serializers.ModelSerializer):

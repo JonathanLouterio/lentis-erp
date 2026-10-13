@@ -9,9 +9,16 @@ from .payment_views import PaymentOptionsView, SaleCheckoutView, ReceivablesView
 
 from .commercial_views import RequestDiscountView, DecideDiscountView
 
+from .cash_views import CashSessionsView, CashDetailView, CashPostingsView, CashCloseView, CashOptionsView
+
 app_name = "sales"
 
 urlpatterns = [
+    path('me/cash/options/', CashOptionsView.as_view(), name='cash-options'),
+    path('me/cash/', CashSessionsView.as_view(), name='cash-sessions'),
+    path('me/cash/<int:session_id>/', CashDetailView.as_view(), name='cash-detail'),
+    path('me/cash/<int:session_id>/postings/', CashPostingsView.as_view(), name='cash-postings'),
+    path('me/cash/<int:session_id>/close/', CashCloseView.as_view(), name='cash-close'),
     path("me/sales/payment-preview/", PaymentPreviewView.as_view(), name="payment-preview"),
     path("me/sales/<int:sale_id>/discount/request/", RequestDiscountView.as_view(), name="discount-request"),
     path("me/sales/<int:sale_id>/discount/<int:request_id>/decision/", DecideDiscountView.as_view(), name="discount-decision"),

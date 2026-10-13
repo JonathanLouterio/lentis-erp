@@ -4,7 +4,11 @@ from .models import CheckoutRequest, FinancialAccount, FinancialEntry, PaymentMe
 
 @admin.register(FinancialAccount)
 class AccountAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'store', 'is_active']
+    @admin.display(description='Dinheiro físico')
+    def is_physical_cash(self, obj):
+        return obj.cash_box
+
+    list_display = ['name', 'code', 'store', 'is_physical_cash', 'is_active']
     list_filter = ['store', 'is_active']
     search_fields = ['name', 'code']
 
@@ -80,3 +84,26 @@ class DiscountAuthorizationAdmin(ReadOnlyFinancialAdmin):
     def get_queryset(self, request):
         from accounts.selectors import get_accessible_stores
         return super().get_queryset(request).filter(sale__store__in=get_accessible_stores(request.user))
+
+
+from .models import CashSession, CashPosting
+
+
+class CashHistoryAdmin(ReadOnlyFinancialAdmin):
+    def get_queryset(self, request):
+        from accounts.selectors import get_accessible_stores
+        query = super().get_queryset(request)
+        relation = 'account__store' if self.model is CashSession else 'session__account__store'
+        return query.filter(**{relation + '__in': get_accessible_stores(request.user)})
+
+
+@admin.register(CashSession)
+class CashSessionAdmin(CashHistoryAdmin):
+    list_display = ['id', 'account', 'opened_by', 'opened_at', 'opening_amount', 'closed_at', 'counted_amount']
+    list_filter = ['account__store', 'closed_at']
+
+
+@admin.register(CashPosting)
+class CashPostingAdmin(CashHistoryAdmin):
+    list_display = ['id', 'session', 'kind', 'amount', 'created_by', 'created_at']
+    list_filter = ['kind', 'session__account__store']

@@ -6,6 +6,7 @@ import ThemeSelect from './ThemeSelect'
 import StockMovements from './StockMovements'
 import Sales from './Sales'
 import Receivables from './Receivables'
+import CashRegister from './CashRegister'
 import './AppLayout.css'
 import './Customers.css'
 
@@ -419,6 +420,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             </section>
           ) : page === 'Vendas' ? (
             <Sales key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+          ) : page === 'Caixa' ? (
+            <CashRegister key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Financeiro' ? (
             <Receivables key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Estoque' ? (

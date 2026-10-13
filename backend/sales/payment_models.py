@@ -12,6 +12,12 @@ class FinancialAccount(models.Model):
     name = models.CharField('Nome', max_length=100)
     is_active = models.BooleanField('Ativa', default=True)
 
+    is_cash_box = models.BooleanField('Conta de dinheiro físico', default=False, help_text='Permite abrir caixa físico nesta conta. A conta inicial de código cash já é reconhecida como caixa.')
+
+    @property
+    def cash_box(self):
+        return self.is_cash_box or self.code == 'cash'
+
     class Meta:
         verbose_name = 'Conta de recebimento'
         verbose_name_plural = 'Contas de recebimento'
@@ -191,6 +197,12 @@ class Receivable(ImmutableRecord):
 
 
 class FinancialEntry(ImmutableRecord):
+    def save(self, *args, **kwargs):
+        from .cash_services import attach_cash_entry
+        if not self._state.adding:
+            return super().save(*args, **kwargs)
+        return attach_cash_entry(self, lambda: super(FinancialEntry, self).save(*args, **kwargs))
+
     receivable = models.ForeignKey(Receivable, on_delete=models.PROTECT, related_name='entries', verbose_name='Parcela')
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='entries', verbose_name='Conta')
     method = models.ForeignKey(PaymentMethod, on_delete=models.PROTECT, verbose_name='Forma de recebimento')

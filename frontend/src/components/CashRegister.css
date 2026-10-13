@@ -1,0 +1,13 @@
+.erp-cash-form { display: grid; gap: 16px; max-width: 680px; }
+.erp-cash-form h2 { margin: 0; }
+.erp-cash-detail-heading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 20px; }
+.erp-cash-detail-heading h2 { margin: 0; }
+.erp-cash-detail-heading p { color: var(--erp-muted); font-size: 13px; }
+.erp-cash-total { font-size: 28px; color: #7541ae; }
+.erp-cash-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 24px 0; }
+.erp-cash-summary > div { background: #f7f5fb; padding: 16px; border-radius: 10px; }
+.erp-cash-summary dt { font-size: 12px; color: var(--erp-muted); }
+.erp-cash-summary dd { margin: 10px 0 0; font-weight: 700; }
+[data-theme='dark'] .erp-cash-summary > div { background: #263149; }
+[data-theme='dark'] .erp-cash-total { color: #d2a5ff; }
+@media (max-width: 760px) { .erp-cash-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
