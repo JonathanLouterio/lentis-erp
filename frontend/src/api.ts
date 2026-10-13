@@ -537,3 +537,25 @@ export async function submitCashOperation(storeId: number, attempt: CashAttempt)
   const suffix = attempt.action === 'open' ? '' : `${attempt.sessionId}/${attempt.action === 'move' ? 'postings/' : 'close/'}`
   return request(`/api/me/cash/${suffix}?store_id=${storeId}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(attempt.payload) })
 }
+
+export type DashboardPeriod = { preset: 'today' | '7days' | 'month' | 'custom'; start?: string; end?: string }
+export type DashboardData = {
+  store_id: number; generated_at: string; today: string; timezone: string
+  period: { preset: string; start: string; end: string; previous_start: string; previous_end: string }
+  sales: { count: number; total: string; ticket: string; previous_total: string; previous_count: number; variation: string | null }
+  receipts: { gross: string; refunds: string; net: string }
+  receivables: {
+    customer: { count: number; amount: string }; operator: { count: number; amount: string }
+    overdue: { count: number; amount: string }; due_today: { count: number; amount: string }
+    attention: { id: number; sale_id: number; customer_name: string; due_date: string; remaining: string; overdue: boolean }[]
+  }
+  stock: { low_count: number; negative_count: number; items: { id: number; name: string; code: string; quantity: string; minimum: string }[] }
+  cash: { count: number; expected_cash: string; items: { id: number; account_name: string; owner: string; opened_at: string; expected_cash: string }[] }
+  chart: { date: string; sales_count: number; sales: string; received: string }[]
+  recent_sales: { id: number; customer_name: string; completed_at: string; total: string }[]
+}
+export function getDashboard(storeId: number, period: DashboardPeriod): Promise<DashboardData> {
+  const query = new URLSearchParams({ store_id: String(storeId), preset: period.preset })
+  if (period.preset === 'custom') { query.set('start', period.start ?? ''); query.set('end', period.end ?? '') }
+  return request(`/api/me/dashboard/?${query}`)
+}

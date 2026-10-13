@@ -15,6 +15,7 @@ Levantamento inicial em 09/10/2026, com referências na documentação oficial d
 | FIN-02 | Separar forma de pagamento acordada na venda, conta de destino e meio usado no recebimento. Diferenciar dívida do cliente de valor a receber da operadora do cartão. | Implementada no checkout atual; conciliação automática e taxas de cartão são futuras. | Decisão do Lentis. |
 | FIN-03 | Montar entrada e saldo parcelado por venda, com intervalos e vencimentos próprios e fechamento exato dos centavos. | Implementada: entrada opcional, saldo em 1 a 12 parcelas, intervalos em meses ou dias, limite por forma/unidade e conferência calculada no servidor. Modelos reutilizáveis de condições são uma evolução futura. | [Omie: opções personalizadas de parcelas][omie-parcelas]. |
 | FIN-04 | Controlar dinheiro físico por conta/unidade, com abertura, recebimentos em dinheiro, suprimentos, retiradas e fechamento com contagem e justificativa da diferença. | Implementada nesta etapa; responsável pela abertura e operador de cada movimento ficam registrados. | Decisão do Lentis. |
+| PAINEL-01 | Mostrar vendas, recebimentos, dívida atual, caixa físico e estoque por unidade, com filtros e alertas identificados pelo período ou pela situação atual. | Implementada no dashboard operacional; os cálculos e atalhos respeitam a unidade autorizada. | Decisão do Lentis. |
 | SEG-01 | Aplicar autorização por unidade no servidor e reavaliar acesso em cada operação, inclusive em repetições. Uma repetição do mesmo envio não duplica venda, estoque ou recebimento. | Implementada no Lentis. | Decisão do Lentis. |
 | OTC-01 | Distinguir mercadoria pronta, lente sob encomenda e serviço; acompanhar encomendas em ordem de serviço, com prazo e entrega. | Proposta específica para a ótica. Não há criação automática de encomenda neste pacote. | Decisão do Lentis. |
 
@@ -96,3 +97,13 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Recebimentos provenientes de vendas ficam com o operador que os registrou e podem entrar no caixa aberto da equipe. Consultas e históricos permanecem restritos à unidade autorizada.
 - Abertura, movimentos e fechamento usam identificadores para que uma repetição do mesmo envio recupere a operação sem duplicação. Caixa fechado não aceita novos movimentos nem edição do histórico. Listas de aberturas e movimentos são paginadas.
 - Nesta etapa não há troco automático, sangria para banco com transferência financeira, reabertura/edição de caixa fechado, impressão de fechamento, conciliação de cartão, TEF ou controle fiscal. Essas funcionalidades serão evoluções separadas.
+
+
+## Indicadores do dashboard
+
+- Períodos de vendas e recebimentos: hoje, últimos sete dias, mês até hoje ou personalizado de até 366 dias, em America/Sao_Paulo. Comparação com período anterior de mesma duração; base zero não gera percentual inventado.
+- Vendas usam finalização e situação atual não cancelada; valores descontam por item e por venda sem multiplicação por pagamentos. Recebimentos usam datas de lançamento e incluem estornos com sinal negativo.
+- Saldo de cliente, repasse de cartão, vencidos, vencimentos hoje, estoque ativo e caixas abertos são situações atuais, identificadas separadamente do período filtrado.
+- O painel consulta dados reais e não gera registros. Detalhes são limitados aos cinco primeiros itens e levam aos módulos completos.
+- Atalhos para nova venda/cliente e atendimento recente; reposição abre o produto na movimentação. Recebimentos abrem o módulo financeiro, onde se escolhe a parcela.
+- Metas, margem, rankings, relatórios exportáveis e notificações automáticas não foram introduzidos nesta etapa.

@@ -11,9 +11,12 @@ from .commercial_views import RequestDiscountView, DecideDiscountView
 
 from .cash_views import CashSessionsView, CashDetailView, CashPostingsView, CashCloseView, CashOptionsView
 
+from .dashboard_views import DashboardView
+
 app_name = "sales"
 
 urlpatterns = [
+    path("me/dashboard/", DashboardView.as_view(), name="dashboard"),
     path('me/cash/options/', CashOptionsView.as_view(), name='cash-options'),
     path('me/cash/', CashSessionsView.as_view(), name='cash-sessions'),
     path('me/cash/<int:session_id>/', CashDetailView.as_view(), name='cash-detail'),

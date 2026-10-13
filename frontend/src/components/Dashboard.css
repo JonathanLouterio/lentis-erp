@@ -1,0 +1,61 @@
+.lentis-dashboard { display: grid; gap: 20px; min-width: 0; }
+.lentis-dashboard-heading, .lentis-period, .lentis-panel-heading, .lentis-mini-row, .lentis-product-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.lentis-dashboard-heading h1 { margin: 9px 0; font-size: 30px; letter-spacing: -.7px; }
+.lentis-dashboard-heading p, .lentis-muted, .lentis-report-caption { color: var(--erp-muted); font-size: 12px; line-height: 1.7; }
+.lentis-dashboard-heading p { font-size: 14px; margin: 0; }
+.lentis-period { align-items: end; }
+.lentis-dashboard label { display: grid; gap: 7px; color: var(--erp-muted); font-size: 12px; }
+.lentis-dashboard select, .lentis-dashboard input { padding: 10px 12px; border: 1px solid var(--erp-border); border-radius: 8px; background: #fff; color: #334155; min-height: 40px; font: inherit; width: 100%; }
+.lentis-dashboard button:disabled { opacity: .5; cursor: not-allowed; }
+.lentis-custom-period { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.lentis-custom-period small { color: var(--erp-muted); font-size: 12px; align-self: center; }
+.lentis-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; }
+.lentis-shortcuts button { background: #f1eafa; color: #7541ae; border: 1px solid #e1d3f2; padding: 11px 16px; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.lentis-shortcuts button:first-child { background: #7541ae; color: #fff; border-color: #7541ae; }
+.lentis-dashboard :is(button, input, select, summary):focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
+.lentis-report-caption { margin: -4px 0; }
+.lentis-loading { padding: 40px; border: 1px solid var(--erp-border); border-radius: 12px; text-align: center; color: var(--erp-muted); }
+.lentis-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.lentis-kpi { display: grid; gap: 13px; align-content: start; min-width: 0; }
+.lentis-kpi > span { color: var(--erp-muted); font-size: 12px; font-weight: 600; }
+.lentis-kpi > strong { font-size: clamp(22px, 2vw, 28px); letter-spacing: -.6px; overflow-wrap: anywhere; }
+.lentis-kpi > small { color: var(--erp-muted); line-height: 1.6; font-size: 11px; }
+.lentis-kpi.is-primary { border-top: 3px solid #8d5ac5; }
+.lentis-kpi.is-primary > strong { color: #7541ae; }
+.lentis-dashboard-main { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+.lentis-dashboard-secondary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.lentis-dashboard .erp-card { min-width: 0; }
+.lentis-panel-heading h2 { font-size: 16px; margin: 0; }
+.lentis-today { font-size: 11px; color: var(--erp-muted); white-space: nowrap; }
+.lentis-chart svg { width: 100%; height: auto; display: block; margin-top: 14px; overflow: visible; }
+.lentis-chart-grid { stroke: var(--erp-border); stroke-dasharray: 4 5; }
+.lentis-chart-zero { stroke: var(--erp-border); }
+.lentis-chart-line { stroke: #8d5ac5; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.lentis-chart-point { fill: #7541ae; stroke: #fff; stroke-width: 2; }
+.lentis-chart svg text { fill: var(--erp-muted); font-size: 12px; }
+.lentis-chart-caption { font-size: 12px; color: var(--erp-muted); min-height: 22px; }
+.lentis-chart details { font-size: 12px; margin-top: 12px; }
+.lentis-chart summary { cursor: pointer; color: #7541ae; }
+.lentis-chart details .lentis-table-wrap { max-height: 260px; }
+.lentis-attention > button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; text-align: left; padding: 16px 0; border: 0; border-bottom: 1px solid var(--erp-border); background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.lentis-attention > button small, .lentis-mini-row small, .lentis-product-row small { display: block; color: var(--erp-muted); font-size: 11px; margin-top: 6px; }
+.lentis-attention > button.is-warning strong, .lentis-negative { color: #b45309; }
+.lentis-section-total { display: block; margin-top: 18px; font-size: 26px; color: #7541ae; }
+.lentis-mini-row, .lentis-product-row { padding: 16px 0; border-bottom: 1px solid var(--erp-border); font-size: 13px; }
+.lentis-product-row { width: 100%; background: transparent; color: inherit; border-inline: 0; border-top: 0; text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
+.lentis-table-wrap { overflow: auto; margin-top: 20px; }
+.lentis-dashboard table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.lentis-dashboard th, .lentis-dashboard td { padding: 13px 12px; text-align: left; border-bottom: 1px solid var(--erp-border); white-space: nowrap; }
+.lentis-dashboard th { color: var(--erp-muted); font-size: 11px; font-weight: 600; }
+[data-theme='dark'] .lentis-dashboard :is(input, select) { background: #111a2c; color: #e2e8f0; }
+[data-theme='dark'] .lentis-shortcuts button { background: #33264a; color: #e0c6ff; border-color: #5a4375; }
+[data-theme='dark'] .lentis-shortcuts button:first-child { background: #7541ae; color: #fff; }
+[data-theme='dark'] :is(.lentis-kpi.is-primary > strong, .lentis-section-total, .lentis-chart summary) { color: #d2a5ff; }
+[data-theme='dark'] .lentis-attention > button.is-warning strong, [data-theme='dark'] .lentis-negative { color: #ffbd72; }
+@media (max-width: 1150px) { .lentis-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lentis-dashboard-main { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .lentis-dashboard-heading { align-items: stretch; flex-direction: column; } .lentis-period { justify-content: flex-start; flex-wrap: wrap; } .lentis-dashboard-secondary { grid-template-columns: 1fr; } .lentis-shortcuts button { flex: 1 1 140px; } }
+@media (max-width: 480px) { .lentis-kpis { grid-template-columns: 1fr; } .lentis-panel-heading { align-items: flex-start; flex-wrap: wrap; } }
+
+.lentis-chart-bar { fill: #8d5ac5; }
+.lentis-table-wrap:focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
+@media (max-width: 760px) { .lentis-chart svg text { font-size: 24px; } }

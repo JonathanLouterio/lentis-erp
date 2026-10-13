@@ -7,6 +7,8 @@ import StockMovements from './StockMovements'
 import Sales from './Sales'
 import Receivables from './Receivables'
 import CashRegister from './CashRegister'
+import Dashboard from './Dashboard'
+import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
 
@@ -47,6 +49,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [collapsed, setCollapsed] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
+  const [salesStartNew, setSalesStartNew] = useState(false)
+  const [dashboardSaleId, setDashboardSaleId] = useState<number | undefined>(undefined)
   const [stores, setStores] = useState<AccessibleStore[]>([])
   const [selectedStoreId, setSelectedStoreId] = useState('')
   const [loadingStores, setLoadingStores] = useState(true)
@@ -303,12 +307,22 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
     if (nextPage === page || !leaveSaleAllowed()) return
+    if (nextPage === 'Vendas') { setSalesStartNew(false); setDashboardSaleId(undefined) }
     setPage(nextPage)
+  }
+
+  function dashboardAction(action: DashboardAction, id?: number) {
+    if (action === 'stock') { openStock(id ? String(id) : ''); return }
+    if (action === 'new-customer') { setOpenGroup('Cadastros'); setPage('Clientes'); openNewCustomer(); return }
+    if (action === 'receivables') { setOpenGroup('Gestão'); changePage('Financeiro'); return }
+    setOpenGroup('Comercial')
+    if (action === 'cash') { changePage('Caixa'); return }
+    setSalesStartNew(action === 'new-sale'); setDashboardSaleId(action === 'sale' ? id : undefined); setPage('Vendas')
   }
 
   function changeStore(storeId: string) {
@@ -318,6 +332,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setCustomers([])
     setProducts([])
     setStockProductId('')
+    setSalesStartNew(false); setDashboardSaleId(undefined)
     setSelectedStoreId(storeId)
   }
 
@@ -419,7 +434,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
             </section>
           ) : page === 'Vendas' ? (
-            <Sales key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Caixa' ? (
             <CashRegister key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Financeiro' ? (
@@ -522,31 +537,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               </div>
             </section>
           ) : page === 'Visão geral' ? (
-            <>
-              <div className="erp-page-heading">
-                <span className="erp-kicker">VISÃO GERAL</span>
-                <h1>Olá, {user.first_name || user.username}!</h1>
-                <p>Seu espaço de trabalho na unidade {selectedStore.name}.</p>
-              </div>
-              <div className="erp-summary-grid">
-                <section className="erp-card">
-                  <span className="erp-card-label">Unidade selecionada</span>
-                  <h2>{selectedStore.name}</h2>
-                  <p>Código {selectedStore.code}</p>
-                  <p className="erp-store-role">Perfil: {selectedRole}</p>
-                </section>
-                <section className="erp-card">
-                  <span className="erp-card-label">Seu acesso</span>
-                  <h2>{stores.length} {stores.length === 1 ? 'unidade' : 'unidades'}</h2>
-                  <p>Disponíveis para sua conta.</p>
-                </section>
-              </div>
-              <section className="erp-card erp-welcome-card">
-                <span className="erp-development-badge">Em construção</span>
-                <h2>O dia a dia da sua ótica, em um só lugar.</h2>
-                <p>Os indicadores de vendas, estoque e financeiro aparecerão aqui conforme os módulos forem implementados.</p>
-              </section>
-            </>
+            <Dashboard key={selectedStore.id} store={selectedStore} firstName={user.first_name || user.username} onAction={dashboardAction} />
           ) : (
             <section className="erp-card">
               <span className="erp-development-badge">Em desenvolvimento</span>

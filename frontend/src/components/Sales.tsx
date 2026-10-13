@@ -7,7 +7,7 @@ import PaymentPlanBuilder from './PaymentPlanBuilder'
 import type { PaymentPlanRow } from './PaymentPlanBuilder'
 import './Sales.css'
 
-type Props = { store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
+type Props = { startNew?: boolean; initialSaleId?: number; store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
 type Line = { referencePrice: string; productId: number; name: string; code: string; quantity: string; price: string; discount: string }
 type Payment = PaymentPlanRow
 const emptyOptions: PaymentOptions = { methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" }
@@ -15,7 +15,7 @@ const emptyPage: SalesPage = { count: 0, next: null, previous: null, results: []
 const immediate = ['cash', 'pix', 'transfer']
 const credit = ['credit', 'store_credit', 'boleto']
 
-export default function Sales({ store, userId, onSavingChange, onDirtyChange }: Props) {
+export default function Sales({ startNew = false, initialSaleId, store, userId, onSavingChange, onDirtyChange }: Props) {
   const storageKey = `lentis.checkout.${userId}.${store.id}`
   const [sales, setSales] = useState<SalesPage>(emptyPage)
   const [page, setPage] = useState(1)
@@ -28,7 +28,7 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
   const [products, setProducts] = useState<Product[]>([])
   const [options, setOptions] = useState<PaymentOptions>(emptyOptions)
   const [selected, setSelected] = useState<Sale | null>(null)
-  const [editor, setEditor] = useState(false)
+  const [editor, setEditor] = useState(startNew)
   const [customerId, setCustomerId] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<Line[]>([])
@@ -80,6 +80,16 @@ export default function Sales({ store, userId, onSavingChange, onDirtyChange }: 
       .catch((err: unknown) => { if (!ignore) setCatalogError(failure(err)) }).finally(() => { if (!ignore) setCatalogLoading(false) })
     return () => { ignore = true }
   }, [store.id, reload])
+
+  useEffect(() => {
+    if (!initialSaleId) return
+    try { if (sessionStorage.getItem(storageKey)) return } catch { /* Armazenamento opcional. */ }
+    let ignore = false; setBusy(true); setEditor(true)
+    void getSale(store.id, initialSaleId).then(sale => { if (!ignore) accept(sale) })
+      .catch((err: unknown) => { if (!ignore) setError(failure(err)) })
+      .finally(() => { if (!ignore) setBusy(false) })
+    return () => { ignore = true }
+  }, [store.id, initialSaleId, storageKey])
 
   const values = lines.map((line) => {
     const quantity = decimal(line.quantity, 3), price = decimal(line.price), off = decimal(line.discount)
