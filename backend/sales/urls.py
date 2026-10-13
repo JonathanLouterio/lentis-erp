@@ -15,9 +15,12 @@ from .dashboard_views import DashboardView
 
 from .quote_views import QuotesView, QuoteDetailView, QuoteTransitionView
 
+from .quote_print_views import QuotePrintView
+
 app_name = "sales"
 
 urlpatterns = [
+    path('me/quotes/<int:quote_id>/print/', QuotePrintView.as_view(), name='quote-print'),
     path('me/quotes/', QuotesView.as_view(), name='quotes'),
     path('me/quotes/<int:quote_id>/', QuoteDetailView.as_view(), name='quote-detail'),
     path('me/quotes/<int:quote_id>/<str:action>/', QuoteTransitionView.as_view(), name='quote-action'),

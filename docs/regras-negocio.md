@@ -122,4 +122,16 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - O preço de referência para controle de desconto na venda é o preço atual do cadastro na conversão; o preço negociado do orçamento é mantido. Registrar o aceite não concede autorização de desconto.
 - Identificadores de operação permitem repetir um envio sem duplicar o orçamento ou a venda. A conversão de uma proposta já convertida retorna sua venda existente. Respostas incertas são recuperadas na tela com o mesmo identificador.
 - O vínculo com a proposta permanece mesmo se a venda gerada for posteriormente cancelada. Uma nova negociação exige novo orçamento.
-- PDF, envio por WhatsApp/e-mail, assinatura do cliente e reserva de estoque não fazem parte desta etapa.
+- Envio por WhatsApp/e-mail, assinatura do cliente e reserva de estoque não fazem parte desta etapa.
+
+
+## Impressão de orçamentos
+
+- A prévia usa os itens, descontos, observações, revisão e situação salvos. Alterações no formulário precisam ser salvas antes da impressão.
+- O documento é aberto em outra aba por um GET autenticado e autorizado para a unidade do orçamento, sem alterar histórico, situação, estoque ou financeiro. A resposta não deve ser armazenada em cache.
+- É possível imprimir ou salvar em PDF pelo diálogo do navegador, com papel A4. A impressão repete o cabeçalho da tabela e evita dividir linhas de itens entre páginas. Chrome e Edge atuais também exibem a numeração e o identificador do orçamento nas margens.
+- Rascunhos, propostas vencidas, recusadas e convertidas possuem indicação explícita. Converter não significa que o pagamento foi recebido; o documento orienta consultar a venda.
+- O orçamento é uma proposta comercial, não é documento fiscal nem comprovante de pagamento.
+- Empresa, nome da unidade, telefone e e-mail são consultados no cadastro atual; cliente inclui os dados cadastrais disponíveis e endereço. Não imprime notas internas do cadastro do cliente, RG ou data de nascimento. O cadastro de unidade atual não possui endereço/CNPJ; esses dados não são inventados.
+- Valores monetários são formatados no backend com Decimal, em reais e vírgula decimal. Nomes e observações são escapados como texto, sem interpretar HTML inserido nos cadastros.
+- O PDF é salvo no computador pelo usuário. Não é arquivado automaticamente no sistema nem enviado a terceiros.
