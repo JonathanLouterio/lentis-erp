@@ -645,3 +645,15 @@ export type CustomerHistoryRecord = {
 export function getCustomerHistorySummary(storeId:number,customerId:number):Promise<CustomerHistorySummary>{return request(`/api/me/customers/${customerId}/history/?store_id=${storeId}`)}
 export function getCustomerHistoryRecords(storeId:number,customerId:number,section:CustomerHistorySection,page=1):Promise<CashPage<CustomerHistoryRecord>>{return request(`/api/me/customers/${customerId}/history/?store_id=${storeId}&section=${section}&page=${page}`)}
 export function getCustomerHistoryRecord(storeId:number,customerId:number,section:CustomerHistorySection,recordId:number):Promise<CustomerHistoryRecord>{return request(`/api/me/customers/${customerId}/history/?store_id=${storeId}&section=${section}&record_id=${recordId}`)}
+
+export type SupplierPayload = {
+  person_type:'company'|'individual';name:string;trade_name:string;document:string;state_registration:string
+  contact_name:string;phone:string;whatsapp:string;email:string;zip_code:string;street:string;address_number:string
+  address_complement:string;neighborhood:string;city:string;state:string;notes:string
+}
+export type Supplier = SupplierPayload & {id:number;store:number;is_active:boolean;version:number;created_at:string;updated_at:string;events?:{version:number;action:string;action_label:string;reason:string;creator_username:string;created_at:string}[]}
+export type SuppliersPage = CashPage<Supplier> & {can_create:boolean;can_edit:boolean}
+export type SupplierAttempt = {id:number|null;payload:Partial<SupplierPayload> & {request_id:string;action:'create'|'update'|'archive'|'restore';expected_version?:number;reason?:string}}
+export function getSuppliers(storeId:number,page=1,status='active',search=''):Promise<SuppliersPage>{const query=new URLSearchParams({store_id:String(storeId),page:String(page),status,search});return request(`/api/me/suppliers/?${query}`)}
+export function getSupplier(storeId:number,id:number):Promise<Supplier>{return request(`/api/me/suppliers/${id}/?store_id=${storeId}`)}
+export async function submitSupplier(storeId:number,attempt:SupplierAttempt):Promise<Supplier>{const token=await getCsrfToken();return request(`/api/me/suppliers/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}

@@ -217,3 +217,23 @@ class StockMovementAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+from .supplier_models import Supplier
+
+
+@admin.register(Supplier)
+class SupplierAdmin(admin.ModelAdmin):
+    list_display=('name','document','store','contact_name','phone','is_active')
+    list_filter=('store','person_type','is_active')
+    search_fields=('name','trade_name','document','contact_name','phone','email')
+    list_select_related=('store',)
+    readonly_fields=tuple(field.name for field in Supplier._meta.fields)
+    actions=None
+
+    def get_queryset(self,request):
+        return super().get_queryset(request).filter(store__in=get_accessible_stores(request.user))
+
+    def has_add_permission(self,request):return False
+    def has_change_permission(self,request,obj=None):return False
+    def has_delete_permission(self,request,obj=None):return False

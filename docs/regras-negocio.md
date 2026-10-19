@@ -203,3 +203,18 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Itens de vendas e orçamentos usam os nomes, quantidades e valores registrados. A ficha de contato usa os dados atuais do cliente. Esta consulta não substitui os históricos de versões e eventos dos módulos de origem.
 - Cliente inativo mantém o histórico acessível pela API à unidade autorizada, sem reativação. A lista principal de clientes continua com seu filtro existente de cadastros ativos.
 - O botão Histórico não altera estoque, financeiro, pagamentos, receitas ou OS. As respostas são privadas e não devem ser armazenadas em cache compartilhado.
+
+
+## Fornecedores
+
+- Cadastro separado de clientes, limitado à unidade selecionada. Identificação, CPF/CNPJ, contato, inscrição estadual/RG, endereço, observações e situação ativo/inativo.
+- Nome/razão social é obrigatório. CPF/CNPJ é opcional nesta etapa; se informado, deve passar pela validação de estrutura e dígitos verificadores. Fornecedor pessoa física usa CPF; pessoa jurídica usa CNPJ numérico ou alfanumérico.
+- Documento é armazenado sem pontuação e com letras maiúsculas, preservando zeros à esquerda. Documento não pode repetir na unidade, inclusive entre inativos. Em outra unidade é um cadastro independente.
+- Validação local do CNPJ alfanumérico segue o manual RFB (ASCII - 48, módulo 11); não consulta a existência ou situação cadastral na Receita. Os validadores anteriores de clientes não são alterados por esta etapa.
+- E-mail deve ter formato válido; CEP informado deve conter oito números; UF informada deve ser uma das UFs brasileiras.
+- Acesso exige unidade ativa, vínculo ativo e organizations.view_supplier. Abertura exige também add_supplier; edição, inativação e reativação exigem change_supplier. Staff por si só não concede acesso.
+- Edição utiliza versão esperada; envios com UUID são idempotentes para evitar duplicações, inclusive para documentos em branco. Unidade e autor de criação são imutáveis.
+- Inativar/reativar exige motivo. Não há exclusão física pela API ou admin. Deve-se reativar o registro existente ao retomar negociações.
+- Histórico registra tipo de operação, versão, responsável, data e motivo; não é uma cópia completa dos campos antes de cada edição.
+- Admin oferece somente consulta, limitada às unidades autorizadas. Operações de cadastro são realizadas no frontend para preservar as validações, versões e histórico.
+- Não há importação fiscal, compras, entradas de estoque ou contas a pagar nesta etapa; o cadastro servirá como base para esses módulos.

@@ -356,3 +356,5 @@ class StockMovement(models.Model):
         return f"{self.product} - {self.get_movement_type_display()} - {self.quantity}"
 
 from .prescription_models import Prescription, PrescriptionRevision, PrescriptionOperation
+
+from .supplier_models import Supplier, SupplierEvent, SupplierOperation  # noqa: E402,F401
