@@ -657,3 +657,17 @@ export type SupplierAttempt = {id:number|null;payload:Partial<SupplierPayload> &
 export function getSuppliers(storeId:number,page=1,status='active',search=''):Promise<SuppliersPage>{const query=new URLSearchParams({store_id:String(storeId),page:String(page),status,search});return request(`/api/me/suppliers/?${query}`)}
 export function getSupplier(storeId:number,id:number):Promise<Supplier>{return request(`/api/me/suppliers/${id}/?store_id=${storeId}`)}
 export async function submitSupplier(storeId:number,attempt:SupplierAttempt):Promise<Supplier>{const token=await getCsrfToken();return request(`/api/me/suppliers/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
+
+export type PurchaseItemPayload = {product_id:number;quantity:string;unit_cost:string}
+export type Purchase = {
+  id:number;store:number;supplier_id:number;supplier_name:string;reference:string;document_date:string|null;notes:string
+  status:'draft'|'received'|'cancelled';status_label:string;version:number;total:string;updates_cost:boolean
+  created_at:string;received_at:string|null;can_edit:boolean;can_receive:boolean;supplier_snapshot?:Record<string,string>
+  items?: (PurchaseItemPayload & {id:number;product_code:string;product_name:string;total:string;movement_id:number|null})[]
+  events?: {version:number;action:string;action_label:string;reason:string;creator_username:string;created_at:string}[]
+}
+export type PurchaseAttempt = {id:number|null;payload:{request_id:string;action:'create'|'update'|'receive'|'cancel';expected_version?:number;supplier_id?:number;reference?:string;document_date?:string|null;notes?:string;items?:PurchaseItemPayload[];confirmed?:boolean;update_cost?:boolean;reason?:string}}
+export type PurchasesPage = CashPage<Purchase> & {can_create:boolean;can_receive:boolean}
+export function getPurchases(storeId:number,page=1,status='all'):Promise<PurchasesPage>{return request(`/api/me/purchases/?store_id=${storeId}&page=${page}&status=${status}`)}
+export function getPurchase(storeId:number,id:number):Promise<Purchase>{return request(`/api/me/purchases/${id}/?store_id=${storeId}`)}
+export async function submitPurchase(storeId:number,attempt:PurchaseAttempt):Promise<Purchase>{const token=await getCsrfToken();return request(`/api/me/purchases/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}

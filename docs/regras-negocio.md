@@ -218,3 +218,19 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Histórico registra tipo de operação, versão, responsável, data e motivo; não é uma cópia completa dos campos antes de cada edição.
 - Admin oferece somente consulta, limitada às unidades autorizadas. Operações de cadastro são realizadas no frontend para preservar as validações, versões e histórico.
 - Não há importação fiscal, compras, entradas de estoque ou contas a pagar nesta etapa; o cadastro servirá como base para esses módulos.
+
+
+## Compras e entrada de mercadorias
+
+- Novo app purchases, com permissões de visualizar, adicionar, alterar compra e permissão específica de confirmar entrada de compra. É obrigatório ter acesso ativo à unidade. Staff não ignora permissões ou vínculos.
+- Cada compra tem fornecedor, referência manual opcional, data do documento opcional, observações e itens. Fornecedor e produtos precisam pertencer à unidade; fornecedor/produtos inativos não podem ser usados para confirmar entradas.
+- Rascunhos não movimentam estoque nem financeiro. A entrada exige rascunho salvo, versão atual, permissão específica e confirmação explícita da conferência.
+- Cada produto aparece uma única vez na compra. Quantidade positiva com até três casas; custo unitário não negativo com até duas casas. Total de cada linha arredondado para centavos com half-up; o total é a soma das linhas arredondadas. Limite de 100 itens por compra.
+- A referência é normalizada para maiúsculas e não pode repetir para o mesmo fornecedor/unidade entre rascunhos e entradas confirmadas. Referências em branco admitem múltiplas compras; UUID de operação protege contra reenvio duplicado. Cancelar um rascunho libera sua referência, preservando o cadastro cancelado.
+- Confirmação trava a compra, o fornecedor e os produtos (estes em ordem de ID) e grava entradas, vínculos e situação na mesma transação. Falha em qualquer item reverte toda a confirmação, inclusive mudanças de custo.
+- Cada item confirmado possui vínculo exclusivo com a movimentação de entrada. Reenvio com o mesmo UUID/dados não gera nova entrada. Alterar o conteúdo de um UUID já usado é recusado.
+- Atualização do custo cadastrado é opcional e desmarcada por padrão. Quando marcada, utiliza o custo unitário da entrada como último custo, sem cálculo de custo médio. Não altera preço de venda ou valores já registrados em vendas anteriores.
+- A confirmação preserva uma cópia da identificação do fornecedor. Os itens mantêm descrição/código, quantidades e custos registrados no rascunho salvo; mudanças posteriores no cadastro de produto não reescrevem o documento confirmado.
+- Compra confirmada é somente leitura e não pode ser cancelada nesta etapa. Apenas rascunhos podem ser cancelados, com motivo; não há exclusão física. Devoluções e estornos de compras terão fluxo próprio posteriormente.
+- Histórico registra operação, versão, usuário, data e motivo, sem fotografia completa dos campos de cada edição de rascunho. Admin é somente consulta, limitado às unidades autorizadas.
+- Referência/data são registros manuais. Não há importação de XML, validação de NF-e, cálculo fiscal, frete, desconto, recebimento parcial, pagamentos ou geração de contas a pagar nesta entrega. A integração financeira é a próxima etapa do bloco.

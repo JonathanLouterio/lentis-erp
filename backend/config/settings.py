@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "organizations.apps.OrganizationsConfig",
     "rest_framework",
     "sales.apps.SalesConfig",
+    "purchases.apps.PurchasesConfig",
 ]
 
 MIDDLEWARE = [

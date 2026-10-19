@@ -13,6 +13,7 @@ import Prescriptions from './Prescriptions'
 import ServiceOrders from './ServiceOrders'
 import CustomerHistory from './CustomerHistory'
 import Suppliers from './Suppliers'
+import Purchases from './Purchases'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -27,7 +28,7 @@ type AppLayoutProps = {
 
 const menuGroups = [
   { title: 'Cadastros', icon: 'cadastros', items: ['Clientes', 'Produtos', 'Receitas', 'Fornecedores'] },
-  { title: 'Comercial', icon: 'comercial', items: ['Vendas', 'Orçamentos', 'Caixa'] },
+  { title: 'Comercial', icon: 'comercial', items: ['Vendas', 'Orçamentos', 'Compras', 'Caixa'] },
   { title: 'Operação', icon: 'operacao', items: ['Estoque', 'Ordens de serviço', 'Atendimento domiciliar'] },
   { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Relatórios', 'Administração'] },
 ]
@@ -314,7 +315,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
@@ -500,6 +501,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             </section>
           ) : page === 'Histórico do cliente' && historyCustomerId ? (
             <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
+          ) : page === 'Compras' ? (
+            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Fornecedores' ? (
             <Suppliers key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Clientes' ? (
