@@ -11,6 +11,7 @@ import Dashboard from './Dashboard'
 import Quotes from './Quotes'
 import Prescriptions from './Prescriptions'
 import ServiceOrders from './ServiceOrders'
+import CustomerHistory from './CustomerHistory'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -52,6 +53,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [collapsed, setCollapsed] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
+  const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null)
   const [orderSaleId, setOrderSaleId] = useState<number | undefined>(undefined)
   const [salesStartNew, setSalesStartNew] = useState(false)
   const [dashboardSaleId, setDashboardSaleId] = useState<number | undefined>(undefined)
@@ -495,6 +497,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions"><button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button><button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openStock(String(product.id))}>Movimentar</button><button type="button" disabled={workspaceBusy} className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button></td></tr>)}</tbody></table></div>}
               </div>
             </section>
+          ) : page === 'Histórico do cliente' && historyCustomerId ? (
+            <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
           ) : page === 'Clientes' ? (
             <section className="erp-clientes-page">
               <div className="erp-page-heading erp-list-heading">
@@ -544,7 +548,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {loadingCustomers ? <p role="status">Carregando clientes…</p>
                   : customersError ? <p className="erp-alert" role="alert">{customersError}</p>
                   : filteredCustomers.length === 0 ? <p>Nenhum cliente encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button><button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Excluir</button></td></tr>)}</tbody></table></div>}
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" disabled={workspaceBusy} onClick={() => { setHistoryCustomerId(customer.id); setPage('Histórico do cliente') }}>Histórico</button><button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button><button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Excluir</button></td></tr>)}</tbody></table></div>}
               </div>
             </section>
           ) : page === 'Visão geral' ? (

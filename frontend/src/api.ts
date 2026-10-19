@@ -629,3 +629,19 @@ export async function submitServiceOrder(storeId:number,attempt:ServiceOrderAtte
   const token=await getCsrfToken()
   return request(`/api/me/service-orders/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})
 }
+
+export type CustomerHistorySection = 'sales'|'quotes'|'prescriptions'|'orders'|'installments'
+export type CustomerHistorySummary = {
+  customer:Customer; generated_at:string; permissions:{prescriptions:boolean;orders:boolean}
+  summary:{completed_sales:number;draft_sales:number;quotes:number;orders:number|null;prescriptions:number|null;customer_pending:string;operator_pending:string;customer_overdue:string}
+}
+export type CustomerHistoryRecord = {
+  id:number;kind:CustomerHistorySection;date:string;title:string;status:string;status_label:string;amount:string|null;sale_id:number|null
+  fields:{label:string;value:string}[]
+  items:{name:string;code:string;quantity:string;unit_price:string|null;total:string|null}[]
+  clinical:(PrescriptionValues & {customer_id:number;is_active:boolean})|null
+  remaining?:string;due_date?:string;debtor?:'customer'|'operator';overdue?:boolean
+}
+export function getCustomerHistorySummary(storeId:number,customerId:number):Promise<CustomerHistorySummary>{return request(`/api/me/customers/${customerId}/history/?store_id=${storeId}`)}
+export function getCustomerHistoryRecords(storeId:number,customerId:number,section:CustomerHistorySection,page=1):Promise<CashPage<CustomerHistoryRecord>>{return request(`/api/me/customers/${customerId}/history/?store_id=${storeId}&section=${section}&page=${page}`)}
+export function getCustomerHistoryRecord(storeId:number,customerId:number,section:CustomerHistorySection,recordId:number):Promise<CustomerHistoryRecord>{return request(`/api/me/customers/${customerId}/history/?store_id=${storeId}&section=${section}&record_id=${recordId}`)}

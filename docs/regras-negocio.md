@@ -189,3 +189,17 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Valores da receita só são retornados com organizations.view_prescription. A permissão operacional de OS não concede acesso clínico.
 - Informações operacionais (armação, lentes e observações) são visíveis aos usuários autorizados da OS. Não digitar graus ou outros dados clínicos nesses campos para contornar a separação de acesso.
 - Impressão, fornecedores de laboratório, custos, anexos, entregas parciais, múltiplas OS por venda e garantias/reabertura ficam para etapas posteriores.
+
+
+## Histórico consolidado do cliente
+
+- Consulta somente leitura, limitada ao cliente e à unidade selecionada; não cruza cadastros por CPF/CNPJ nem pesquisa clientes de outras lojas.
+- Resumo: vendas finalizadas, rascunhos, orçamentos e contagens de receitas/OS quando autorizadas. O saldo pendente do cliente é separado do saldo devido pela operadora.
+- O saldo de cada parcela é seu valor menos a soma dos recebimentos e estornos. Vendas canceladas não compõem pendências nem atraso; suas parcelas continuam consultáveis com situação Cancelada.
+- O valor vencido do cliente considera somente parcelas de sua responsabilidade, ainda abertas em vendas finalizadas e com vencimento anterior à data local.
+- Seções paginadas: vendas, orçamentos, receitas, ordens de serviço e parcelas. Os detalhes sempre validam também o cliente e a unidade; um ID isolado não concede acesso.
+- As seções de receitas e OS exigem as mesmas permissões dos respectivos módulos. Sem permissão, nem suas contagens são retornadas; permissão de OS não concede acesso clínico.
+- A lista de receitas não retorna os graus. O detalhe autorizado consulta a versão atual do cadastro, inclusive quando arquivado; cópias imutáveis utilizadas em vendas e OS continuam sendo consultadas nos atendimentos correspondentes.
+- Itens de vendas e orçamentos usam os nomes, quantidades e valores registrados. A ficha de contato usa os dados atuais do cliente. Esta consulta não substitui os históricos de versões e eventos dos módulos de origem.
+- Cliente inativo mantém o histórico acessível pela API à unidade autorizada, sem reativação. A lista principal de clientes continua com seu filtro existente de cadastros ativos.
+- O botão Histórico não altera estoque, financeiro, pagamentos, receitas ou OS. As respostas são privadas e não devem ser armazenadas em cache compartilhado.
