@@ -580,3 +580,21 @@ export async function submitQuoteOperation(storeId: number, attempt: QuoteAttemp
   const suffix = attempt.action === 'save' ? attempt.quoteId ? `${attempt.quoteId}/` : '' : `${attempt.quoteId}/${attempt.action}/`
   return request(`/api/me/quotes/${suffix}?store_id=${storeId}`, { method: attempt.action === 'save' && attempt.quoteId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(attempt.payload) })
 }
+
+export const prescriptionFields = ['od_sphere','od_cylinder','od_axis','od_addition','oe_sphere','oe_cylinder','oe_axis','oe_addition','pd','od_dnp','oe_dnp'] as const
+export type PrescriptionField = typeof prescriptionFields[number]
+export type PrescriptionValues = Record<PrescriptionField, string | number | null> & { issued_on: string; prescriber_name: string; prescriber_registration: string; notes: string }
+export type Prescription = PrescriptionValues & { id: number; store: number; customer: number; customer_name: string; version: number; is_active: boolean; creator_username: string; editor_username: string; created_at: string; updated_at: string; revisions?: { version:number; action:string; reason:string; created_at:string; creator_username:string; snapshot: PrescriptionValues & {customer_id:number;is_active:boolean} }[] }
+export type PrescriptionPage = CashPage<Prescription> & {can_create: boolean;can_edit:boolean}
+export type PrescriptionAttempt = { action:'save'|'archive'; id:number|null; payload: Record<string,unknown> & {request_id:string} }
+export function getPrescriptions(storeId:number, page=1, customerId='', status='active'):Promise<PrescriptionPage> {
+  const query = new URLSearchParams({store_id:String(storeId),page:String(page),status})
+  if(customerId) query.set('customer_id',customerId)
+  return request(`/api/me/prescriptions/?${query}`)
+}
+export function getPrescription(storeId:number,id:number):Promise<Prescription> {return request(`/api/me/prescriptions/${id}/?store_id=${storeId}`)}
+export async function savePrescription(storeId:number,attempt:PrescriptionAttempt):Promise<Prescription> {
+  const token=await getCsrfToken()
+  const suffix=attempt.id?`${attempt.id}/${attempt.action==='archive'?'archive/':''}`:''
+  return request(`/api/me/prescriptions/${suffix}?store_id=${storeId}`,{method:attempt.id && attempt.action==='save'?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})
+}

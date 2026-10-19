@@ -135,3 +135,19 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Empresa, nome da unidade, telefone e e-mail são consultados no cadastro atual; cliente inclui os dados cadastrais disponíveis e endereço. Não imprime notas internas do cadastro do cliente, RG ou data de nascimento. O cadastro de unidade atual não possui endereço/CNPJ; esses dados não são inventados.
 - Valores monetários são formatados no backend com Decimal, em reais e vírgula decimal. Nomes e observações são escapados como texto, sem interpretar HTML inserido nos cadastros.
 - O PDF é salvo no computador pelo usuário. Não é arquivado automaticamente no sistema nem enviado a terceiros.
+
+
+## Receitas oftalmológicas por cliente
+
+- Cadastro em Cadastros → Receitas, sempre vinculado a cliente e unidade. Não é permitido transferir uma receita entre clientes ou unidades; outro paciente exige outro registro.
+- É um registro da receita apresentada, não emissão de prescrição: não interpreta os graus, não realiza transposição de cilíndrico, não soma adição e não calcula DP/DNP. Não afeta vendas, caixa, estoque ou recebimentos.
+- Registra data da receita, prescritor e registro informado, esférico, cilíndrico, eixo e adição de OD/OE, DP/DNP em milímetros e observações. Não consulta conselho profissional nem determina validade clínica.
+- Valores assinados e zero são preservados. Campo não informado fica nulo e não é convertido em zero. Os números aceitam até duas casas decimais; a capacidade de armazenamento não é um limite clínico. Esférico, cilíndrico e adição aceitam os sinais informados, sem conversão.
+- Eixo é inteiro entre 0 e 180. Cilíndrico não zero exige eixo; eixo informado exige cilíndrico. DP/DNP informadas precisam ser positivas. Pelo menos um esférico, cilíndrico ou adição deve estar informado; zero conta como valor informado.
+- O acesso exige vínculo ativo à unidade e permissão organizations.view_prescription. Cadastro também exige organizations.add_prescription; correção e arquivamento exigem organizations.change_prescription. Superusuário ativo tem as permissões; apenas is_staff ou perfil Vendedor não as concede.
+- As permissões globais não liberam acesso a outras unidades. Todos os endpoints, inclusive histórico, validam a unidade. Respostas usam Cache-Control no-store, private.
+- Cadastro, correção e arquivamento são operações atômicas. Cada versão guarda os campos registrados, operador, data/hora e motivo. Correções e arquivamento exigem motivo. Versão desatualizada é rejeitada para evitar sobrescrever trabalho de outra pessoa.
+- Arquivamento mantém o histórico e impede novas correções naquele registro. Receitas não são excluídas pela API; histórico não é editado. Uma nova receita clínica deve ser outro cadastro; Corrigir serve para corrigir a transcrição.
+- Um identificador único permite repetir envios sem duplicação. No navegador, apenas envios com resposta incerta ficam temporariamente no sessionStorage da aba, separados por usuário/unidade, e são removidos após confirmação. Não há armazenamento local automático de rascunhos.
+- A consulta pode filtrar cliente e registros ativos/arquivados, com paginação de 25 itens. O histórico é apresentado ao abrir uma receita.
+- Não inclui anexos, PDF, ligação com venda/ordem de serviço, cálculo óptico ou agendamento de exame nesta etapa.

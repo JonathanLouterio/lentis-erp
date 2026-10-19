@@ -9,6 +9,7 @@ import Receivables from './Receivables'
 import CashRegister from './CashRegister'
 import Dashboard from './Dashboard'
 import Quotes from './Quotes'
+import Prescriptions from './Prescriptions'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -22,7 +23,7 @@ type AppLayoutProps = {
 }
 
 const menuGroups = [
-  { title: 'Cadastros', icon: 'cadastros', items: ['Clientes', 'Produtos'] },
+  { title: 'Cadastros', icon: 'cadastros', items: ['Clientes', 'Produtos', 'Receitas'] },
   { title: 'Comercial', icon: 'comercial', items: ['Vendas', 'Orçamentos', 'Caixa'] },
   { title: 'Operação', icon: 'operacao', items: ['Estoque', 'Ordens de serviço', 'Atendimento domiciliar'] },
   { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Relatórios', 'Administração'] },
@@ -308,7 +309,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
@@ -436,6 +437,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             </section>
           ) : page === 'Vendas' ? (
             <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+          ) : page === 'Receitas' ? (
+            <Prescriptions key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Orçamentos' ? (
             <Quotes key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onOpenSale={id => dashboardAction('sale', id)} />
           ) : page === 'Caixa' ? (

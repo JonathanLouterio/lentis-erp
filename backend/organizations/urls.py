@@ -8,9 +8,14 @@ from .views import (
     MyStockMovementsView,
 )
 
+from .prescription_api import PrescriptionsView, PrescriptionDetailView, PrescriptionArchiveView
+
 app_name = "organizations"
 
 urlpatterns = [
+    path("me/prescriptions/", PrescriptionsView.as_view(), name="prescriptions"),
+    path("me/prescriptions/<int:record_id>/", PrescriptionDetailView.as_view(), name="prescription-detail"),
+    path("me/prescriptions/<int:record_id>/archive/", PrescriptionArchiveView.as_view(), name="prescription-archive"),
     path("me/customers/", MyCustomersView.as_view(), name="my-customers"),
     path("me/customers/<int:customer_id>/", MyCustomerDetailView.as_view(), name="my-customer-detail"),
     path("me/products/", MyProductsView.as_view(), name="my-products"),
