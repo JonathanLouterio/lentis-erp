@@ -169,3 +169,23 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - O checkout continua idempotente: repetir um envio com resposta incerta recupera a mesma venda e cópia, sem duplicar estoque ou financeiro.
 - Vendas antigas e vendas convertidas de orçamento iniciam sem receita até uma escolha explícita no rascunho. Não há preenchimento retroativo. A receita da venda não aparece automaticamente no PDF de orçamento.
 - Não inclui cálculo óptico, emissão de prescrição, anexos ou OS nesta etapa. A estrutura fica disponível para futura integração com a OS.
+
+
+## Ordens de serviço da ótica
+
+- Uma OS por venda finalizada, com cliente identificado e itens. Não é criada automaticamente.
+- A abertura preserva o nome do cliente, identificação e quantidade dos itens, além do vínculo à cópia imutável de receita da venda, quando existir. Alterações na receita original não atualizam a OS.
+- A ausência de receita não bloqueia a abertura, permitindo serviços que não precisam de grau. Nenhum cálculo clínico é realizado.
+- Etapas: aberta → laboratório → montagem → conferência → pronta para entrega → entregue. Não é permitido pular etapas.
+- A conferência exige confirmação explícita. A entrega exige confirmação e identificação de quem recebeu no campo de observação.
+- Retrabalho parte da conferência ou da etapa pronta para entrega, retorna ao laboratório ou montagem e exige motivo.
+- Previsão de entrega obrigatória; OS em andamento com previsão anterior à data local do sistema aparece atrasada.
+- Edição dos dados de produção exige motivo. Cada alteração preserva os dados da versão, responsável e data no histórico.
+- Versão esperada impede gravação de tela desatualizada; UUID de operação impede duplicação por reenvio.
+- A OS não movimenta novamente o estoque, contas a receber ou caixa. Cancelar a OS não cancela a venda.
+- Cancelar a venda não apaga a OS: as ações de produção ficam bloqueadas, a fila exibe alerta e o operador deve cancelar a OS com motivo. OS já entregue preserva seu encerramento e histórico.
+- OS entregue ou cancelada não pode ser editada, excluída ou reaberta nesta etapa.
+- Acesso exige vínculo ativo com a unidade e permissão sales.view_serviceorder; abertura exige add_serviceorder; alterações exigem change_serviceorder. Ser staff não concede essas permissões.
+- Valores da receita só são retornados com organizations.view_prescription. A permissão operacional de OS não concede acesso clínico.
+- Informações operacionais (armação, lentes e observações) são visíveis aos usuários autorizados da OS. Não digitar graus ou outros dados clínicos nesses campos para contornar a separação de acesso.
+- Impressão, fornecedores de laboratório, custos, anexos, entregas parciais, múltiplas OS por venda e garantias/reabertura ficam para etapas posteriores.

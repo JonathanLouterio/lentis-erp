@@ -311,3 +311,5 @@ from .cash_models import CashSession, CashPosting  # noqa: E402,F401
 from .quote_models import Quote, QuoteItem, QuoteEvent, QuoteOperation  # noqa: E402,F401
 
 from .prescription_models import SalePrescription  # noqa: E402,F401
+
+from .work_order_models import ServiceOrder, ServiceOrderEvent, ServiceOrderOperation  # noqa: E402,F401

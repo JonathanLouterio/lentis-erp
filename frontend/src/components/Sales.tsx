@@ -9,7 +9,7 @@ import PaymentPlanBuilder from './PaymentPlanBuilder'
 import type { PaymentPlanRow } from './PaymentPlanBuilder'
 import './Sales.css'
 
-type Props = { startNew?: boolean; initialSaleId?: number; store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
+type Props = { onServiceOrder?: (saleId:number)=>void; startNew?: boolean; initialSaleId?: number; store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
 type Line = { referencePrice: string; productId: number; name: string; code: string; quantity: string; price: string; discount: string }
 type Payment = PaymentPlanRow
 const emptyOptions: PaymentOptions = { methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" }
@@ -17,7 +17,7 @@ const emptyPage: SalesPage = { count: 0, next: null, previous: null, results: []
 const immediate = ['cash', 'pix', 'transfer']
 const credit = ['credit', 'store_credit', 'boleto']
 
-export default function Sales({ startNew = false, initialSaleId, store, userId, onSavingChange, onDirtyChange }: Props) {
+export default function Sales({ startNew = false, initialSaleId, store, userId, onSavingChange, onDirtyChange, onServiceOrder }: Props) {
   const storageKey = `lentis.checkout.${userId}.${store.id}`
   const [sales, setSales] = useState<SalesPage>(emptyPage)
   const [page, setPage] = useState(1)
@@ -238,6 +238,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   }
 
   return <section className="erp-sales-page">
+    {selected?.status==='completed' && selected.customer && onServiceOrder && <button type="button" className="erp-table-button" disabled={blocked} onClick={()=>onServiceOrder(selected.id)}>Abrir / acompanhar OS desta venda</button>}
     <div className="erp-page-heading erp-list-heading"><div><span className="erp-kicker">COMERCIAL</span><h1>{editor ? selected ? `Venda #${selected.id}` : 'Nova venda' : 'Vendas'}</h1><p>{editor ? 'Cliente, produtos e pagamento em um único atendimento.' : `Vendas da unidade ${store.name}.`}</p></div>
       {editor ? <button className="erp-secondary-button" disabled={blocked} onClick={() => { if (allowedToLeave()) { setEditor(false); setDirty(false); setSelected(null) } }}>Voltar às vendas</button> : <button className="erp-action-button" disabled={blocked || catalogLoading} onClick={newSale}>Nova venda</button>}
     </div>

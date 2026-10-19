@@ -606,3 +606,26 @@ export type SalePrescriptionSelection = {prescription_id:number|null;version?:nu
 export type SalePrescriptionRecord = {id:number;source_id:number|null;source_version:number|null;customer:number;action:'attached'|'removed';snapshot:PrescriptionValues & {customer_id?:number;customer_name?:string;is_active?:boolean};creator_username:string;created_at:string}
 export function getSalePrescriptionAccess(storeId:number):Promise<{can_view:boolean}>{return request(`/api/me/sales/prescription-access/?store_id=${storeId}`)}
 export function getSalePrescriptionHistory(storeId:number,saleId:number):Promise<SalePrescriptionRecord[]>{return request(`/api/me/sales/${saleId}/prescription-history/?store_id=${storeId}`)}
+
+export type ServiceOrderStatus = 'open'|'laboratory'|'mounting'|'checking'|'ready'|'delivered'|'cancelled'
+export type ServiceOrder = {
+  id:number; sale_id:number; sale_status:SaleStatus; customer_name:string; status:ServiceOrderStatus; status_label:string
+  version:number; promised_on:string; laboratory:string; frame_description:string; lens_description:string; notes:string
+  created_at:string; updated_at:string; overdue:boolean; has_prescription:boolean; can_change:boolean; next_status:ServiceOrderStatus|null
+  items?:{product_id:number;code:string;name:string;quantity:string}[]
+  prescription?:SalePrescriptionRecord|null; can_view_prescription?:boolean
+  events?:{version:number;action:string;from_status:string;to_status:string;reason:string;snapshot:Record<string,string>;creator_username:string;created_at:string}[]
+}
+export type ServiceOrderPage = CashPage<ServiceOrder> & {can_create:boolean}
+export type ServiceOrderAttempt = {id:number|null; payload:{request_id:string;action:'create'|'update'|'advance'|'rework'|'cancel';sale_id?:number;expected_version?:number;promised_on?:string;laboratory?:string;frame_description?:string;lens_description?:string;notes?:string;reason?:string;confirmed?:boolean;target_status?:'laboratory'|'mounting'}}
+export function getServiceOrders(storeId:number,page=1,status='active',overdue=false,saleId?:number):Promise<ServiceOrderPage>{
+  const query=new URLSearchParams({store_id:String(storeId),page:String(page),status})
+  if(overdue)query.set('overdue','1')
+  if(saleId)query.set('sale_id',String(saleId))
+  return request(`/api/me/service-orders/?${query}`)
+}
+export function getServiceOrder(storeId:number,id:number):Promise<ServiceOrder>{return request(`/api/me/service-orders/${id}/?store_id=${storeId}`)}
+export async function submitServiceOrder(storeId:number,attempt:ServiceOrderAttempt):Promise<ServiceOrder>{
+  const token=await getCsrfToken()
+  return request(`/api/me/service-orders/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})
+}

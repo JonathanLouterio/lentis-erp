@@ -10,6 +10,7 @@ import CashRegister from './CashRegister'
 import Dashboard from './Dashboard'
 import Quotes from './Quotes'
 import Prescriptions from './Prescriptions'
+import ServiceOrders from './ServiceOrders'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -51,6 +52,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [collapsed, setCollapsed] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
+  const [orderSaleId, setOrderSaleId] = useState<number | undefined>(undefined)
   const [salesStartNew, setSalesStartNew] = useState(false)
   const [dashboardSaleId, setDashboardSaleId] = useState<number | undefined>(undefined)
   const [stores, setStores] = useState<AccessibleStore[]>([])
@@ -309,12 +311,13 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
     if (nextPage === page || !leaveSaleAllowed()) return
     if (nextPage === 'Vendas') { setSalesStartNew(false); setDashboardSaleId(undefined) }
+    if (nextPage === 'Ordens de serviço') setOrderSaleId(undefined)
     setPage(nextPage)
   }
 
@@ -436,7 +439,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
             </section>
           ) : page === 'Vendas' ? (
-            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} onServiceOrder={(id) => { if (!leaveSaleAllowed()) return; setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+          ) : page === 'Ordens de serviço' ? (
+            <ServiceOrders initialSaleId={orderSaleId} key={`${selectedStore.id}.${orderSaleId ?? "list"}`} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Receitas' ? (
             <Prescriptions key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Orçamentos' ? (
