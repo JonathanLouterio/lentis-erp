@@ -28,6 +28,8 @@ class SaleEventSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
+    prescription = serializers.SerializerMethodField()
+    can_view_prescription = serializers.SerializerMethodField()
     store_name = serializers.CharField(source="store.name", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True, default=None)
     creator_username = serializers.CharField(source="created_by.username", read_only=True)
@@ -52,9 +54,17 @@ class SaleSerializer(serializers.ModelSerializer):
             "id", "store", "store_name", "customer", "customer_name", "created_by", "creator_username",
             "status", "status_label", "notes", "created_at", "updated_at", "completed_at", "cancelled_at",
             "cancellation_reason", "items", "events", "subtotal", "discount_total", "total",
-            "can_edit", "can_finalize", "can_cancel", "discount_amount", "payments", "financial_status", "stock_warnings", "discount_control", "discount_requests",
+            "prescription", "can_view_prescription", "can_edit", "can_finalize", "can_cancel", "discount_amount", "payments", "financial_status", "stock_warnings", "discount_control", "discount_requests",
         ]
         read_only_fields = fields
+
+    def get_can_view_prescription(self, sale):
+        from .prescription_services import can_view_prescriptions
+        return can_view_prescriptions(self.context['request'].user)
+
+    def get_prescription(self, sale):
+        from .prescription_services import prescription_output
+        return prescription_output(sale.prescription_record, include_snapshot=False) if self.get_can_view_prescription(sale) else None
 
     def get_payments(self, sale):
         from .payment_serializers import SalePaymentSerializer

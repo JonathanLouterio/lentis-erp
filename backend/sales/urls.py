@@ -17,9 +17,13 @@ from .quote_views import QuotesView, QuoteDetailView, QuoteTransitionView
 
 from .quote_print_views import QuotePrintView
 
+from .prescription_views import PrescriptionAccessView, SalePrescriptionHistoryView
+
 app_name = "sales"
 
 urlpatterns = [
+    path("me/sales/prescription-access/", PrescriptionAccessView.as_view(), name="sale-prescription-access"),
+    path("me/sales/<int:sale_id>/prescription-history/", SalePrescriptionHistoryView.as_view(), name="sale-prescription-history"),
     path('me/quotes/<int:quote_id>/print/', QuotePrintView.as_view(), name='quote-print'),
     path('me/quotes/', QuotesView.as_view(), name='quotes'),
     path('me/quotes/<int:quote_id>/', QuoteDetailView.as_view(), name='quote-detail'),

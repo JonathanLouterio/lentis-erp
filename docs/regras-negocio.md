@@ -150,4 +150,22 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Arquivamento mantém o histórico e impede novas correções naquele registro. Receitas não são excluídas pela API; histórico não é editado. Uma nova receita clínica deve ser outro cadastro; Corrigir serve para corrigir a transcrição.
 - Um identificador único permite repetir envios sem duplicação. No navegador, apenas envios com resposta incerta ficam temporariamente no sessionStorage da aba, separados por usuário/unidade, e são removidos após confirmação. Não há armazenamento local automático de rascunhos.
 - A consulta pode filtrar cliente e registros ativos/arquivados, com paginação de 25 itens. O histórico é apresentado ao abrir uma receita.
-- Não inclui anexos, PDF, ligação com venda/ordem de serviço, cálculo óptico ou agendamento de exame nesta etapa.
+- Não inclui anexos, PDF, ligação com ordem de serviço, cálculo óptico ou agendamento de exame nesta etapa. A ligação com vendas é descrita na próxima seção.
+
+
+## Receita utilizada na venda
+
+- A seleção é opcional e aparece na tela de vendas para usuários com organizations.view_prescription, além do acesso ativo à unidade. Não exige permissão de corrigir a receita para apenas escolher uma receita já cadastrada.
+- A receita escolhida precisa estar ativa, na mesma unidade e vinculada ao cliente identificado na venda. Não é possível escolher receita em venda de balcão sem cliente.
+- A escolha usa identificador e versão, sem aceitar graus ou cópias enviados pelo navegador. O backend bloqueia a receita e confere a versão na hora de salvar. Alterações/arquivamento entre a escolha e o salvamento exigem atualizar as opções e conferir novamente.
+- Ao salvar o rascunho ou concluir a venda, é criada uma cópia dos valores da versão escolhida, com identificação da origem, cliente, operador e data. A cópia é registrada na mesma transação do checkout; falha no atendimento desfaz o vínculo.
+- Salvar a venda sem escolher outra receita mantém exatamente a cópia existente, mesmo quando o cadastro original foi posteriormente corrigido ou arquivado. Nada é atualizado automaticamente.
+- Para utilizar uma revisão posterior, escolha explicitamente a versão atual no rascunho e salve. A tela avisa quando identifica outra versão nas opções carregadas. Este aviso não substitui a conferência da receita apresentada e não é uma notificação em tempo real.
+- Em rascunhos, usuários autorizados podem selecionar outra receita ou remover o vínculo ao salvar. As cópias anteriores e a remoção permanecem no histórico.
+- Mudar o cliente de uma venda vinculada exige remover/substituir o vínculo de forma autorizada na mesma transação. A tela limpa a escolha ao trocar o cliente; o backend impede manter receita de outra pessoa.
+- O identificador do vínculo atual precisa corresponder ao que o operador abriu, evitando sobrescrever uma escolha concorrente. Isso protege o vínculo de receita, não implementa um controle geral de versão de todos os campos de venda.
+- Vendas concluídas ou canceladas não permitem trocar/remover a cópia. Cancelamento mantém os dados da receita. Vendas com histórico de receita preservam esse histórico e devem usar cancelamento, não exclusão física.
+- Usuários sem permissão de receitas continuam operando os demais dados da venda, sem receber graus/cópias. Eles não podem escolher, remover ou consultar o histórico de receitas. As respostas gerais de venda carregam apenas a referência autorizada; os valores são consultados em endpoint específico com Cache-Control no-store, private.
+- O checkout continua idempotente: repetir um envio com resposta incerta recupera a mesma venda e cópia, sem duplicar estoque ou financeiro.
+- Vendas antigas e vendas convertidas de orçamento iniciam sem receita até uma escolha explícita no rascunho. Não há preenchimento retroativo. A receita da venda não aparece automaticamente no PDF de orçamento.
+- Não inclui cálculo óptico, emissão de prescrição, anexos ou OS nesta etapa. A estrutura fica disponível para futura integração com a OS.

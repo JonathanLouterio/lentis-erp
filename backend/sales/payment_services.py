@@ -95,6 +95,8 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
         payments = values.pop('payments')
         customer = values.pop('customer_id', None)
         discount = values.pop('discount_amount')
+        prescription_selection = values.pop('prescription_selection', None)
+        from .prescription_services import apply_prescription
         if sale_id:
             sale = _locked_sale(user, sale_id)
             if sale.store_id != store.pk:
@@ -104,13 +106,16 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
             sale.discount_amount = Decimal('0')
             sale.customer = customer
             sale.notes = values['notes']
-            sale.save()
+            changed = apply_prescription(sale, user, prescription_selection)
+            sale.save(_allow_prescription_change=changed)
             for payment in sale.payments.all():
                 payment.delete()
             for item in sale.items.all():
                 item.delete()
         else:
             sale = Sale.objects.create(store=store, created_by=user, customer=customer, **values)
+            if apply_prescription(sale, user, prescription_selection):
+                sale.save(_allow_prescription_change=True)
         for item in items:
             item = dict(item)
             SaleItem.objects.create(sale=sale, product=item.pop('product_id'), **item)

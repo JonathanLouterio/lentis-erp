@@ -344,6 +344,8 @@ export type SaleEvent = {
 }
 
 export type Sale = {
+  prescription: Omit<SalePrescriptionRecord, 'snapshot'> | null
+  can_view_prescription: boolean
   id: number
   store: number
   store_name: string
@@ -461,6 +463,7 @@ export type CheckoutPayment = {
   first_due_date: string; confirmed: boolean; interval_unit?: 'months' | 'days'; interval_count?: number
 }
 export type CheckoutPayload = {
+  prescription_selection?: SalePrescriptionSelection
   request_id: string; sale_id: number | null; action: 'draft' | 'complete'; customer_id: number | null
   notes: string; discount_amount: string; items: SaleItemPayload[]; payments: CheckoutPayment[]
 }
@@ -598,3 +601,8 @@ export async function savePrescription(storeId:number,attempt:PrescriptionAttemp
   const suffix=attempt.id?`${attempt.id}/${attempt.action==='archive'?'archive/':''}`:''
   return request(`/api/me/prescriptions/${suffix}?store_id=${storeId}`,{method:attempt.id && attempt.action==='save'?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})
 }
+
+export type SalePrescriptionSelection = {prescription_id:number|null;version?:number;expected_record_id:number|null}
+export type SalePrescriptionRecord = {id:number;source_id:number|null;source_version:number|null;customer:number;action:'attached'|'removed';snapshot:PrescriptionValues & {customer_id?:number;customer_name?:string;is_active?:boolean};creator_username:string;created_at:string}
+export function getSalePrescriptionAccess(storeId:number):Promise<{can_view:boolean}>{return request(`/api/me/sales/prescription-access/?store_id=${storeId}`)}
+export function getSalePrescriptionHistory(storeId:number,saleId:number):Promise<SalePrescriptionRecord[]>{return request(`/api/me/sales/${saleId}/prescription-history/?store_id=${storeId}`)}

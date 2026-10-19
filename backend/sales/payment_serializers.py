@@ -36,7 +36,18 @@ class PaymentWriteSerializer(serializers.Serializer):
         return account
 
 
+class PrescriptionSelectionSerializer(serializers.Serializer):
+    prescription_id = serializers.IntegerField(allow_null=True, min_value=1, max_value=9223372036854775807)
+    version = serializers.IntegerField(required=False, min_value=1, max_value=2147483647)
+    expected_record_id = serializers.IntegerField(allow_null=True, min_value=1, max_value=9223372036854775807)
+    def validate(self, values):
+        if values['prescription_id'] is not None and 'version' not in values:
+            raise serializers.ValidationError({'version':'Informe a versão da receita escolhida.'})
+        return values
+
+
 class CheckoutSerializer(SaleCreateSerializer):
+    prescription_selection = PrescriptionSelectionSerializer(required=False)
     sale_id = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=9223372036854775807)
     action = serializers.ChoiceField(choices=['draft', 'complete'])
     discount_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))

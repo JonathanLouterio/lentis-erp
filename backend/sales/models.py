@@ -32,6 +32,7 @@ class Sale(models.Model):
         "Situação", max_length=12, choices=Status.choices,
         default=Status.DRAFT, editable=False,
     )
+    prescription_record = models.ForeignKey("sales.SalePrescription", on_delete=models.PROTECT, null=True, blank=True, related_name="current_sales", editable=False)
     discount_amount = models.DecimalField("Desconto da venda (R$)", max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(ZERO)])
     notes = models.TextField("Observações", blank=True)
     created_at = models.DateTimeField("Criada em", auto_now_add=True)
@@ -59,6 +60,10 @@ class Sale(models.Model):
     def clean(self):
         super().clean()
         self.cancellation_reason = self.cancellation_reason.strip()
+        if self.prescription_record_id:
+            record = self.prescription_record
+            if record.sale_id != self.pk or record.customer_id != self.customer_id or record.action != 'attached':
+                raise ValidationError('A receita vinculada deve ser desta venda e do cliente selecionado. Remova o vínculo antes de trocar o cliente.')
         if self.discount_amount < 0 or (self.pk and self.total < 0):
             raise ValidationError({"discount_amount": "O desconto não pode ultrapassar o valor dos itens."})
         if self.customer_id and self.store_id and self.customer.store_id != self.store_id:
@@ -90,12 +95,14 @@ class Sale(models.Model):
     def total(self):
         return self.calculate_totals()["total"]
 
-    def save(self, *args, _allow_status_change=False, **kwargs):
+    def save(self, *args, _allow_status_change=False, _allow_prescription_change=False, **kwargs):
         # As transições serão chamadas pelo serviço de finalização/cancelamento,
         # na mesma transação das movimentações. Uma edição comum não as executa.
         with transaction.atomic():
             if not self._state.adding:
                 previous = Sale.objects.select_for_update().get(pk=self.pk)
+                if self.prescription_record_id != previous.prescription_record_id and not _allow_prescription_change:
+                    raise ValidationError('Selecione a receita pelo checkout para preservar a cópia e o histórico.')
                 if self.store_id != previous.store_id or self.created_by_id != previous.created_by_id:
                     raise ValidationError("A unidade e o autor da venda não podem ser alterados.")
                 if not _allow_status_change and (
@@ -110,6 +117,8 @@ class Sale(models.Model):
     def delete(self, *args, **kwargs):
         with transaction.atomic():
             current = Sale.objects.select_for_update().get(pk=self.pk)
+            if current.prescription_history.exists():
+                raise ValidationError("Esta venda possui histórico de receita. Use o cancelamento para preservar os registros.")
             if current.status != self.Status.DRAFT:
                 raise ValidationError("Somente rascunhos podem ser excluídos. Use o cancelamento para vendas finalizadas.")
             return super().delete(*args, **kwargs)
@@ -300,3 +309,5 @@ from .commercial_models import DiscountPolicy, DiscountAuthorization  # noqa: E4
 from .cash_models import CashSession, CashPosting  # noqa: E402,F401
 
 from .quote_models import Quote, QuoteItem, QuoteEvent, QuoteOperation  # noqa: E402,F401
+
+from .prescription_models import SalePrescription  # noqa: E402,F401

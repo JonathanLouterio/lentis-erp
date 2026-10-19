@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getMyCustomers, getMyProducts, getPaymentOptions, getPaymentPreview, getSale, getSales, submitCheckout } from '../api'
 import type { AccessibleStore, CheckoutPayload, Customer, PaymentOptions, PaymentPreview, Product, Sale, SaleStatus, SalesPage } from '../api'
 import { brl, dateTime, decimal, decimalText, displayDate, failure, money, paymentSchedule, signedDecimal, today } from './saleMoney'
+import SalePrescriptionPanel from './SalePrescriptionPanel'
+import type { SalePrescriptionSelection } from '../api'
 import CheckoutModal from './CheckoutModal'
 import PaymentPlanBuilder from './PaymentPlanBuilder'
 import type { PaymentPlanRow } from './PaymentPlanBuilder'
@@ -30,6 +32,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const [selected, setSelected] = useState<Sale | null>(null)
   const [editor, setEditor] = useState(startNew)
   const [customerId, setCustomerId] = useState('')
+  const [prescriptionSelection, setPrescriptionSelection] = useState<SalePrescriptionSelection | null>(null)
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<Line[]>([])
   const [discount, setDiscount] = useState('0')
@@ -143,6 +146,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
 
   function allowedToLeave() { return !blocked && (!dirty || window.confirm('Sair sem salvar as alterações desta venda?')) }
   function accept(sale: Sale) {
+    setPrescriptionSelection(null)
     setSelected(sale); setEditor(true); setCustomerId(sale.customer === null ? '' : String(sale.customer)); setNotes(sale.notes)
     setLines(sale.items.map((item) => ({ productId: item.product, referencePrice: item.reference_price ?? item.unit_price, name: item.product_name, code: item.product_code, quantity: item.quantity, price: item.unit_price, discount: item.discount_amount })))
     setDiscount(sale.discount_amount || '0')
@@ -151,6 +155,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   }
   function newSale() {
     if (!allowedToLeave()) return
+    setPrescriptionSelection(null)
     setBuilder(false); setPreview(null); setSelected(null); setEditor(true); setLines([]); setPayments([]); setCustomerId(''); setNotes(''); setDiscount('0'); setDirty(false); setError(''); setSuccess(''); setCancelOpen(false); setReason(''); setProductId(''); setSearch(''); setApprovalReason(''); setDecisionReasons({})
   }
   async function openSale(id: number) {
@@ -179,7 +184,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     setPayments((items) => [...items.map((item, index) => ({ ...item, auto: false, amount: decimalText(paymentAmounts[index] ?? 0n) })), defaultPayment()]); setDirty(true)
   }
   function buildPayload(action: 'draft' | 'complete'): CheckoutPayload {
-    return { request_id: crypto.randomUUID(), sale_id: selected?.id ?? null, action, customer_id: customerId ? Number(customerId) : null, notes, discount_amount: decimalText(globalDiscount ?? 0n),
+    return { ...(prescriptionSelection ? {prescription_selection:prescriptionSelection} : {}), request_id: crypto.randomUUID(), sale_id: selected?.id ?? null, action, customer_id: customerId ? Number(customerId) : null, notes, discount_amount: decimalText(globalDiscount ?? 0n),
       items: lines.map((line, index) => ({ product_id: line.productId, quantity: decimalText(values[index].quantity ?? 0n, 3), unit_price: decimalText(values[index].price ?? 0n), discount_amount: decimalText(values[index].off ?? 0n) })),
       payments: payments.map((payment, index) => ({ method_id: Number(payment.methodId), account_id: Number(payment.accountId), amount: decimalText(paymentAmounts[index] ?? 0n), installment_count: payment.count, first_due_date: payment.due, confirmed: payment.confirmed, interval_unit: payment.intervalUnit, interval_count: payment.intervalCount })),
     }
@@ -247,10 +252,11 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     </div> : !pending && <div className="erp-checkout-grid" aria-busy={busy}>
       <div className="erp-checkout-main">
         <div className="erp-card"><div className="erp-checkout-section"><span>01</span><h2>Cliente</h2>{readOnly && <span className={`erp-sale-badge is-${selected?.status}`}>{selected?.status_label}</span>}</div>
-          <label>Cliente da venda<select aria-label="Cliente da venda" value={customerId} disabled={blocked || readOnly || catalogLoading} onChange={(event) => { setCustomerId(event.target.value); setDirty(true) }}><option value="">Venda balcão (sem identificação)</option>{customerId && !chosenCustomer && <option value={customerId}>{selected?.customer_name || 'Cliente indisponível'}</option>}{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.cpf ? ` · ${customer.cpf}` : customer.cnpj ? ` · ${customer.cnpj}` : ''}</option>)}</select></label>
+          <label>Cliente da venda<select aria-label="Cliente da venda" value={customerId} disabled={blocked || readOnly || catalogLoading} onChange={(event) => { setCustomerId(event.target.value); setPrescriptionSelection(selected?.prescription ? {prescription_id:null,expected_record_id:selected.prescription.id} : null); setDirty(true) }}><option value="">Venda balcão (sem identificação)</option>{customerId && !chosenCustomer && <option value={customerId}>{selected?.customer_name || 'Cliente indisponível'}</option>}{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.cpf ? ` · ${customer.cpf}` : customer.cnpj ? ` · ${customer.cnpj}` : ''}</option>)}</select></label>
           {needsCustomer && !customerId && <p className="erp-alert">Selecione um cliente para boleto ou crediário.</p>}
           <details className="erp-checkout-notes" open={!!notes || undefined}><summary>Observações do atendimento</summary><label>Observações<textarea aria-label="Observações" value={notes} disabled={blocked || readOnly} maxLength={10000} onChange={(event) => { setNotes(event.target.value); setDirty(true) }} placeholder="Informações úteis para este atendimento" /></label></details>
         </div>
+          <SalePrescriptionPanel key={`${store.id}:${customerId}:${selected?.id??'new'}`} storeId={store.id} customerId={customerId?Number(customerId):null} saleId={selected?.id??null} current={selected?.prescription??null} selection={prescriptionSelection} readOnly={readOnly} blocked={blocked} onChange={value=>{setPrescriptionSelection(value);setDirty(true)}} />
         <div className="erp-card"><div className="erp-checkout-section"><span>02</span><h2>Produtos</h2><small>{lines.length} itens</small></div>
           {!readOnly && <div className="erp-checkout-product-picker"><label>Buscar produto<input aria-label="Buscar produto" value={search} disabled={blocked || catalogLoading} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, código ou código de barras" /></label><label>Produto<select aria-label="Produto" value={productId} disabled={blocked || catalogLoading} onChange={(event) => setProductId(event.target.value)}><option value="">Selecione um produto</option>{products.filter((product) => `${product.name} ${product.internal_code} ${product.barcode}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map((product) => <option key={product.id} value={product.id}>{product.internal_code} · {product.name} · {money.format(Number(product.sale_price))}</option>)}</select></label><button className="erp-action-button" disabled={blocked || !productId || catalogLoading || !!catalogError} onClick={addProduct}>Adicionar</button></div>}
           {!lines.length ? <div className="erp-checkout-empty">Adicione os produtos que o cliente está levando.</div> : <div className="erp-checkout-lines">{lines.map((line, index) => <div className="erp-checkout-line" key={line.productId}>
