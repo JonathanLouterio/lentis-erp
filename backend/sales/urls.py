@@ -52,3 +52,9 @@ urlpatterns = [
     path("me/sales/<int:sale_id>/finalize/", MySaleFinalizeView.as_view(), name="sale-finalize"),
     path("me/sales/<int:sale_id>/cancel/", MySaleCancelView.as_view(), name="sale-cancel"),
 ]
+
+from .report_views import ReportsView, ReportOptionsView
+urlpatterns += [
+    path('me/reports/options/', ReportOptionsView.as_view(), name='report-options'),
+    path('me/reports/', ReportsView.as_view(), name='reports'),
+]

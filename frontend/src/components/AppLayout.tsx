@@ -15,6 +15,7 @@ import CustomerHistory from './CustomerHistory'
 import Suppliers from './Suppliers'
 import Purchases from './Purchases'
 import Payables from './Payables'
+import Reports from './Reports'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -507,6 +508,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
           ) : page === 'Compras' ? (
             <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={id => { if (leaveSaleAllowed()) { setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } }} />
+          ) : page === 'Relatórios' ? (
+            <Reports key={selectedStore.id} store={selectedStore} onSavingChange={setSavingSale} />
           ) : page === 'Contas a pagar' ? (
             <Payables key={selectedStore.id} store={selectedStore} userId={user.id} initialPurchaseId={payablePurchaseId} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Fornecedores' ? (

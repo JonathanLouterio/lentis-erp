@@ -686,3 +686,21 @@ export function getPayables(storeId:number,page=1,status='pending',purchaseId?:n
 export function getPayable(storeId:number,id:number):Promise<PayablePlan>{return request(`/api/me/payables/${id}/?store_id=${storeId}`)}
 export function getPayableOptions(storeId:number):Promise<PayableOptions>{return request(`/api/me/payables/options/?store_id=${storeId}`)}
 export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
+
+export type ReportKind='sales'|'movements'|'receivables'|'payables'
+export type ReportFilters={report:ReportKind;start:string;end:string;status:'all'|'pending'|'paid'|'overdue';debtor:'all'|'customer'|'operator';direction:'all'|'in'|'out';account_id?:number|null}
+export type ReportColumn={key:string;label:string;kind:'text'|'money'|'date'|'datetime'|'integer'}
+export type ReportData=CashPage<Record<string,string>> & {title:string;description:string;basis:string;columns:ReportColumn[];summary:{key:string;label:string;value:string;kind:'money'|'integer'}[];filters:ReportFilters;generated_at:string;today:string;timezone:string;store_id:number}
+export type ReportOptions={reports:{key:ReportKind;title:string;basis:string}[];accounts:{id:number;name:string;is_active:boolean}[];timezone:string;start:string;end:string;max_export_rows:number}
+function reportQuery(storeId:number,filters:ReportFilters,page=1){const query=new URLSearchParams({store_id:String(storeId),report:filters.report,start:filters.start,end:filters.end,page:String(page)});if(filters.report==='receivables'||filters.report==='payables')query.set('status',filters.status);if(filters.report==='receivables')query.set('debtor',filters.debtor);if(filters.report==='movements'){query.set('direction',filters.direction);if(filters.account_id)query.set('account_id',String(filters.account_id))}return query}
+export function getReportOptions(storeId:number):Promise<ReportOptions>{return request(`/api/me/reports/options/?store_id=${storeId}`)}
+export function getReport(storeId:number,filters:ReportFilters,page=1):Promise<ReportData>{return request(`/api/me/reports/?${reportQuery(storeId,filters,page)}`)}
+export async function exportReport(storeId:number,filters:ReportFilters):Promise<{blob:Blob;filename:string}>{
+  const query=reportQuery(storeId,filters);query.set('export','csv')
+  let response:Response
+  try{response=await fetch(`/api/me/reports/?${query}`,{headers:{Accept:'*/*'},credentials:'same-origin',cache:'no-store'})}catch{throw new ApiError('Não foi possível conectar para exportar o relatório.',0)}
+  if(!response.ok){const data=await response.json().catch(()=>null);throw new ApiError(firstErrorMessage(data)||'Não foi possível exportar o relatório.',response.status)}
+  if(!response.headers.get('Content-Type')?.toLowerCase().startsWith('text/csv'))throw new ApiError('O servidor retornou um arquivo inesperado.',502)
+  const filename=(response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'lentis-relatorio.csv').replace(/[\\/]/g,'_')
+  return {blob:await response.blob(),filename}
+}
