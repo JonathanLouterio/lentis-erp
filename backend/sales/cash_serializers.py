@@ -39,11 +39,22 @@ class CashSessionSerializer(serializers.ModelSerializer):
 
 
 class CashPostingSerializer(serializers.ModelSerializer):
-    kind_label = serializers.CharField(source='get_kind_display', read_only=True)
+    kind_label = serializers.SerializerMethodField()
     creator_username = serializers.CharField(source='created_by.username', read_only=True)
     sale_id = serializers.SerializerMethodField()
+    purchase_id = serializers.SerializerMethodField()
     class Meta:
         model = CashPosting
-        fields = ['id', 'kind', 'kind_label', 'amount', 'reason', 'created_at', 'creator_username', 'financial_entry', 'sale_id']
+        fields = ['id', 'kind', 'kind_label', 'amount', 'reason', 'created_at', 'creator_username', 'financial_entry', 'sale_id', 'purchase_id']
     def get_sale_id(self, obj):
         return obj.financial_entry.receivable.payment.sale_id if obj.financial_entry_id else None
+
+    def get_kind_label(self, obj):
+        payment = getattr(obj, 'payable_payment', None)
+        if payment:
+            return 'Estorno de pagamento a fornecedor' if payment.reversal_of_id else 'Pagamento a fornecedor'
+        return obj.get_kind_display()
+
+    def get_purchase_id(self, obj):
+        payment = getattr(obj, 'payable_payment', None)
+        return payment.installment.plan.purchase_id if payment else None

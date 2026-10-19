@@ -524,7 +524,7 @@ export type CashSession = {
 export type CashPosting = {
   id: number; kind: 'supply' | 'withdrawal' | 'receipt' | 'refund'; kind_label: string
   amount: string; reason: string; created_at: string; creator_username: string
-  financial_entry: number | null; sale_id: number | null
+  financial_entry: number | null; sale_id: number | null; purchase_id?: number | null
 }
 export type CashPage<T> = { count: number; results: T[]; next: string | null; previous: string | null }
 export type CashAttempt =
@@ -671,3 +671,18 @@ export type PurchasesPage = CashPage<Purchase> & {can_create:boolean;can_receive
 export function getPurchases(storeId:number,page=1,status='all'):Promise<PurchasesPage>{return request(`/api/me/purchases/?store_id=${storeId}&page=${page}&status=${status}`)}
 export function getPurchase(storeId:number,id:number):Promise<Purchase>{return request(`/api/me/purchases/${id}/?store_id=${storeId}`)}
 export async function submitPurchase(storeId:number,attempt:PurchaseAttempt):Promise<Purchase>{const token=await getCsrfToken();return request(`/api/me/purchases/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
+
+export type PayablePayment = {id:number;amount:string;account_name:string;method_name:string;paid_on:string;reason:string;reversal_of:number|null;reversed:boolean;cash_posting_id:number|null;creator_username:string;created_at:string}
+export type PayableInstallment = {id:number;number:number;due_date:string;amount:string;paid:string;remaining:string;status:'pending'|'partial'|'paid';overdue:boolean;payments:PayablePayment[]}
+export type PayablePermissions = {can_create:boolean;can_pay:boolean;can_reverse:boolean}
+export type PayablePlan = PayablePermissions & {id:number;purchase_id:number;supplier_name:string;reference:string;total:string;paid:string;remaining:string;status:'pending'|'partial'|'paid';overdue:boolean;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;creator_username:string;created_at:string;installments?:PayableInstallment[]}
+export type PayablesPage = CashPage<PayablePlan> & PayablePermissions
+export type PayableOptions = PayablePermissions & {accounts:{id:number;name:string;cash_box:boolean;balance:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
+export type PayableAttempt =
+  | {kind:'generate';payload:{request_id:string;purchase_id:number;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number}}
+  | {kind:'pay';installmentId:number;payload:{request_id:string;account_id:number;method_id:number;amount:string;paid_on:string;reason:string}}
+  | {kind:'reverse';paymentId:number;payload:{request_id:string;reason:string}}
+export function getPayables(storeId:number,page=1,status='pending',purchaseId?:number):Promise<PayablesPage>{const query=new URLSearchParams({store_id:String(storeId),page:String(page),status});if(purchaseId)query.set('purchase_id',String(purchaseId));return request(`/api/me/payables/?${query}`)}
+export function getPayable(storeId:number,id:number):Promise<PayablePlan>{return request(`/api/me/payables/${id}/?store_id=${storeId}`)}
+export function getPayableOptions(storeId:number):Promise<PayableOptions>{return request(`/api/me/payables/options/?store_id=${storeId}`)}
+export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}

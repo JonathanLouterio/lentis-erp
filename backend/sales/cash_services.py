@@ -124,3 +124,27 @@ def attach_cash_entry(entry, save_entry):
         if session:
             CashPosting.objects.create(session=session, kind='receipt' if entry.amount > 0 else 'refund', amount=entry.amount, reason=entry.reason, created_by=entry.created_by, financial_entry=entry)
         return result
+
+
+def post_payable_cash(*, user, store, account, method, amount, reason, request_id):
+    """Na transação do título: dinheiro sai/retorna no caixa aberto atual."""
+    authorized(user, store)
+    if account.store_id != store.pk or method.store_id != store.pk:
+        raise ValidationError('A conta e a forma devem pertencer à unidade.')
+    if method.kind != 'cash':
+        if account.cash_box:
+            raise ValidationError('Selecione uma conta bancária para uma saída sem dinheiro físico.')
+        return None
+    account = _account(store, account.pk)
+    if not account.is_active or not account.cash_box:
+        raise ValidationError('Selecione uma conta ativa de caixa físico para dinheiro.')
+    session = CashSession.objects.select_for_update(of=('self',)).filter(account=account, closed_at__isnull=True).first()
+    if session is None:
+        raise ValidationError('Abra o caixa antes de registrar pagamento ou estorno a fornecedor em dinheiro.')
+    if not can_operate(user, session):
+        raise PermissionDenied('Somente o responsável ou uma pessoa com permissão de caixa pode movimentar dinheiro.')
+    if session.expected_cash - amount < 0:
+        raise ValidationError('O pagamento ultrapassa o dinheiro previsto no caixa. Confira o saldo ou registre um suprimento.')
+    if CashPosting.objects.filter(request_id=request_id).exists():
+        raise ValidationError('O identificador já pertence a uma movimentação de caixa.')
+    return CashPosting.objects.create(session=session, kind='withdrawal' if amount > 0 else 'supply', amount=-amount, reason=reason, created_by=user, request_id=request_id)

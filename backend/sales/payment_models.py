@@ -34,7 +34,9 @@ class FinancialAccount(models.Model):
 
     @property
     def balance(self):
-        return self.entries.aggregate(value=models.Sum('amount'))['value'] or Decimal('0.00')
+        receipts = self.entries.aggregate(value=models.Sum('amount'))['value'] or Decimal('0.00')
+        outgoing = self.payable_payments.aggregate(value=models.Sum('amount'))['value'] or Decimal('0.00')
+        return receipts - outgoing
 
     def __str__(self):
         return f'{self.store} — {self.name}'

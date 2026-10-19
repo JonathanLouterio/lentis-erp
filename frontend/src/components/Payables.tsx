@@ -1,0 +1,91 @@
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { ApiError, getPayables, getPayable, getPayableOptions, getPurchases, getPurchase, submitPayable } from '../api'
+import type { AccessibleStore, PayablePlan, PayableInstallment, PayablePayment, PayableAttempt, PayablesPage, PayableOptions, PurchasesPage, Purchase } from '../api'
+import { decimal, signedDecimal, decimalText, today, displayDate, dateTime, paymentSchedule, failure } from './saleMoney'
+import './Payables.css'
+
+type Props = {store:AccessibleStore;userId:number;initialPurchaseId?:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
+const empty:PayablesPage={count:0,next:null,previous:null,results:[],can_create:false,can_pay:false,can_reverse:false}
+const labels={pending:'Em aberto',partial:'Pago parcialmente',paid:'Quitado'}
+function currency(value:string|bigint){const cents=typeof value==='bigint'?value:signedDecimal(value);if(cents===null)return '—';const absolute=cents<0n?-cents:cents;return `${cents<0n?'− ':''}R$ ${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(absolute/100n)},${(absolute%100n).toString().padStart(2,'0')}`}
+
+export default function Payables({store,userId,initialPurchaseId,onSavingChange,onDirtyChange}:Props){
+  const storageKey=`lentis.payable.${userId}.${store.id}`
+  const [pending,setPending]=useState<PayableAttempt|null>(()=>{try{return JSON.parse(sessionStorage.getItem(storageKey)||'null') as PayableAttempt|null}catch{return null}})
+  const [rows,setRows]=useState(empty)
+  const [options,setOptions]=useState<PayableOptions|null>(null)
+  const [selected,setSelected]=useState<PayablePlan|null>(null)
+  const [page,setPage]=useState(1)
+  const [status,setStatus]=useState('pending')
+  const [reload,setReload]=useState(0)
+  const [loading,setLoading]=useState(true)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+  const [success,setSuccess]=useState('')
+  const [dirty,setDirty]=useState(false)
+  const [generator,setGenerator]=useState(false)
+  const [purchases,setPurchases]=useState<PurchasesPage|null>(null)
+  const [purchasePage,setPurchasePage]=useState(1)
+  const [source,setSource]=useState<Purchase|null>(null)
+  const [count,setCount]=useState('1')
+  const [firstDue,setFirstDue]=useState(today())
+  const [unit,setUnit]=useState<'months'|'days'>('months')
+  const [interval,setInterval]=useState('1')
+  const [installment,setInstallment]=useState<PayableInstallment|null>(null)
+  const [reversing,setReversing]=useState<PayablePayment|null>(null)
+  const [methodId,setMethodId]=useState('')
+  const [accountId,setAccountId]=useState('')
+  const [amount,setAmount]=useState('')
+  const [paidOn,setPaidOn]=useState(today())
+  const [reason,setReason]=useState('')
+  const [confirmed,setConfirmed]=useState(false)
+  const locked=busy||!!pending
+  const method=options?.methods.find(m=>String(m.id)===methodId)
+  const accounts=(options?.accounts||[]).filter(a=>a.cash_box===(method?.kind==='cash'))
+  const preview=source?paymentSchedule(decimal(source.total)??0n,Number(count),firstDue,unit,Number(interval)):[]
+  const value=decimal(amount)
+  const validPayment=!!installment&&value!==null&&value>0n&&value<=(decimal(installment.remaining)??0n)&&!!method&&accounts.some(a=>String(a.id)===accountId)&&!!paidOn&&paidOn<=today()&&(method.kind!=='cash'||paidOn===today())&&!!reason.trim()&&confirmed
+  useEffect(()=>{onSavingChange(busy);return()=>onSavingChange(false)},[busy,onSavingChange])
+  useEffect(()=>{onDirtyChange(dirty||!!pending);return()=>onDirtyChange(false)},[dirty,pending,onDirtyChange])
+  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty||pending)e.preventDefault()};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty,pending])
+  useEffect(()=>{let ignore=false;setLoading(true);setError('');void Promise.all([getPayables(store.id,page,status),getPayableOptions(store.id)]).then(([r,o])=>{if(!ignore){setRows(r);setOptions(o)}}).catch(e=>{if(!ignore){setRows(empty);setOptions(null);setSelected(null);setError(failure(e))}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,page,status,reload])
+  useEffect(()=>{if(!generator)return;let ignore=false;setPurchases(null);void getPurchases(store.id,purchasePage,'received').then(v=>{if(!ignore)setPurchases(v)}).catch(e=>{if(!ignore)setError(failure(e))});return()=>{ignore=true}},[store.id,purchasePage,generator,reload])
+  useEffect(()=>{if(initialPurchaseId&&!pending)void openSource(initialPurchaseId)},[store.id,initialPurchaseId])
+  function resetForm(){setInstallment(null);setReversing(null);setReason('');setConfirmed(false);setDirty(false)}
+  function allowed(){return !dirty||window.confirm('Descartar alterações não salvas desta operação?')}
+  function accept(plan:PayablePlan){setSelected(plan);setGenerator(false);setSource(null);resetForm()}
+  async function open(id:number){if(locked||!allowed())return;setBusy(true);setError('');setSuccess('');try{accept(await getPayable(store.id,id))}catch(e){setError(failure(e));setSelected(null);resetForm()}finally{setBusy(false)}}
+  async function openSource(id:number){if(locked||!allowed())return;setBusy(true);setError('');setSuccess('');try{const existing=await getPayables(store.id,1,'all',id);if(existing.results[0])accept(await getPayable(store.id,existing.results[0].id));else{const purchase=await getPurchase(store.id,id);setSelected(null);resetForm();setGenerator(true);setSource(purchase);setConfirmed(false)}}catch(e){setError(failure(e));setSource(null)}finally{setBusy(false)}}
+  function newPlan(){if(locked||!allowed())return;setSelected(null);resetForm();setSource(null);setGenerator(true);setCount('1');setFirstDue(today());setUnit('months');setInterval('1');setError('');setSuccess('')}
+  async function send(attempt:PayableAttempt){
+    if(busy)return;setBusy(true);setPending(attempt);setError('');setSuccess('')
+    try{sessionStorage.setItem(storageKey,JSON.stringify(attempt))}catch{/* Mantido em memória. */}
+    try{const plan=await submitPayable(store.id,attempt);setPending(null);try{sessionStorage.removeItem(storageKey)}catch{/* Sem armazenamento. */}accept(plan);setReload(v=>v+1);setSuccess(attempt.kind==='generate'?'Parcelas geradas. Nenhum pagamento foi registrado.':attempt.kind==='pay'?'Pagamento registrado no título e na conta.':'Estorno registrado. O valor voltou ao saldo da parcela.')}
+    catch(e){setError(failure(e));if(e instanceof ApiError&&e.status>=400&&e.status<500){setPending(null);try{sessionStorage.removeItem(storageKey)}catch{/* Sem armazenamento. */}}}
+    finally{setBusy(false)}
+  }
+  function generate(e:FormEvent){e.preventDefault();if(locked||!source||!preview.length||!confirmed)return;void send({kind:'generate',payload:{request_id:crypto.randomUUID(),purchase_id:source.id,installment_count:Number(count),first_due_date:firstDue,interval_unit:unit,interval_count:Number(interval)}})}
+  function startPayment(i:PayableInstallment){if(locked||!allowed())return;resetForm();setInstallment(i);setAmount(i.remaining.replace('.',','));setMethodId('');setAccountId('');setPaidOn(today());setError('')}
+  function startReversal(p:PayablePayment){if(locked||!allowed())return;resetForm();setReversing(p);setError('')}
+  function submit(e:FormEvent){e.preventDefault();if(locked||!confirmed)return;if(reversing&&reason.trim())void send({kind:'reverse',paymentId:reversing.id,payload:{request_id:crypto.randomUUID(),reason}});else if(installment&&validPayment&&value!==null)void send({kind:'pay',installmentId:installment.id,payload:{request_id:crypto.randomUUID(),account_id:Number(accountId),method_id:Number(methodId),amount:decimalText(value),paid_on:paidOn,reason}})}
+  const touch=()=>{setDirty(true);setConfirmed(false)}
+  return <section className="payable-page">
+    <header className="payable-heading"><div><span className="erp-kicker">GESTÃO · {store.name}</span><h1>Contas a pagar</h1><p>Acompanhe vencimentos e registre pagamentos das compras recebidas.</p></div><button type="button" className="erp-action-button" disabled={locked||!options?.can_create} onClick={newPlan}>Gerar parcelas de compra</button></header>
+    {error&&<p className="erp-alert" role="alert">{error}</p>}{success&&<p className="payable-success" role="status">{success}</p>}
+    {pending&&<div className="erp-card payable-pending"><h2>Conferir envio pendente</h2><p>A conexão não confirmou o resultado. Repita este mesmo envio para recuperar a operação sem registrar outro pagamento.</p><button type="button" className="erp-action-button" disabled={busy} onClick={()=>void send(pending)}>Conferir / repetir envio</button></div>}
+    <div className="payable-toolbar"><label>Situação<select aria-label="Situação das contas a pagar" disabled={locked} value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option value="pending">Em aberto</option><option value="overdue">Vencidas</option><option value="paid">Quitadas</option><option value="all">Todas</option></select></label><button type="button" disabled={locked} onClick={()=>setReload(v=>v+1)}>Atualizar lista e contas</button></div>
+    <div className="payable-grid"><aside className="erp-card payable-list"><h2>Títulos <small>({rows.count})</small></h2>{loading?<p role="status">Carregando…</p>:rows.results.length?rows.results.map(p=><button type="button" className={`payable-row${selected?.id===p.id?' is-selected':''}`} key={p.id} disabled={locked} onClick={()=>void open(p.id)}><strong>{p.supplier_name}</strong><span>Compra #{p.purchase_id} · {p.reference||'Sem referência'}</span><span className={p.overdue?'payable-overdue':''}>{p.overdue?'Há parcelas vencidas':labels[p.status]}</span><strong>Em aberto: {currency(p.remaining)}</strong><small>Total {currency(p.total)} · {p.installment_count} parcela(s)</small></button>):<p>Nenhum título neste filtro.</p>}<div className="payable-pagination"><button type="button" disabled={locked||!rows.previous} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={locked||!rows.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div></aside>
+    <div className="payable-main">
+    {generator?<div className="erp-card"><h2>Gerar contas a pagar</h2><p>Uma compra gera um único plano. Confira os valores e vencimentos antes de confirmar.</p><fieldset disabled={locked}><legend>Compra recebida</legend><label>Compra<select aria-label="Compra para contas a pagar" value={source?.id||''} onChange={e=>{if(e.target.value)void openSource(Number(e.target.value))}}><option value="">Selecione uma entrada confirmada</option>{source&&!purchases?.results.some(p=>p.id===source.id)&&<option value={source.id}>#{source.id} · {source.supplier_name}</option>}{purchases?.results.map(p=><option value={p.id} key={p.id}>#{p.id} · {p.supplier_name} · {currency(p.total)}</option>)}</select></label><div className="payable-pagination"><button type="button" disabled={purchasePage===1} onClick={()=>setPurchasePage(v=>v-1)}>Compras anteriores</button><button type="button" disabled={!purchases?.next} onClick={()=>setPurchasePage(v=>v+1)}>Mais compras</button></div></fieldset>
+    {source&&<form onSubmit={generate}><fieldset disabled={locked}><legend>Condições da compra #{source.id}</legend><p><strong>{source.supplier_name} · Total {currency(source.total)}</strong></p><div className="payable-fields"><label>Quantidade de parcelas<input aria-label="Quantidade de parcelas" type="number" min={1} max={12} value={count} onChange={e=>{setCount(e.target.value);touch()}} required/></label><label>Primeiro vencimento<input aria-label="Primeiro vencimento" type="date" value={firstDue} onChange={e=>{setFirstDue(e.target.value);touch()}} required/></label><label>Intervalo<input aria-label="Intervalo entre parcelas" type="number" min={1} max={unit==='months'?12:365} value={interval} onChange={e=>{setInterval(e.target.value);touch()}} required/></label><label>Unidade do intervalo<select aria-label="Unidade do intervalo" value={unit} onChange={e=>{setUnit(e.target.value as 'months'|'days');setInterval('1');touch()}}><option value="months">Meses</option><option value="days">Dias</option></select></label></div>
+    {preview.length?<ol className="payable-preview">{preview.map((p,i)=><li key={p.date}><span>Parcela {i+1} · {displayDate(p.date)}</span><strong>{currency(p.amount)}</strong></li>)}</ol>:<p className="erp-alert">Informe condições válidas. Cada parcela deve ter pelo menos um centavo.</p>}<label className="payable-check"><input type="checkbox" checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);setDirty(true)}}/>Conferi o total e os vencimentos. Gerar parcelas não registra um pagamento.</label><button className="erp-action-button" type="submit" disabled={!preview.length||!confirmed||!options?.can_create}>Confirmar geração das parcelas</button></fieldset></form>}</div>
+    :selected?<>
+    <div className="erp-card"><div className="payable-heading"><div><h2>{selected.supplier_name}</h2><p>Compra #{selected.purchase_id} · {selected.reference||'Sem referência'} · Título #{selected.id}</p></div><span className={selected.overdue?'payable-overdue':''}>{labels[selected.status]}</span></div><dl className="payable-summary"><div><dt>Total da compra</dt><dd>{currency(selected.total)}</dd></div><div><dt>Pago líquido</dt><dd>{currency(selected.paid)}</dd></div><div><dt>Em aberto</dt><dd>{currency(selected.remaining)}</dd></div></dl><small>Gerado por {selected.creator_username} em {dateTime.format(new Date(selected.created_at))}</small><button type="button" className="payable-refresh" disabled={locked} onClick={()=>void open(selected.id)}>Reabrir dados atuais</button></div>
+    {(installment||reversing)&&<form className="erp-card payable-payment-form" onSubmit={submit}><h2>{reversing?`Estornar pagamento #${reversing.id}`:`Registrar pagamento · parcela ${installment?.number}`}</h2><fieldset disabled={locked}><legend>{reversing?'Contrapartida do lançamento':'Pagamento efetuado'}</legend>{reversing?<p>O estorno integral de <strong>{currency(reversing.amount)}</strong> retorna à conta {reversing.account_name} e reabre o saldo da parcela. Confirme a devolução do dinheiro ou a correção do registro.</p>:<><p>Saldo atual da parcela: <strong>{currency(installment?.remaining||'0')}</strong></p><div className="payable-fields"><label>Forma de pagamento<select aria-label="Forma do pagamento a fornecedor" value={methodId} onChange={e=>{setMethodId(e.target.value);setAccountId('');touch()}} required><option value="">Selecione</option>{options?.methods.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>Conta de saída<select aria-label="Conta de saída" value={accountId} onChange={e=>{setAccountId(e.target.value);touch()}} required disabled={!method}><option value="">Selecione</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Valor pago (R$)<input aria-label="Valor pago ao fornecedor" inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);touch()}} required/></label><label>Data do pagamento<input aria-label="Data do pagamento ao fornecedor" type="date" max={today()} value={paidOn} onChange={e=>{setPaidOn(e.target.value);touch()}} required/></label></div>{method?.kind==='cash'&&<p className="payable-note">Dinheiro exige caixa aberto, permissão para operá-lo e saldo físico previsto suficiente. Use a data de hoje.</p>}<p className="payable-note">Este registro não realiza transferência bancária. Informe um pagamento já efetuado. A conta registra entradas menos pagamentos, sem representar um extrato bancário.</p></>}
+    <label>{reversing?'Motivo do estorno':'Referência / comprovante'}<textarea aria-label="Referência do pagamento ou estorno" maxLength={255} value={reason} onChange={e=>{setReason(e.target.value);touch()}} required/></label><label className="payable-check"><input type="checkbox" checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);setDirty(true)}}/>{reversing?'Conferi e autorizo o estorno integral deste registro.':'Conferi o valor, a conta e a data do pagamento efetuado.'}</label><div className="payable-toolbar"><button type="button" onClick={()=>{if(allowed())resetForm()}}>Voltar</button><button type="submit" className="erp-action-button" disabled={reversing?!reason.trim()||!confirmed:!validPayment}>{busy?'Registrando…':reversing?'Confirmar estorno':'Confirmar pagamento'}</button></div></fieldset></form>}
+    <div className="erp-card"><h2>Parcelas e histórico</h2>{selected.installments?.map(i=><article className="payable-installment" key={i.id}><div className="payable-heading"><div><h3>Parcela {i.number} · {displayDate(i.due_date)}</h3><span className={i.overdue?'payable-overdue':''}>{i.overdue?'Vencida · ':''}{labels[i.status]}</span></div><div><strong>{currency(i.remaining)} em aberto</strong><small>Original {currency(i.amount)} · pago {currency(i.paid)}</small></div></div>{i.status!=='paid'&&selected.can_pay&&<button type="button" className="erp-action-button" disabled={locked} onClick={()=>startPayment(i)}>Pagar parcela {i.number}</button>}{i.payments.length?<div className="payable-history">{i.payments.map(p=><div key={p.id}><div><strong>#{p.id} · {p.reversal_of?`Estorno do pagamento #${p.reversal_of}`:'Pagamento'} · {currency(p.amount)}</strong><span>{displayDate(p.paid_on)} · {p.method_name} · {p.account_name}</span><small>Registrado em {dateTime.format(new Date(p.created_at))} por {p.creator_username}{p.cash_posting_id?` · movimento de caixa #${p.cash_posting_id}`:''}</small><p>{p.reason}</p></div>{p.reversed?<span>Estornado</span>:!p.reversal_of&&selected.can_reverse&&<button type="button" disabled={locked} onClick={()=>startReversal(p)}>Estornar pagamento {p.id}</button>}</div>)}</div>:<p className="payable-note">Nenhum pagamento registrado.</p>}</article>)}</div>
+    </>:<div className="erp-card"><h2>Agenda de pagamentos</h2><p>Selecione um título para consultar suas parcelas ou gere as contas a pagar de uma compra recebida.</p><p className="payable-note">Parcelas e pagamentos permanecem no histórico. Correções de pagamento são feitas por estorno, com justificativa.</p></div>}
+    </div></div>
+  </section>
+}

@@ -130,3 +130,5 @@ class PurchaseOperation(ProtectedRecord):
     created_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.PROTECT,related_name='+')
     digest=models.CharField(max_length=64)
     created_at=models.DateTimeField(auto_now_add=True)
+
+from .payable_models import PayablePlan, PayableInstallment, PayablePayment  # noqa: E402,F401

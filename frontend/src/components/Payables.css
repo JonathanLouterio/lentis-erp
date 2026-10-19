@@ -1,0 +1,30 @@
+.payable-page{display:grid;gap:22px;color:var(--erp-text)}
+.payable-page h1{font-size:clamp(1.6rem,2.5vw,2.1rem);margin:7px 0}
+.payable-page h2{margin:0 0 12px;font-size:1.15rem}.payable-page h3{margin:0 0 7px;font-size:1rem}
+.payable-page p{line-height:1.6}.payable-page small,.payable-note{color:var(--erp-muted)}
+.payable-heading,.payable-toolbar,.payable-pagination{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.payable-heading p{margin:6px 0}.payable-toolbar{justify-content:flex-start}
+.payable-grid{display:grid;grid-template-columns:minmax(260px,.72fr) minmax(0,1.7fr);gap:22px;align-items:start}
+.payable-main{display:grid;gap:20px;min-width:0}.payable-list{min-width:0}
+.payable-row{display:grid;gap:8px;width:100%;text-align:left;padding:18px 12px;margin:8px 0;background:transparent;border:1px solid var(--erp-border);border-radius:12px;color:inherit;overflow-wrap:anywhere;cursor:pointer}
+.payable-row:hover,.payable-row.is-selected{border-color:#3b82f6;background:rgba(59,130,246,.07)}
+.payable-page label{display:grid;gap:8px;font-size:.88rem;font-weight:600;min-width:0}
+.payable-page input,.payable-page select,.payable-page textarea{font:inherit;color:inherit;background:var(--erp-surface,var(--erp-bg,#fff));border:1px solid var(--erp-border);border-radius:8px;padding:11px 12px;width:100%;box-sizing:border-box;min-width:0}
+.payable-page textarea{resize:vertical;min-height:80px}.payable-page fieldset{border:0;margin:12px 0 0;padding:0;display:grid;gap:18px;min-width:0}.payable-page legend{font-weight:650;margin:0 0 14px}
+.payable-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.payable-page button{cursor:pointer}.payable-page button:disabled{cursor:default;opacity:.55}.payable-page button:not(.erp-action-button):not(.payable-row){border:1px solid var(--erp-border);border-radius:8px;background:transparent;color:inherit;padding:9px 13px}
+.payable-page input:focus-visible,.payable-page select:focus-visible,.payable-page textarea:focus-visible,.payable-page button:focus-visible{outline:2px solid #3b82f6;outline-offset:3px}
+.payable-page .payable-check{display:flex;align-items:flex-start;gap:10px;line-height:1.5;font-weight:400}.payable-check input{width:18px;height:18px;flex:0 0 auto;margin:2px 0;accent-color:#2563eb}
+.payable-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:22px 0}.payable-summary dt{font-size:.8rem;color:var(--erp-muted);margin-bottom:9px}.payable-summary dd{margin:0;font-size:1.1rem;font-weight:700;overflow-wrap:anywhere}
+.payable-refresh{margin:14px 0 0}.payable-summary>div:last-child dd{color:#2563eb}
+.payable-installment{border-top:1px solid var(--erp-border);padding:22px 0}.payable-installment .payable-heading>div:last-child{display:grid;gap:7px}.payable-installment>.erp-action-button{margin-top:16px}
+.payable-history{display:grid;gap:12px;margin-top:18px}.payable-history>div{padding:14px;border:1px solid var(--erp-border);border-radius:10px;display:flex;gap:15px;align-items:center;justify-content:space-between;flex-wrap:wrap}.payable-history>div>div{display:grid;gap:7px;min-width:0;overflow-wrap:anywhere}.payable-history p{margin:0;font-size:.87rem}
+.payable-preview{list-style:none;padding:0;margin:0;display:grid;gap:8px}.payable-preview li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--erp-border);padding:10px 0;flex-wrap:wrap}
+.payable-pagination{margin-top:20px;font-size:.85rem}.payable-success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.35);padding:15px;border-radius:10px;color:inherit}
+.payable-overdue{color:#b45309;font-weight:650}[data-theme=dark] .payable-overdue{color:#fbbf24}
+.payable-pending,.payable-payment-form{border:1px solid #3b82f6!important}
+@media(max-width:1050px){.payable-grid{grid-template-columns:1fr}.payable-list{max-height:440px;overflow:auto}}
+@media(max-width:580px){.payable-fields,.payable-summary{grid-template-columns:1fr}.payable-heading{align-items:flex-start}.payable-page .erp-card{padding:18px}.payable-history>div{align-items:flex-start}.payable-summary{gap:14px}}
+
+[data-theme="dark"] .payable-page :is(input,select,textarea){background:#263149;color:#e2e8f0;color-scheme:dark}
+[data-theme="dark"] .payable-summary>div:last-child dd{color:#93c5fd}

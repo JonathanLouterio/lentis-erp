@@ -5,13 +5,13 @@ import type { AccessibleStore, Product, Supplier, Purchase, PurchaseAttempt, Pur
 import { decimal, decimalText, dateTime, today, failure } from './saleMoney'
 import './Purchases.css'
 
-type Props={store:AccessibleStore;userId:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
+type Props={store:AccessibleStore;userId:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void;onPayables?:(id:number)=>void}
 type Line={productId:number;name:string;code:string;quantity:string;cost:string}
 function currency(value:string|bigint){const cents=typeof value==='bigint'?value:decimal(value);return cents===null?'—':`R$ ${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(cents/100n)},${(cents%100n).toString().padStart(2,'0')}`}
 const empty:PurchasesPage={count:0,next:null,previous:null,results:[],can_create:false,can_receive:false}
 function totalLine(line:Line){const q=decimal(line.quantity,3),c=decimal(line.cost);return q!==null&&c!==null?(q*c+500n)/1000n:null}
 
-export default function Purchases({store,userId,onSavingChange,onDirtyChange}:Props){
+export default function Purchases({store,userId,onSavingChange,onDirtyChange,onPayables}:Props){
   const storageKey=`lentis.purchase.${userId}.${store.id}`
   const [pending,setPending]=useState<PurchaseAttempt|null>(()=>{try{return JSON.parse(sessionStorage.getItem(storageKey)||'null') as PurchaseAttempt|null}catch{return null}})
   const [result,setResult]=useState(empty)
@@ -84,6 +84,7 @@ export default function Purchases({store,userId,onSavingChange,onDirtyChange}:Pr
     <fieldset disabled={locked||readOnly||catalogLoading||!!catalogError}><legend>Itens da compra</legend>{!readOnly&&<div className="purchase-add"><label>Produto<select aria-label="Produto da compra" value={productId} onChange={e=>setProductId(e.target.value)}><option value="">Selecione um produto</option>{products.map(p=><option key={p.id} value={p.id}>{p.internal_code} · {p.name}</option>)}</select></label><button type="button" onClick={addProduct} disabled={!productId||lines.length>=100}>Adicionar produto</button></div>}<div className="purchase-lines">{lines.map((l,i)=><article key={l.productId}><strong>{l.code} · {l.name}</strong><div className="purchase-line-fields"><label>Quantidade<input aria-label={`Quantidade do item ${i+1}`} inputMode="decimal" value={l.quantity} onChange={e=>changeLine(i,'quantity',e.target.value)}/></label><label>Custo unitário<input aria-label={`Custo do item ${i+1}`} inputMode="decimal" value={l.cost} onChange={e=>changeLine(i,'cost',e.target.value)}/></label><strong>{totalLine(l)===null?'Valor inválido':currency(totalLine(l)!)}</strong>{!readOnly&&<button type="button" onClick={()=>{setLines(lines.filter((_,n)=>n!==i));setDirty(true)}}>Remover</button>}</div>{selected?.status==='received'&&<small>Movimentação #{selected.items?.find(x=>x.product_id===l.productId)?.movement_id}</small>}</article>)}</div><strong className="purchase-total">Total dos itens: {currency(total)}</strong>{!readOnly&&<button className="erp-action-button" type="submit">Salvar rascunho</button>}</fieldset></form>
     {!readOnly&&<button type="button" className="erp-action-button" disabled={locked||catalogLoading||!!catalogError||(!selected&&!result.can_receive)||!!selected&&!selected.can_receive} onClick={()=>void prepare()}>Conferir entrada</button>}
     {selected?.status==='received'&&<p className="purchase-hint">{selected.updates_cost?'O custo cadastrado dos produtos foi atualizado pelo custo desta entrada.':'O custo cadastrado dos produtos foi preservado.'} Compra confirmada é somente leitura.</p>}
+    {selected?.status==='received'&&(decimal(selected.total)??0n)>0n&&onPayables&&<button type="button" className="erp-action-button" disabled={locked} onClick={()=>onPayables(selected.id)}>Gerar / consultar contas a pagar</button>}
     {selected?.can_edit&&<fieldset disabled={locked}><legend>Cancelar rascunho</legend><label>Motivo do cancelamento<textarea maxLength={255} value={reason} onChange={e=>setReason(e.target.value)}/></label><button type="button" onClick={cancel}>Cancelar rascunho</button></fieldset>}
     {selected&&<><h3>Histórico de operações</h3><div className="purchase-history">{selected.events?.map(e=><article key={e.version}><strong>{e.action_label} · versão {e.version}</strong><small>{dateTime.format(new Date(e.created_at))} · {e.creator_username}</small>{e.reason&&<p>{e.reason}</p>}</article>)}</div><button type="button" disabled={locked} onClick={()=>void open(selected.id)}>Reabrir dados atuais</button></>}
     </>}</div></div>

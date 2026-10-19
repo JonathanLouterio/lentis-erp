@@ -14,6 +14,7 @@ import ServiceOrders from './ServiceOrders'
 import CustomerHistory from './CustomerHistory'
 import Suppliers from './Suppliers'
 import Purchases from './Purchases'
+import Payables from './Payables'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -30,7 +31,7 @@ const menuGroups = [
   { title: 'Cadastros', icon: 'cadastros', items: ['Clientes', 'Produtos', 'Receitas', 'Fornecedores'] },
   { title: 'Comercial', icon: 'comercial', items: ['Vendas', 'Orçamentos', 'Compras', 'Caixa'] },
   { title: 'Operação', icon: 'operacao', items: ['Estoque', 'Ordens de serviço', 'Atendimento domiciliar'] },
-  { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Relatórios', 'Administração'] },
+  { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Contas a pagar', 'Relatórios', 'Administração'] },
 ]
 
 function MenuIcon({ name }: { name: string }) {
@@ -55,6 +56,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [collapsed, setCollapsed] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
+  const [payablePurchaseId, setPayablePurchaseId] = useState<number | undefined>(undefined)
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null)
   const [orderSaleId, setOrderSaleId] = useState<number | undefined>(undefined)
   const [salesStartNew, setSalesStartNew] = useState(false)
@@ -315,11 +317,12 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras', 'Contas a pagar'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
     if (nextPage === page || !leaveSaleAllowed()) return
+    if (nextPage === 'Contas a pagar') setPayablePurchaseId(undefined)
     if (nextPage === 'Vendas') { setSalesStartNew(false); setDashboardSaleId(undefined) }
     if (nextPage === 'Ordens de serviço') setOrderSaleId(undefined)
     setPage(nextPage)
@@ -342,6 +345,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setProducts([])
     setStockProductId('')
     setSalesStartNew(false); setDashboardSaleId(undefined)
+    setPayablePurchaseId(undefined)
     setSelectedStoreId(storeId)
   }
 
@@ -502,7 +506,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           ) : page === 'Histórico do cliente' && historyCustomerId ? (
             <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
           ) : page === 'Compras' ? (
-            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={id => { if (leaveSaleAllowed()) { setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } }} />
+          ) : page === 'Contas a pagar' ? (
+            <Payables key={selectedStore.id} store={selectedStore} userId={user.id} initialPurchaseId={payablePurchaseId} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Fornecedores' ? (
             <Suppliers key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Clientes' ? (

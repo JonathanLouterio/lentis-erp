@@ -40,7 +40,7 @@ class CashPostingsView(CashDetailView):
     def get(self, request, session_id):
         session = self.selected(session_id)
         pagination = SalesPagination()
-        rows = pagination.paginate_queryset(session.postings.select_related('created_by', 'financial_entry__receivable__payment'), request, view=self)
+        rows = pagination.paginate_queryset(session.postings.select_related('created_by', 'financial_entry__receivable__payment', 'payable_payment__installment__plan'), request, view=self)
         return pagination.get_paginated_response(CashPostingSerializer(rows, many=True).data)
     def post(self, request, session_id):
         store = self._selected_store()
