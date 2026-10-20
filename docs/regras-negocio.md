@@ -262,3 +262,16 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Totais e quantidade consideram todos os resultados dos filtros aplicados, independentemente da página. As consultas aceitam períodos inclusivos de até 366 dias, com paginação de 25 linhas e limite de 100 por página pela API.
 - CSV exporta todas as páginas dos filtros aplicados, com limite de 20.000 registros, UTF-8 com BOM, separador ponto e vírgula e vírgula decimal. Caso o limite seja excedido, a consulta é rejeitada sem arquivo parcial; campos de texto que possam ser interpretados como fórmula recebem prefixo de proteção.
 - O relatório de vendas exige `sales.view_sale`; contas a receber, `sales.view_receivable`; contas a pagar, `purchases.view_payableplan`; movimentações exige simultaneamente `sales.view_financialentry` e `purchases.view_payableplan`. A exportação aplica as mesmas permissões da consulta.
+
+## Backup e restauração de teste
+
+- O backup usa o serviço Compose `db` da raiz do projeto, identifica um único contêiner em execução e mantém esse ID nas etapas seguintes. As credenciais vêm do próprio contêiner; senhas não são gravadas no manifesto ou relatório.
+- `pg_dump` gera um arquivo custom no contêiner. A cópia do `.dump` usa `docker cp`; nenhum binário é redirecionado pelo pipeline do PowerShell.
+- Um backup completo contém `database.dump` e `manifest.json`, com tamanho, SHA-256, banco de origem, versão e horário UTC. A pasta final só aparece depois que os dois arquivos estão completos e o hash foi conferido. Pastas incompletas desta execução são removidas quando a execução termina com erro.
+- Cada execução cria um novo backup; não há exclusão automática de backups anteriores. O diretório `backups` ignora arquivos gerados no Git.
+- O teste confere tamanho e hash antes de acessar Docker, cria um banco `lentis_restore_test_<GUID>` e restaura em transação única, interrompendo no primeiro erro. O banco configurado da aplicação nunca é alvo do restore ou do drop.
+- O teste assume propriedade do banco temporário apenas após createdb terminar com sucesso. Falha de criação não autoriza remover um banco preexistente. A limpeza se restringe ao nome exclusivo gerado pela execução.
+- A restauração confere tabelas básicas e migrations e registra contagens das tabelas restauradas, sem comparar com as contagens de um banco original que pode continuar em uso. Arquivos de teste e banco temporário são removidos ao final normal, inclusive após falhas de restore. Falhas na limpeza são reportadas e não produzem sucesso.
+- Um backup criado ainda não é um backup testado. O comando combinado só informa `RestoreTested=True` depois da restauração, conferência e limpeza concluídas.
+- O arquivo é uma cópia lógica do banco. Código, configurações, arquivos de mídia, roles e configurações globais do cluster exigem cópias próprias. O restore de teste usa a conta atual e não valida a reprodução das permissões e proprietários originais.
+- Esta etapa não inclui restauração sobre o banco de trabalho, agendamento automático, retenção ou envio externo. Interrupções forçadas do terminal ou do Docker podem impedir a limpeza; nesse caso, o nome temporário exibido deve ser conferido antes de qualquer remoção manual.
