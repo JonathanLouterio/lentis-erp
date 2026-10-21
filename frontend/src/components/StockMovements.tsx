@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createStockMovement, getMyProducts, getStockMovements, getPaymentOptions } from '../api'
-import type { AccessibleStore, Product, StockMovement, StockMovementType } from '../api'
+import { createStockMovement, getStockOptions, getStockMovements } from '../api'
+import type { AccessibleStore, StockProductChoice, StockMovement, StockMovementType } from '../api'
 import './StockMovements.css'
 
 type Props = {
   store: AccessibleStore
   initialProductId?: string
+  permissions: { view: boolean; add: boolean }
   onSavingChange: (saving: boolean) => void
 }
 
@@ -27,8 +28,10 @@ function readQuantity(value: string): number | null {
   return Number.isFinite(amount) && amount <= 999999999.999 ? amount : null
 }
 
-export default function StockMovements({ store, initialProductId = '', onSavingChange }: Props) {
-  const [products, setProducts] = useState<Product[]>([])
+export default function StockMovements({ store, initialProductId = '', permissions, onSavingChange }: Props) {
+  const [products, setProducts] = useState<StockProductChoice[]>([])
+  const [canView, setCanView] = useState(false)
+  const [canCreate, setCanCreate] = useState(false)
   const [allowNegative, setAllowNegative] = useState(false)
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,20 +52,22 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
     let ignore = false
     setLoading(true)
     setLoadError('')
-    void Promise.all([getMyProducts(store.id), getStockMovements(store.id), getPaymentOptions(store.id)])
-      .then(([currentProducts, history, policy]) => {
+    void getStockOptions(store.id).then(async options => {
+        const history = options.can_view ? await getStockMovements(store.id) : []
         if (ignore) return
-        setProducts(currentProducts)
+        setProducts(options.products)
         setMovements(history)
-        setAllowNegative(policy.allow_negative_stock)
-        setProductId((current) => currentProducts.some((item) => String(item.id) === current) ? current : '')
+        setCanView(options.can_view)
+        setCanCreate(options.can_create)
+        setAllowNegative(options.allow_negative_stock)
+        setProductId(current => options.products.some(item => String(item.id) === current) ? current : '')
       })
       .catch((err: unknown) => {
-        if (!ignore) setLoadError(messageFrom(err))
+        if (!ignore) { setProducts([]); setMovements([]); setCanView(false); setCanCreate(false); setLoadError(messageFrom(err)) }
       })
       .finally(() => { if (!ignore) setLoading(false) })
     return () => { ignore = true }
-  }, [store.id, reload])
+  }, [store.id, reload, permissions.view, permissions.add])
 
   const selectedProduct = products.find((product) => String(product.id) === productId)
   const amount = readQuantity(quantity)
@@ -90,7 +95,7 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saving) return
+    if (saving || !canCreate || !permissions.add) return
     setFormError('')
     setSuccess('')
     if (!selectedProduct) {
@@ -118,7 +123,7 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
         quantity: amount.toFixed(3),
         reason: reason.trim(),
       })
-      setMovements((current) => [saved, ...current])
+      if (canView) setMovements((current) => [saved, ...current])
       setProducts((current) => current.map((product) => product.id === saved.product
         ? { ...product, stock_quantity: saved.balance_after } : product))
       setQuantity('')
@@ -126,6 +131,7 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
       setSuccess(`${labels[saved.movement_type]} ${saved.movement_type === 'adjustment' ? 'registrado' : 'registrada'} para ${saved.product_name}. Saldo: ${quantityFormat.format(Number(saved.balance_after))}.`)
     } catch (err) {
       setFormError(messageFrom(err))
+      setReload(value => value + 1)
     } finally {
       setSaving(false)
       onSavingChange(false)
@@ -158,17 +164,17 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
           <div className="erp-stock-summary">
             <div className="erp-card"><span className="erp-card-label">Produtos ativos</span><strong>{products.length}</strong></div>
             <div className="erp-card"><span className="erp-card-label">No mínimo ou abaixo</span><strong>{lowStock}</strong></div>
-            <div className="erp-card"><span className="erp-card-label">Movimentações registradas</span><strong>{movements.length}</strong></div>
+            <div className="erp-card"><span className="erp-card-label">Movimentações registradas</span><strong>{canView ? movements.length : '—'}</strong>{!canView && <small>Histórico restrito</small>}</div>
           </div>
           {success && <p className="erp-stock-success" role="status">{success}</p>}
-          <form className="erp-card erp-customer-form" onSubmit={(event) => void submit(event)} aria-busy={saving}>
+          {canCreate && permissions.add ? <form className="erp-card erp-customer-form" onSubmit={(event) => void submit(event)} aria-busy={saving}>
             <div className="erp-form-heading"><div><span className="erp-card-label">CONTROLE DE SALDO</span><h2>Nova movimentação</h2></div></div>
             {products.length === 0 ? <p>Cadastre um produto ativo nesta unidade para registrar movimentações.</p>
               : <>
                 <fieldset className="erp-stock-fieldset" disabled={saving}>
                   <div className="erp-form-grid">
                     <label className="erp-field-wide">Produto
-                      <select required value={productId} onChange={(event) => { setProductId(event.target.value); setFormError(''); setSuccess('') }}>
+                      <select aria-label="Produto da movimentação" required value={productId} onChange={(event) => { setProductId(event.target.value); setFormError(''); setSuccess('') }}>
                         <option value="">Selecione o produto</option>
                         {products.map((product) => <option key={product.id} value={String(product.id)}>{product.internal_code} — {product.name}</option>)}
                       </select>
@@ -205,8 +211,8 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
                   {saving ? 'Registrando…' : movementType === 'adjustment' ? 'Registrar ajuste' : 'Registrar movimentação'}
                 </button>
               </>}
-          </form>
-          <div className="erp-card erp-customer-list-card">
+          </form> : <div className="erp-card"><p>Seu usuário pode consultar o estoque, mas não registrar movimentações.</p></div>}
+          {canView && permissions.view ? <div className="erp-card erp-customer-list-card">
             <div className="erp-form-heading"><h2>Histórico</h2><span className="erp-card-label">{filtered.length} registro{filtered.length === 1 ? '' : 's'}</span></div>
             <div className="erp-stock-filters">
               <label>Produto<select value={filterProduct} onChange={(event) => setFilterProduct(event.target.value)}>
@@ -232,7 +238,7 @@ export default function StockMovements({ store, initialProductId = '', onSavingC
                   <td className="erp-stock-reason">{movement.reason}</td><td>{movement.created_by_username}</td>
                 </tr>)}</tbody>
               </table></div>}
-          </div>
+          </div> : <div className="erp-card"><p>Seu usuário pode registrar movimentações, mas não consultar o histórico. Solicite a permissão de consulta ao administrador.</p></div>}
         </>}
     </section>
   )

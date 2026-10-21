@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -21,6 +22,10 @@ class MyCustomersAPITests(TestCase):
             company=self.company, code="002", name="Filial"
         )
         self.user = User.objects.create_user(username="cliente_api")
+        self.user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="organizations",
+            codename__in=["view_customer", "add_customer"],
+        ))
         StoreMembership.objects.create(
             user=self.user,
             store=self.store,

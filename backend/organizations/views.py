@@ -1,6 +1,9 @@
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from rest_framework import status
+from rest_framework.views import APIView
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -14,6 +17,9 @@ from .serializers import (
     StockMovementCreateSerializer, StockMovementSerializer,
 )
 from .stock_services import register_stock_movement
+from .access_permissions import (
+    CatalogActionPermission, CatalogWriteGuardMixin, FreshActiveUser, catalog_capabilities, fresh_actor,
+)
 
 
 class SelectedStoreMixin:
@@ -27,15 +33,21 @@ class SelectedStoreMixin:
             raise ValidationError({"store_id": "Informe um código de unidade válido."}) from exc
         if not 0 < store_id <= 9223372036854775807:
             raise ValidationError({"store_id": "Informe um código de unidade válido."})
-        store = get_accessible_stores(self.request.user).filter(pk=store_id).first()
+        actor = fresh_actor(self.request)
+        if actor is None:
+            # Preserva o contrato dos outros módulos que reutilizam este mixin.
+            # Os endpoints desta etapa já negam a conta inativa na classe de permissão.
+            raise ValidationError({"store_id": "Você não possui acesso a esta unidade."})
+        store = get_accessible_stores(actor).filter(pk=store_id).first()
         if store is None:
             raise ValidationError({"store_id": "Você não possui acesso a esta unidade."})
         return store
 
 
-class MyCustomersView(SelectedStoreMixin, ListCreateAPIView):
+class MyCustomersView(CatalogWriteGuardMixin, SelectedStoreMixin, ListCreateAPIView):
     serializer_class = CustomerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CatalogActionPermission]
+    catalog_model = "customer"
 
     def get_queryset(self):
         return Customer.objects.filter(store=self._selected_store(), is_active=True).select_related("store")
@@ -44,26 +56,26 @@ class MyCustomersView(SelectedStoreMixin, ListCreateAPIView):
         serializer.save(store=self._selected_store())
 
 
-class MyCustomerDetailView(SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
+class MyCustomerDetailView(CatalogWriteGuardMixin, SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
     serializer_class = CustomerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CatalogActionPermission]
+    catalog_model = "customer"
     lookup_url_kwarg = "customer_id"
 
     def get_queryset(self):
         return Customer.objects.filter(store=self._selected_store(), is_active=True).select_related("store")
 
     def destroy(self, request, *args, **kwargs):
-        if not (request.user.is_staff or request.user.is_superuser):
-            raise PermissionDenied("Somente administradores podem excluir clientes.")
         instance = self.get_object()
         instance.is_active = False
         instance.save(update_fields=["is_active", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class MyProductsView(SelectedStoreMixin, ListCreateAPIView):
+class MyProductsView(CatalogWriteGuardMixin, SelectedStoreMixin, ListCreateAPIView):
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CatalogActionPermission]
+    catalog_model = "product"
 
     def get_queryset(self):
         return Product.objects.filter(store=self._selected_store(), is_active=True).select_related("store")
@@ -72,17 +84,16 @@ class MyProductsView(SelectedStoreMixin, ListCreateAPIView):
         serializer.save(store=self._selected_store())
 
 
-class MyProductDetailView(SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
+class MyProductDetailView(CatalogWriteGuardMixin, SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CatalogActionPermission]
+    catalog_model = "product"
     lookup_url_kwarg = "product_id"
 
     def get_queryset(self):
         return Product.objects.filter(store=self._selected_store(), is_active=True).select_related("store")
 
     def destroy(self, request, *args, **kwargs):
-        if not (request.user.is_staff or request.user.is_superuser):
-            raise PermissionDenied("Somente administradores podem inativar produtos.")
         instance = self.get_object()
         instance.is_active = False
         instance.save(update_fields=["is_active", "updated_at"])
@@ -90,7 +101,8 @@ class MyProductDetailView(SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
 
 
 class MyStockMovementsView(SelectedStoreMixin, ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CatalogActionPermission]
+    catalog_model = "stockmovement"
     http_method_names = ["get", "post", "head", "options"]
 
     def get_serializer_class(self):
@@ -128,3 +140,37 @@ class MyStockMovementsView(SelectedStoreMixin, ListCreateAPIView):
             raise ValidationError(detail) from exc
         output = StockMovementSerializer(movement, context=self.get_serializer_context())
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+@method_decorator(never_cache, name="dispatch")
+class CatalogAccessView(SelectedStoreMixin, APIView):
+    permission_classes = [IsAuthenticated, FreshActiveUser]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        store = self._selected_store()
+        return Response({"store_id": store.pk, **catalog_capabilities(fresh_actor(request))})
+
+
+@method_decorator(never_cache, name="dispatch")
+class StockOptionsView(SelectedStoreMixin, APIView):
+    permission_classes = [IsAuthenticated, FreshActiveUser]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request):
+        user = fresh_actor(request)
+        capabilities = catalog_capabilities(user)["stock"]
+        if not any(capabilities.values()):
+            raise PermissionDenied("Seu usuário não tem permissão para consultar ou movimentar estoque.")
+        store = self._selected_store()
+        # Seleção de estoque não exige ler preços de custo/venda ou dados comerciais.
+        products = Product.objects.filter(store=store, is_active=True).order_by("name", "pk").only(
+            "id", "internal_code", "name", "stock_quantity", "minimum_stock")
+        return Response({
+            "store_id": store.pk,
+            "allow_negative_stock": store.allow_negative_stock,
+            "can_view": capabilities["view"], "can_create": capabilities["add"],
+            "products": [{"id": p.pk, "internal_code": p.internal_code, "name": p.name,
+                          "stock_quantity": str(p.stock_quantity), "minimum_stock": str(p.minimum_stock)}
+                         for p in products],
+        })

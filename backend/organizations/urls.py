@@ -6,6 +6,8 @@ from .views import (
     MyProductDetailView,
     MyProductsView,
     MyStockMovementsView,
+    CatalogAccessView,
+    StockOptionsView,
 )
 
 from .prescription_api import PrescriptionsView, PrescriptionDetailView, PrescriptionArchiveView
@@ -17,6 +19,8 @@ from .supplier_api import SuppliersView, SupplierDetailView
 app_name = "organizations"
 
 urlpatterns = [
+    path("me/catalog-access/", CatalogAccessView.as_view(), name="catalog-access"),
+    path("me/stock-options/", StockOptionsView.as_view(), name="stock-options"),
     path("me/suppliers/", SuppliersView.as_view(), name="suppliers"),
     path("me/suppliers/<int:supplier_id>/", SupplierDetailView.as_view(), name="supplier-detail"),
     path("me/customers/<int:customer_id>/history/", CustomerHistoryView.as_view(), name="customer-history"),

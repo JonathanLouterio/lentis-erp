@@ -29,8 +29,32 @@ class StoreAdmin(admin.ModelAdmin):
         return False
 
 
+class SystemCatalogAdminMixin:
+    """Operação comum usa a API; evita rotas legadas de edição sem os mesmos bloqueios."""
+    def _system_admin(self, request):
+        from .access_permissions import fresh_actor
+        actor = fresh_actor(request)
+        return bool(actor and actor.is_superuser)
+
+    def has_module_permission(self, request):
+        return self._system_admin(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._system_admin(request)
+
+    def has_add_permission(self, request):
+        return self._system_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._system_admin(request)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset if self._system_admin(request) else queryset.none()
+
+
 @admin.register(Customer)
-class CustomerAdmin(admin.ModelAdmin):
+class CustomerAdmin(SystemCatalogAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "person_type",
@@ -110,7 +134,7 @@ class CustomerAdmin(admin.ModelAdmin):
         return False
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(SystemCatalogAdminMixin, admin.ModelAdmin):
     list_display = (
         "internal_code",
         "name",

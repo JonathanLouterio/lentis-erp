@@ -165,3 +165,19 @@
     grid-template-columns: 1fr;
   }
 }
+
+.erp-stock-page, .erp-stock-page > *, .erp-stock-page .erp-card { min-width: 0; }
+.erp-stock-page :is(input, select, textarea) { box-sizing: border-box; max-width: 100%; }
+.erp-stock-page .erp-page-heading { flex-wrap: wrap; }
+.erp-stock-page .erp-page-heading > button { max-width: 100%; white-space: normal; }
+@media (max-width: 760px) {
+  .erp-stock-summary, .erp-stock-filters { grid-template-columns: minmax(0, 1fr); }
+  .erp-stock-page .erp-page-heading > button { width: 100%; }
+}
+
+.erp-stock-page { grid-template-columns: minmax(0, 1fr); }
+.erp-stock-page label { min-width: 0; overflow-wrap: anywhere; }
+.erp-stock-page :is(input, select, textarea) { width: 100%; min-width: 0; }
+@media (max-width: 760px) {
+  .erp-stock-page .erp-form-grid { grid-template-columns: minmax(0, 1fr); }
+}

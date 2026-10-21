@@ -759,3 +759,22 @@ export async function resetManagedUserPassword(id: number, password: string, ver
 export function getManagedUserHistory(id: number): Promise<{ results: UserAccessEvent[] }> {
   return request(`${userManagementPath}${id}/history/`)
 }
+
+export type CatalogActions = { view: boolean; add: boolean; change: boolean; delete: boolean }
+export type CatalogAccess = {
+  store_id: number
+  customers: CatalogActions
+  products: CatalogActions
+  stock: { view: boolean; add: boolean }
+}
+export type StockProductChoice = Pick<Product, 'id' | 'internal_code' | 'name' | 'stock_quantity' | 'minimum_stock'>
+export type StockOptions = {
+  store_id: number; allow_negative_stock: boolean; can_view: boolean; can_create: boolean
+  products: StockProductChoice[]
+}
+export function getCatalogAccess(storeId: number): Promise<CatalogAccess> {
+  return request(`/api/me/catalog-access/?store_id=${storeId}`)
+}
+export function getStockOptions(storeId: number): Promise<StockOptions> {
+  return request(`/api/me/stock-options/?store_id=${storeId}`)
+}

@@ -290,3 +290,18 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Alterações usam transação, locks PostgreSQL em ordem comum entre administradores e token de versão derivado do estado atual. Conflitos retornam 409 sem sobrescrever edições anteriores.
 - Histórico registra mudanças desta funcionalidade e seu responsável, sem credenciais. Não retroage a edições externas. Consulta restrita ao usuário selecionado, com os últimos 50 eventos; não há endpoints de edição ou exclusão desses eventos.
 - Conta inativa ou vínculo revogado perde acesso na próxima requisição. Páginas já carregadas podem exigir atualização para refletir a mudança visualmente.
+
+
+## Permissões de clientes, produtos e estoque
+
+- A padronização anteriormente pendente está concluída para as APIs de listagem/detalhe e gravação de clientes/produtos e para movimentações manuais de estoque. Vendas e os demais fluxos seguem suas verificações próprias nesta etapa.
+- Consultar clientes exige view_customer, cadastrar add_customer, editar change_customer e inativar delete_customer, todos em organizations. Produtos aplicam os mesmos prefixos sobre product.
+- Consultar estoque exige organizations.view_stockmovement; lançar entrada, saída ou ajuste manual exige organizations.add_stockmovement. A permissão manual não é requisito extra das movimentações internas de vendas/compras.
+- Flag staff e função por loja não concedem essas ações automaticamente. Grupos e permissões diretas existentes são considerados. Não há migração ou concessão automática para usuários anteriores.
+- DELETE de cliente/produto continua como inativação lógica. POST/PUT/PATCH não aceitam is_active, impedindo usar edição para contornar a ação de inativar. Saldo direto e edição/exclusão de histórico de estoque permanecem bloqueados.
+- A manutenção de clientes/produtos no Django Admin fica restrita a superusuários; usuários comuns, mesmo staff, operam pelo frontend/API. Histórico de estoque permanece somente leitura e filtrado pelas unidades acessíveis.
+- Concessões são verificadas novamente no banco por requisição, inclusive após revogação direta ou de grupo em uma sessão já aberta. Conta, vínculo, loja e empresa precisam permanecer ativos.
+- A API continua filtrando registros pela unidade autorizada. Permissão global não permite operar cadastros de outra unidade, nem elimina CSRF ou validações de negócio.
+- A tela usa capacidades do próprio usuário para esconder ações e confere acessos ao trocar de página ou retornar à janela. A API é a autoridade, mesmo se um botão antigo ainda estiver na tela.
+- Cadastrar sem consultar não libera listagem. A seleção visual de um cadastro existente requer consulta; editar e inativar continuam sendo concessões independentes na API.
+- Opções de estoque não dependem das opções de pagamento de vendas. Usuários com direito de consulta ou lançamento manual recebem apenas produtos ativos da unidade com ID, código, nome, saldo e mínimo, sem preços de custo/venda. Lançamento sem consulta não libera histórico.

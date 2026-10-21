@@ -17,7 +17,8 @@ import Purchases from './Purchases'
 import Payables from './Payables'
 import Reports from './Reports'
 import UserManagement from './UserManagement'
-import { getUserManagementOptions } from '../api'
+import { getUserManagementOptions, getCatalogAccess } from '../api'
+import type { CatalogAccess } from '../api'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -149,8 +150,39 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return () => { ignore = true }
   }, [user.id, retry])
 
+  const [catalogAccess, setCatalogAccess] = useState<CatalogAccess | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState('')
+  const [catalogRetry, setCatalogRetry] = useState(0)
   const selectedStore = stores.find((store) => String(store.id) === selectedStoreId)
   const selectedRole = selectedStore?.role_label || 'Sem perfil'
+  const access = catalogAccess?.store_id === selectedStore?.id ? catalogAccess : null
+  useEffect(() => {
+    if (!selectedStore) { setCatalogAccess(null); setCatalogLoading(false); return }
+    let ignore = false
+    setCatalogLoading(true); setCatalogError('')
+    void getCatalogAccess(selectedStore.id).then(result => {
+      if (!ignore) setCatalogAccess(result)
+    }).catch(err => {
+      if (!ignore) { setCatalogAccess(null); setCatalogError(err instanceof Error ? err.message : 'Não foi possível conferir seus acessos.') }
+    }).finally(() => { if (!ignore) setCatalogLoading(false) })
+    return () => { ignore = true }
+  }, [selectedStore?.id, page, catalogRetry])
+  useEffect(() => {
+    const refresh = () => setCatalogRetry(value => value + 1)
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
+  function refreshAccessOnDenial(err: unknown) {
+    if (err instanceof ApiError && err.status === 403) setCatalogRetry(value => value + 1)
+  }
+  function catalogMenuVisible(item: string) {
+    if (!access || catalogError) return !['Clientes', 'Produtos', 'Estoque'].includes(item)
+    if (item === 'Clientes') return Object.values(access.customers).some(Boolean)
+    if (item === 'Produtos') return Object.values(access.products).some(Boolean)
+    if (item === 'Estoque') return access.stock.view || access.stock.add
+    return true
+  }
   const filteredCustomers = customers.filter((customer) => {
     const query = customerSearch.trim().toLowerCase()
     if (!query) return true
@@ -165,28 +197,28 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   })
 
   useEffect(() => {
-    if (page !== 'Clientes' || !selectedStore) return
+    if (page !== 'Clientes' || !selectedStore || !access?.customers.view) { if (page === 'Clientes') setCustomers([]); return }
     let ignore = false
     setLoadingCustomers(true)
     setCustomersError('')
     void getMyCustomers(selectedStore.id)
       .then((result) => { if (!ignore) setCustomers(result) })
-      .catch(() => { if (!ignore) setCustomersError('Não foi possível carregar os clientes.') })
+      .catch(err => { if (!ignore) { setCustomers([]); setCustomersError(err instanceof Error ? err.message : 'Não foi possível carregar os clientes.'); refreshAccessOnDenial(err) } })
       .finally(() => { if (!ignore) setLoadingCustomers(false) })
     return () => { ignore = true }
-  }, [page, selectedStoreId, selectedStore?.id])
+  }, [page, selectedStoreId, selectedStore?.id, access?.customers.view])
 
   useEffect(() => {
-    if (page !== 'Produtos' || !selectedStore) return
+    if (page !== 'Produtos' || !selectedStore || !access?.products.view) { if (page === 'Produtos') setProducts([]); return }
     let ignore = false
     setLoadingProducts(true)
     setProductsError('')
     void getMyProducts(selectedStore.id)
       .then((result) => { if (!ignore) setProducts(result) })
-      .catch((err) => { if (!ignore) setProductsError(err instanceof Error ? err.message : 'Não foi possível carregar os produtos.') })
+      .catch((err) => { if (!ignore) { setProducts([]); setProductsError(err instanceof Error ? err.message : 'Não foi possível carregar os produtos.'); refreshAccessOnDenial(err) } })
       .finally(() => { if (!ignore) setLoadingProducts(false) })
     return () => { ignore = true }
-  }, [page, selectedStoreId, selectedStore?.id])
+  }, [page, selectedStoreId, selectedStore?.id, access?.products.view])
 
   function closeCustomerForm() {
     setCustomerFormOpen(false)
@@ -196,6 +228,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function openNewCustomer() {
+    if (!access?.customers.add || catalogLoading) return
     setEditingCustomer(null)
     setCustomerForm(emptyCustomer())
     setCustomerFormError('')
@@ -203,6 +236,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function openEditCustomer(customer: Customer) {
+    if (!access?.customers.change || catalogLoading) return
     setEditingCustomer(customer)
     setCustomerForm({
       person_type: customer.person_type, name: customer.name, trade_name: customer.trade_name || '',
@@ -220,6 +254,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   async function handleSaveCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedStore || savingCustomer) return
+    if (!(editingCustomer ? access?.customers.change : access?.customers.add)) { setCustomerFormError('Seu usuário não tem permissão para salvar este cadastro.'); return }
     setSavingCustomer(true)
     setCustomerFormError('')
     try {
@@ -231,6 +266,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
         : [saved, ...current])
       closeCustomerForm()
     } catch (err) {
+      refreshAccessOnDenial(err)
       setCustomerFormError(err instanceof Error ? err.message : 'Não foi possível salvar o cliente.')
     } finally {
       setSavingCustomer(false)
@@ -239,6 +275,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
   async function handleDeleteCustomer(customer: Customer) {
     if (!selectedStore || savingCustomer) return
+    if (!access?.customers.delete) { setCustomersError('Seu usuário não tem permissão para inativar este cadastro.'); return }
     if (!window.confirm(`Inativar o cliente "${customer.name}"?`)) return
     setSavingCustomer(true)
     setCustomersError('')
@@ -246,7 +283,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
       await deleteCustomer(selectedStore.id, customer.id)
       setCustomers((current) => current.filter((item) => item.id !== customer.id))
     } catch (err) {
-      setCustomersError(err instanceof Error ? err.message : 'Somente administradores podem excluir clientes.')
+      refreshAccessOnDenial(err)
+      setCustomersError(err instanceof Error ? err.message : 'Não foi possível inativar o cliente.')
     } finally {
       setSavingCustomer(false)
     }
@@ -260,6 +298,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function openNewProduct() {
+    if (!access?.products.add || catalogLoading) return
     setEditingProduct(null)
     setProductForm(emptyProduct())
     setProductFormError('')
@@ -267,6 +306,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function openEditProduct(product: Product) {
+    if (!access?.products.change || catalogLoading) return
     setEditingProduct(product)
     setProductForm({
       internal_code: product.internal_code, barcode: product.barcode || '', name: product.name,
@@ -280,6 +320,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedStore || savingProduct) return
+    if (!(editingProduct ? access?.products.change : access?.products.add)) { setProductFormError('Seu usuário não tem permissão para salvar este cadastro.'); return }
     setSavingProduct(true)
     setProductFormError('')
     try {
@@ -291,6 +332,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
         : [saved, ...current])
       closeProductForm()
     } catch (err) {
+      refreshAccessOnDenial(err)
       setProductFormError(err instanceof Error ? err.message : 'Não foi possível salvar o produto.')
     } finally {
       setSavingProduct(false)
@@ -299,6 +341,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
   async function handleDeleteProduct(product: Product) {
     if (!selectedStore || savingProduct) return
+    if (!access?.products.delete) { setProductsError('Seu usuário não tem permissão para inativar este cadastro.'); return }
     if (!window.confirm(`Inativar o produto "${product.name}"?`)) return
     setSavingProduct(true)
     setProductsError('')
@@ -306,7 +349,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
       await deleteProduct(selectedStore.id, product.id)
       setProducts((current) => current.filter((item) => item.id !== product.id))
     } catch (err) {
-      setProductsError(err instanceof Error ? err.message : 'Somente administradores podem inativar produtos.')
+      refreshAccessOnDenial(err)
+      setProductsError(err instanceof Error ? err.message : 'Não foi possível inativar o produto.')
     } finally {
       setSavingProduct(false)
     }
@@ -396,7 +440,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 </>}
               </button>
               <div id={`menu-${group.icon}`} className="erp-submenu" hidden={collapsed || openGroup !== group.title}>
-                {group.items.filter(item => item !== 'Usuários e acessos' || canManageUsers).map((item) => (
+                {group.items.filter(item => (item !== 'Usuários e acessos' || canManageUsers) && catalogMenuVisible(item)).map((item) => (
                   <button type="button" disabled={workspaceBusy} key={item} className={page === item ? 'is-active' : ''}
                     aria-current={page === item ? 'page' : undefined} onClick={() => {
                       if (item === 'Estoque') { if (leaveSaleAllowed()) openStock() }
@@ -466,6 +510,13 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
               <h1>Nenhuma unidade disponível</h1>
               <p>Você ainda não possui acesso a uma unidade ativa. Solicite a liberação ao administrador.</p>
             </section>
+          ) : ['Clientes', 'Produtos', 'Estoque'].includes(page) && (catalogError || !access) ? (
+            <section className="erp-card" role={catalogError ? 'alert' : 'status'}>
+              <p>{catalogError || 'Conferindo suas permissões…'}</p>
+              {!catalogLoading && <button type="button" className="erp-action-button" onClick={() => setCatalogRetry(value => value + 1)}>Atualizar acessos</button>}
+            </section>
+          ) : !catalogMenuVisible(page) ? (
+            <section className="erp-card"><h1>Acesso não permitido</h1><p>Solicite ao administrador as permissões para este módulo nesta unidade.</p><button type="button" className="erp-action-button" onClick={() => setCatalogRetry(value => value + 1)}>Atualizar acessos</button></section>
           ) : page === 'Vendas' ? (
             <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} onServiceOrder={(id) => { if (!leaveSaleAllowed()) return; setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Ordens de serviço' ? (
@@ -480,7 +531,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
             <Receivables key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Estoque' ? (
             <StockMovements key={selectedStore.id} store={selectedStore}
-              initialProductId={stockProductId} onSavingChange={setSavingStock} />
+              initialProductId={stockProductId} permissions={access?.stock ?? { view: false, add: false }} onSavingChange={setSavingStock} />
           ) : page === 'Produtos' ? (
             <section className="erp-clientes-page">
               <div className="erp-page-heading erp-list-heading">
@@ -489,9 +540,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   <h1>Produtos</h1>
                   <p>Produtos cadastrados em {selectedStore.name}.</p>
                 </div>
-                <button className="erp-action-button" type="button" onClick={openNewProduct}>Novo produto</button>
+                {access?.products.add && <button className="erp-action-button" type="button" disabled={workspaceBusy || catalogLoading} onClick={openNewProduct}>Novo produto</button>}
               </div>
-              {productFormOpen && (
+              {productFormOpen && (editingProduct ? access?.products.change : access?.products.add) && (
                 <form className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveProduct(event)}>
                   <div className="erp-form-heading">
                     <div><span className="erp-card-label">{editingProduct ? 'EDIÇÃO' : 'NOVO CADASTRO'}</span><h2>{editingProduct ? 'Editar produto' : 'Adicionar produto'}</h2></div>
@@ -512,7 +563,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   <button className="erp-action-button" type="submit" disabled={savingProduct}>{savingProduct ? 'Salvando…' : editingProduct ? 'Salvar alterações' : 'Salvar produto'}</button>
                 </form>
               )}
-              <div className="erp-card erp-customer-list-card">
+              {access?.products.view ? <div className="erp-card erp-customer-list-card">
                 <div className="erp-list-toolbar">
                   <input aria-label="Buscar produtos" placeholder="Buscar por código, nome, marca ou código de barras" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} />
                   <span className="erp-card-label">{filteredProducts.length} produto{filteredProducts.length === 1 ? '' : 's'}</span>
@@ -520,8 +571,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {loadingProducts ? <p role="status">Carregando produtos…</p>
                   : productsError ? <p className="erp-alert" role="alert">{productsError}</p>
                   : filteredProducts.length === 0 ? <p>Nenhum produto encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions"><button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button><button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openStock(String(product.id))}>Movimentar</button><button type="button" disabled={workspaceBusy} className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button></td></tr>)}</tbody></table></div>}
-              </div>
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions">{access?.products.change && <button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button>}{(access?.stock.view || access?.stock.add) && <button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openStock(String(product.id))}>Estoque</button>}{access?.products.delete && <button type="button" disabled={workspaceBusy} className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button>}</td></tr>)}</tbody></table></div>}
+              </div> : <div className="erp-card"><p>Você não tem permissão para consultar a lista de produtos. O cadastro de novos registros depende da permissão de cadastrar.</p></div>}
             </section>
           ) : page === 'Histórico do cliente' && historyCustomerId ? (
             <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
@@ -541,12 +592,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   <h1>Clientes</h1>
                   <p>Clientes cadastrados em {selectedStore.name}.</p>
                 </div>
-                <button className="erp-action-button" type="button"
-                  onClick={openNewCustomer}>
-                  Novo cliente
-                </button>
+                {access?.customers.add && <button className="erp-action-button" type="button"
+                  disabled={workspaceBusy || catalogLoading} onClick={openNewCustomer}>Novo cliente</button>}
               </div>
-              {customerFormOpen && (
+              {customerFormOpen && (editingCustomer ? access?.customers.change : access?.customers.add) && (
                 <form className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveCustomer(event)}>
                   <div className="erp-form-heading">
                     <div><span className="erp-card-label">{editingCustomer ? 'EDIÇÃO' : 'NOVO CADASTRO'}</span><h2>{editingCustomer ? 'Editar cliente' : 'Adicionar cliente'}</h2></div>
@@ -574,7 +623,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   <button className="erp-action-button" type="submit" disabled={savingCustomer}>{savingCustomer ? 'Salvando…' : editingCustomer ? 'Salvar alterações' : 'Salvar cliente'}</button>
                 </form>
               )}
-              <div className="erp-card erp-customer-list-card">
+              {access?.customers.view ? <div className="erp-card erp-customer-list-card">
                 <div className="erp-list-toolbar">
                   <input aria-label="Buscar clientes" placeholder="Buscar por nome, CPF, telefone ou e-mail" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} />
                   <span className="erp-card-label">{filteredCustomers.length} cliente{filteredCustomers.length === 1 ? '' : 's'}</span>
@@ -582,8 +631,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {loadingCustomers ? <p role="status">Carregando clientes…</p>
                   : customersError ? <p className="erp-alert" role="alert">{customersError}</p>
                   : filteredCustomers.length === 0 ? <p>Nenhum cliente encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" disabled={workspaceBusy} onClick={() => { setHistoryCustomerId(customer.id); setPage('Histórico do cliente') }}>Histórico</button><button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button><button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Excluir</button></td></tr>)}</tbody></table></div>}
-              </div>
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" disabled={workspaceBusy} onClick={() => { setHistoryCustomerId(customer.id); setPage('Histórico do cliente') }}>Histórico</button>{access?.customers.change && <button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button>}{access?.customers.delete && <button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Inativar</button>}</td></tr>)}</tbody></table></div>}
+              </div> : <div className="erp-card"><p>Você não tem permissão para consultar a lista de clientes. O cadastro de novos registros depende da permissão de cadastrar.</p></div>}
             </section>
           ) : page === 'Visão geral' ? (
             <Dashboard key={selectedStore.id} store={selectedStore} firstName={user.first_name || user.username} onAction={dashboardAction} />

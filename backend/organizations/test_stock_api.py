@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import RequestFactory, TestCase
 from rest_framework.test import APIClient
 
@@ -78,6 +79,11 @@ class StockMovementAPITests(TestCase):
 
     def test_unlinked_user_is_denied(self):
         user = get_user_model().objects.create_user(username="stock_api_unlinked")
+        # Este cenário testa a falta de vínculo, com permissões de ação já concedidas.
+        user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="organizations",
+            codename__in=["view_stockmovement", "add_stockmovement"],
+        ))
         self.client.force_authenticate(user)
         self.assertEqual(self.client.get(self.url).status_code, 400)
         self.assertEqual(self.post_movement().status_code, 400)
