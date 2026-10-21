@@ -704,3 +704,58 @@ export async function exportReport(storeId:number,filters:ReportFilters):Promise
   const filename=(response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'lentis-relatorio.csv').replace(/[\\/]/g,'_')
   return {blob:await response.blob(),filename}
 }
+
+// Gestão global: somente administradores do sistema.
+export type ManagedMembership = { store_id: number; role: string; is_active: boolean }
+export type UserManagementOptions = {
+  roles: { value: string; label: string }[]
+  stores: { id: number; code: string; name: string; is_active: boolean }[]
+  permissions: { id: number; key: string; name: string; app: string; model: string; section: string }[]
+}
+export type ManagedUserSummary = {
+  id: number; username: string; first_name: string; last_name: string
+  is_active: boolean; protected: boolean
+}
+export type ManagedUser = ManagedUserSummary & {
+  email: string; is_superuser: boolean; is_staff: boolean; version: string
+  permission_ids: number[]; inherited_permission_ids: number[]; groups: string[]
+  memberships: ManagedMembership[]
+}
+export type ManagedUserPayload = {
+  username: string; first_name: string; last_name: string; email: string
+  is_active: boolean; permission_ids: number[]; memberships: ManagedMembership[]
+  password?: string; version?: string
+}
+export type ManagedUsersPage = { results: ManagedUserSummary[]; count: number; page: number; has_next: boolean }
+export type UserAccessEvent = {
+  id: number; actor: string; action: string; created_at: string
+  changes: Record<string, { before: unknown; after: unknown }>
+}
+const userManagementPath = '/api/me/user-management/'
+export function getUserManagementOptions(): Promise<UserManagementOptions> {
+  return request(`${userManagementPath}options/`)
+}
+export function getManagedUsers(search = '', page = 1): Promise<ManagedUsersPage> {
+  return request(`${userManagementPath}?${new URLSearchParams({ search, page: String(page) })}`)
+}
+export function getManagedUser(id: number): Promise<ManagedUser> {
+  return request(`${userManagementPath}${id}/`)
+}
+export async function saveManagedUser(id: number | null, data: ManagedUserPayload): Promise<ManagedUser> {
+  const token = await getCsrfToken()
+  return request(`${userManagementPath}${id === null ? '' : `${id}/`}`, {
+    method: id === null ? 'POST' : 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify(data),
+  })
+}
+export async function resetManagedUserPassword(id: number, password: string, version: string): Promise<ManagedUser> {
+  const token = await getCsrfToken()
+  return request(`${userManagementPath}${id}/password/`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+    body: JSON.stringify({ password, version }),
+  })
+}
+export function getManagedUserHistory(id: number): Promise<{ results: UserAccessEvent[] }> {
+  return request(`${userManagementPath}${id}/history/`)
+}

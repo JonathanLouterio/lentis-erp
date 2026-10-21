@@ -275,3 +275,18 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Um backup criado ainda não é um backup testado. O comando combinado só informa `RestoreTested=True` depois da restauração, conferência e limpeza concluídas.
 - O arquivo é uma cópia lógica do banco. Código, configurações, arquivos de mídia, roles e configurações globais do cluster exigem cópias próprias. O restore de teste usa a conta atual e não valida a reprodução das permissões e proprietários originais.
 - Esta etapa não inclui restauração sobre o banco de trabalho, agendamento automático, retenção ou envio externo. Interrupções forçadas do terminal ou do Docker podem impedir a limpeza; nesse caso, o nome temporário exibido deve ser conferido antes de qualquer remoção manual.
+
+
+## Gestão de usuários e acessos
+
+- Somente superusuários ativos gerenciam contas nesta API global. Função Gerente, flag staff e permissões comuns de accounts não autorizam a gestão.
+- Contas comuns podem ser criadas, editadas, desativadas e reativadas. Não há exclusão física, promoção a staff/superusuário ou alteração de grupos nesta API. Contas administrativas são protegidas contra mudanças por esta tela.
+- Vínculos mantêm uma função por usuário/loja. Omitir ou desmarcar inativa o vínculo sem apagar o registro. Não se concede novo acesso ativo a loja ou empresa inativa.
+- Permissões Django são globais nas lojas acessíveis ao usuário. Não formam uma matriz de ações por loja nem são preenchidas automaticamente pela função. Regras comerciais por função permanecem aplicáveis.
+- Esta etapa gerencia as concessões existentes. Cadastros e vendas antigos ainda possuem endpoints baseados em vínculo/perfil sem consultar todos os códigos Django; desmarcar uma permissão não é bloqueio universal. A padronização das verificações por ação permanece pendente.
+- Permissões herdadas de grupos e permissões externas ao catálogo são preservadas. Retirar uma concessão direta não revoga a concessão herdada de grupo.
+- Senhas têm hash Django, mínimo de 8 caracteres e os validadores configurados no projeto. Redefinição invalida sessões anteriores; senhas e hashes não aparecem nos eventos ou nas respostas.
+- Sessão e CSRF são obrigatórios para gravar. Campos extras, escalada de privilégios, funções inválidas, lojas inexistentes e vínculos duplicados são rejeitados antes de persistir.
+- Alterações usam transação, locks PostgreSQL em ordem comum entre administradores e token de versão derivado do estado atual. Conflitos retornam 409 sem sobrescrever edições anteriores.
+- Histórico registra mudanças desta funcionalidade e seu responsável, sem credenciais. Não retroage a edições externas. Consulta restrita ao usuário selecionado, com os últimos 50 eventos; não há endpoints de edição ou exclusão desses eventos.
+- Conta inativa ou vínculo revogado perde acesso na próxima requisição. Páginas já carregadas podem exigir atualização para refletir a mudança visualmente.

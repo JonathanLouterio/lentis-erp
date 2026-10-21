@@ -61,3 +61,6 @@ class StoreMembership(models.Model):
             f"{self.user} - {self.store} "
             f"({self.get_role_display()})"
         )
+
+
+from .user_management_models import UserAccessEvent  # noqa: E402,F401

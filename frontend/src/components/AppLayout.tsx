@@ -16,6 +16,8 @@ import Suppliers from './Suppliers'
 import Purchases from './Purchases'
 import Payables from './Payables'
 import Reports from './Reports'
+import UserManagement from './UserManagement'
+import { getUserManagementOptions } from '../api'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
@@ -32,7 +34,7 @@ const menuGroups = [
   { title: 'Cadastros', icon: 'cadastros', items: ['Clientes', 'Produtos', 'Receitas', 'Fornecedores'] },
   { title: 'Comercial', icon: 'comercial', items: ['Vendas', 'Orçamentos', 'Compras', 'Caixa'] },
   { title: 'Operação', icon: 'operacao', items: ['Estoque', 'Ordens de serviço', 'Atendimento domiciliar'] },
-  { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Contas a pagar', 'Relatórios', 'Administração'] },
+  { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Contas a pagar', 'Relatórios', 'Usuários e acessos'] },
 ]
 
 function MenuIcon({ name }: { name: string }) {
@@ -54,9 +56,24 @@ function MenuIcon({ name }: { name: string }) {
 }
 
 export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }: AppLayoutProps) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [canManageUsers, setCanManageUsers] = useState(false)
+  useEffect(() => {
+    let ignore = false
+    void getUserManagementOptions().then(() => { if (!ignore) setCanManageUsers(true) }).catch(() => { if (!ignore) setCanManageUsers(false) })
+    return () => { ignore = true }
+  }, [])
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches)
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)')
+    const onChange = () => { if (media.matches) setCollapsed(true) }
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [])
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 760px)').matches) setCollapsed(true)
+  }, [page])
   const [payablePurchaseId, setPayablePurchaseId] = useState<number | undefined>(undefined)
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null)
   const [orderSaleId, setOrderSaleId] = useState<number | undefined>(undefined)
@@ -318,7 +335,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras', 'Contas a pagar'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras', 'Contas a pagar', 'Usuários e acessos'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
@@ -379,7 +396,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 </>}
               </button>
               <div id={`menu-${group.icon}`} className="erp-submenu" hidden={collapsed || openGroup !== group.title}>
-                {group.items.map((item) => (
+                {group.items.filter(item => item !== 'Usuários e acessos' || canManageUsers).map((item) => (
                   <button type="button" disabled={workspaceBusy} key={item} className={page === item ? 'is-active' : ''}
                     aria-current={page === item ? 'page' : undefined} onClick={() => {
                       if (item === 'Estoque') { if (leaveSaleAllowed()) openStock() }
@@ -435,7 +452,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
         <main className="erp-content">
           {error && <p className="erp-alert" role="alert">{error}</p>}
-          {loadingStores ? (
+          {page === 'Usuários e acessos' && canManageUsers ? (
+            <UserManagement onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+          ) : loadingStores ? (
             <div className="erp-card" role="status">Carregando suas unidades…</div>
           ) : storesError ? (
             <div className="erp-card">
