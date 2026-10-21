@@ -778,3 +778,12 @@ export function getCatalogAccess(storeId: number): Promise<CatalogAccess> {
 export function getStockOptions(storeId: number): Promise<StockOptions> {
   return request(`/api/me/stock-options/?store_id=${storeId}`)
 }
+
+
+export type SaleAccess = { store_id: number; view: boolean; add: boolean; change: boolean; finalize: boolean; cancel: boolean }
+export type SaleCustomerChoice = Pick<Customer, 'id' | 'name'>
+export type SaleProductChoice = Pick<Product, 'id' | 'internal_code' | 'name' | 'barcode' | 'sale_price' | 'stock_quantity'>
+export type SalePaymentOptions = Omit<PaymentOptions, 'accounts'> & { accounts: Omit<FinancialAccount, 'balance'>[] }
+export type SaleOptions = { customers: SaleCustomerChoice[]; products: SaleProductChoice[]; payment_options: SalePaymentOptions }
+export function getSaleAccess(storeId: number): Promise<SaleAccess> { return request(`/api/me/sales/access/?store_id=${storeId}`) }
+export function getSaleOptions(storeId: number): Promise<SaleOptions> { return request(`/api/me/sales/options/?store_id=${storeId}`) }

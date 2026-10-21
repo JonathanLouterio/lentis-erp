@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getMyCustomers, getMyProducts, getPaymentOptions, getPaymentPreview, getSale, getSales, submitCheckout } from '../api'
-import type { AccessibleStore, CheckoutPayload, Customer, PaymentOptions, PaymentPreview, Product, Sale, SaleStatus, SalesPage } from '../api'
+import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getSaleAccess, getSaleOptions, finalizeSale, getPaymentPreview, getSale, getSales, submitCheckout } from '../api'
+import type { AccessibleStore, CheckoutPayload, SaleCustomerChoice, SalePaymentOptions, SaleAccess, PaymentPreview, SaleProductChoice, Sale, SaleStatus, SalesPage } from '../api'
 import { brl, dateTime, decimal, decimalText, displayDate, failure, money, paymentSchedule, signedDecimal, today } from './saleMoney'
 import SalePrescriptionPanel from './SalePrescriptionPanel'
 import type { SalePrescriptionSelection } from '../api'
@@ -12,7 +12,7 @@ import './Sales.css'
 type Props = { onServiceOrder?: (saleId:number)=>void; startNew?: boolean; initialSaleId?: number; store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
 type Line = { referencePrice: string; productId: number; name: string; code: string; quantity: string; price: string; discount: string }
 type Payment = PaymentPlanRow
-const emptyOptions: PaymentOptions = { methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" }
+const emptyOptions: SalePaymentOptions = { methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" }
 const emptyPage: SalesPage = { count: 0, next: null, previous: null, results: [] }
 const immediate = ['cash', 'pix', 'transfer']
 const credit = ['credit', 'store_credit', 'boleto']
@@ -26,9 +26,9 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const [loading, setLoading] = useState(true)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState('')
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [products, setProducts] = useState<Product[]>([])
-  const [options, setOptions] = useState<PaymentOptions>(emptyOptions)
+  const [customers, setCustomers] = useState<SaleCustomerChoice[]>([])
+  const [products, setProducts] = useState<SaleProductChoice[]>([])
+  const [options, setOptions] = useState<SalePaymentOptions>(emptyOptions)
   const [selected, setSelected] = useState<Sale | null>(null)
   const [editor, setEditor] = useState(startNew)
   const [customerId, setCustomerId] = useState('')
@@ -51,8 +51,25 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const [approvalReason, setApprovalReason] = useState('')
   const [decisionReasons, setDecisionReasons] = useState<Record<number,string>>({})
   const [pending, setPending] = useState<CheckoutPayload | null>(null)
-  const readOnly = !!selected && selected.status !== 'draft'
-  const blocked = busy || !!pending
+  const [access, setAccess] = useState<SaleAccess | null>(null)
+  const [accessError, setAccessError] = useState('')
+  const [accessLoading, setAccessLoading] = useState(true)
+  const mayWrite = selected ? !!access?.change : !!access?.add
+  const closed = !!selected && selected.status !== 'draft'
+  const readOnly = closed || !mayWrite
+  useEffect(() => {
+    let ignore = false
+    async function refresh() {
+      setAccessLoading(true)
+      try { const next = await getSaleAccess(store.id); if (!ignore) { setAccess(next); setAccessError('') } }
+      catch (err) { if (!ignore) { setAccess(null); setAccessError(failure(err)) } }
+      finally { if (!ignore) setAccessLoading(false) }
+    }
+    void refresh()
+    window.addEventListener('focus', refresh)
+    return () => { ignore = true; window.removeEventListener('focus', refresh) }
+  }, [store.id, reload])
+  const blocked = busy || !!pending || accessLoading || !!accessError
 
   useEffect(() => { onSavingChange(busy); return () => onSavingChange(false) }, [busy, onSavingChange])
   useEffect(() => { onDirtyChange(dirty || !!pending); return () => onDirtyChange(false) }, [dirty, pending, onDirtyChange])
@@ -70,29 +87,31 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   }, [storageKey])
   useEffect(() => {
     let ignore = false
+    if (!access?.view) { setSales(emptyPage); setLoading(false); return }
     setLoading(true)
     void getSales(store.id, page, status).then((data) => { if (!ignore) setSales(data) })
       .catch((err: unknown) => { if (!ignore) setError(failure(err)) }).finally(() => { if (!ignore) setLoading(false) })
     return () => { ignore = true }
-  }, [store.id, page, status, reload])
+  }, [store.id, page, status, reload, access?.view])
   useEffect(() => {
     let ignore = false
+    if (!access || !Object.entries(access).some(([key, value]) => key !== 'store_id' && value === true)) { setCustomers([]); setProducts([]); setOptions(emptyOptions); setCatalogLoading(false); return }
     setCatalogLoading(true); setCatalogError('')
-    void Promise.all([getMyCustomers(store.id), getMyProducts(store.id), getPaymentOptions(store.id)])
-      .then(([nextCustomers, nextProducts, nextOptions]) => { if (!ignore) { setCustomers(nextCustomers); setProducts(nextProducts); setOptions(nextOptions) } })
+    void getSaleOptions(store.id)
+      .then(data => { if (!ignore) { setCustomers(data.customers); setProducts(data.products); setOptions(data.payment_options) } })
       .catch((err: unknown) => { if (!ignore) setCatalogError(failure(err)) }).finally(() => { if (!ignore) setCatalogLoading(false) })
     return () => { ignore = true }
-  }, [store.id, reload])
+  }, [store.id, reload, access?.view, access?.add, access?.change, access?.finalize, access?.cancel])
 
   useEffect(() => {
-    if (!initialSaleId) return
+    if (!initialSaleId || !access?.view) return
     try { if (sessionStorage.getItem(storageKey)) return } catch { /* Armazenamento opcional. */ }
     let ignore = false; setBusy(true); setEditor(true)
     void getSale(store.id, initialSaleId).then(sale => { if (!ignore) accept(sale) })
       .catch((err: unknown) => { if (!ignore) setError(failure(err)) })
       .finally(() => { if (!ignore) setBusy(false) })
     return () => { ignore = true }
-  }, [store.id, initialSaleId, storageKey])
+  }, [store.id, initialSaleId, storageKey, access?.view])
 
   const values = lines.map((line) => {
     const quantity = decimal(line.quantity, 3), price = decimal(line.price), off = decimal(line.discount)
@@ -111,9 +130,9 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const received = payments.reduce((sum, payment, index) => sum + (payment.confirmed && immediate.includes(options.methods.find((method) => String(method.id) === payment.methodId)?.kind || '') ? paymentAmounts[index] ?? 0n : 0n), 0n)
   const operator = payments.reduce((sum, payment, index) => sum + (['credit','debit'].includes(options.methods.find((method) => String(method.id) === payment.methodId)?.kind || '') ? paymentAmounts[index] ?? 0n : 0n), 0n)
   const recordedInstallments = selected?.payments?.flatMap((payment) => payment.installments) ?? []
-  const receivedSummary = readOnly ? recordedInstallments.reduce((sum,item) => sum + (decimal(item.paid_amount) ?? 0n),0n) : received
-  const operatorSummary = readOnly ? recordedInstallments.filter((item) => item.debtor === "operator").reduce((sum,item) => sum + (decimal(item.remaining_amount) ?? 0n),0n) : operator
-  const customerSummary = readOnly ? recordedInstallments.filter((item) => item.debtor === "customer").reduce((sum,item) => sum + (decimal(item.remaining_amount) ?? 0n),0n) : allocated - received - operator
+  const receivedSummary = closed ? recordedInstallments.reduce((sum,item) => sum + (decimal(item.paid_amount) ?? 0n),0n) : received
+  const operatorSummary = closed ? recordedInstallments.filter((item) => item.debtor === "operator").reduce((sum,item) => sum + (decimal(item.remaining_amount) ?? 0n),0n) : operator
+  const customerSummary = closed ? recordedInstallments.filter((item) => item.debtor === "customer").reduce((sum,item) => sum + (decimal(item.remaining_amount) ?? 0n),0n) : allocated - received - operator
   const paymentsValid = payments.every((payment, index) => {
     const amount = paymentAmounts[index], method = options.methods.find((value) => String(value.id) === payment.methodId)
     return amount !== null && amount > 0n && amount <= 999999999999999999n && !!method && options.accounts.some((value) => String(value.id) === payment.accountId) && payment.due.length === 10 && payment.count >= 1 && payment.count <= (method?.installment_limit ?? 12) && paymentSchedule(amount, payment.count, payment.due, payment.intervalUnit, payment.intervalCount).length === payment.count && amount >= BigInt(payment.count) && (credit.includes(method.kind) || payment.count === 1) && (!payment.confirmed || immediate.includes(method.kind))
@@ -140,8 +159,8 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const discountAllowed = !overDiscountLimit || approvedDiscount
   const discountPercentage = referenceSubtotal > 0n ? Number(consideredDiscount * 10000n / referenceSubtotal)/100 : 0
   const closedCashPayments = payments.filter(payment => payment.confirmed && options.methods.find(method => String(method.id) === payment.methodId)?.kind === 'cash' && options.accounts.some(account => String(account.id) === payment.accountId && account.cash_control_enabled && !account.cash_is_open))
-  const canComplete = !builder && !closedCashPayments.length && discountAllowed && itemValid && lines.length > 0 && paymentsValid && allocated === total && (!needsCustomer || !!customerId) && !catalogLoading && !catalogError && (options.allow_negative_stock || predictedNegativeStock.length === 0)
-  const canDraft = !builder && itemValid && (paymentsValid || payments.length === 0) && !catalogLoading && !catalogError
+  const canComplete = !!access?.finalize && mayWrite && !builder && !closedCashPayments.length && discountAllowed && itemValid && lines.length > 0 && paymentsValid && allocated === total && (!needsCustomer || !!customerId) && !catalogLoading && !catalogError && (options.allow_negative_stock || predictedNegativeStock.length === 0)
+  const canDraft = mayWrite && !builder && itemValid && (paymentsValid || payments.length === 0) && !catalogLoading && !catalogError
   const chosenCustomer = customers.find((customer) => String(customer.id) === customerId)
 
   function allowedToLeave() { return !blocked && (!dirty || window.confirm('Sair sem salvar as alterações desta venda?')) }
@@ -154,12 +173,12 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     setDirty(false); setCancelOpen(false); setReason(''); setReview(false); setPreview(null); setBuilder(false); setProductId('')
   }
   function newSale() {
-    if (!allowedToLeave()) return
+    if (!access?.add || !allowedToLeave()) return
     setPrescriptionSelection(null)
     setBuilder(false); setPreview(null); setSelected(null); setEditor(true); setLines([]); setPayments([]); setCustomerId(''); setNotes(''); setDiscount('0'); setDirty(false); setError(''); setSuccess(''); setCancelOpen(false); setReason(''); setProductId(''); setSearch(''); setApprovalReason(''); setDecisionReasons({})
   }
   async function openSale(id: number) {
-    if (!allowedToLeave()) return
+    if (!access?.view || !allowedToLeave()) return
     setBusy(true); setError('')
     try { accept(await getSale(store.id, id)); setReload(value=>value+1) } catch (err) { setError(failure(err)) } finally { setBusy(false) }
   }
@@ -197,7 +216,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     finally { setBusy(false) }
   }
   async function persist(payload: CheckoutPayload) {
-    if (busy) return
+    if (busy || accessLoading || !(payload.sale_id ? access?.change : access?.add) || (payload.action === 'complete' && !access?.finalize)) return
     setBusy(true); setError(''); setReview(false)
     try { sessionStorage.setItem(storageKey, JSON.stringify(payload)) } catch { /* O identificador também permanece em memória. */ }
     try {
@@ -214,7 +233,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     } finally { setBusy(false) }
   }
   async function cancel() {
-    if (!selected?.can_cancel || !reason.trim() || blocked) return
+    if (!access?.cancel || !selected?.can_cancel || !reason.trim() || blocked) return
     setBusy(true); setError('')
     try { accept(await cancelSale(store.id, selected.id, reason.trim())); setReload((value) => value + 1); setSuccess('Venda cancelada. O estoque foi devolvido e os recebimentos registrados foram estornados no sistema.') }
     catch (err) { setError(failure(err)) } finally { setBusy(false) }
@@ -231,29 +250,41 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   }
   async function decideApproval(requestId: number, action: 'approve' | 'reject') {
     const reason = decisionReasons[requestId]?.trim()
-    if (!selected || blocked || dirty || !reason) return
+    if (!access?.view || !selected || blocked || dirty || !reason) return
     setBusy(true); setError('')
     try { accept(await decideDiscountAuthorization(store.id,selected.id,requestId,action,reason)); setReload(value=>value+1); setSuccess(action === 'approve' ? 'Desconto autorizado para os valores registrados.' : 'Solicitação de desconto recusada.') }
     catch (err) { setError(failure(err)) } finally { setBusy(false) }
   }
 
+  async function finalizeSaved() {
+    if (!selected || !access?.finalize || blocked || !selected.can_finalize) return
+    if (!window.confirm('Confirmar esta venda com os itens e pagamentos já salvos?')) return
+    setBusy(true); setError('')
+    try { accept(await finalizeSale(store.id, selected.id)); setReload(value => value + 1); setSuccess('Venda concluída com os dados salvos.') }
+    catch (err) { setError(failure(err)); setReload(value => value + 1) }
+    finally { setBusy(false) }
+  }
+  if (!access || accessError) return <section className="erp-card" role="status"><p>{accessError || 'Conferindo suas permissões de vendas…'}</p><button className="erp-secondary-button" disabled={accessLoading} onClick={() => setReload(value => value + 1)}>Atualizar acessos</button></section>
+  if (!Object.entries(access).some(([key, value]) => key !== 'store_id' && value === true)) return <section className="erp-card"><p>Você não tem permissão de operar vendas nesta unidade.</p></section>
+  if (selected && !access.view && !mayWrite) return <section className="erp-card"><p role="status">{success || 'Consulta desta venda restrita pelas permissões atuais.'}</p>{access.add && <button className="erp-action-button" disabled={blocked} onClick={newSale}>Nova venda</button>}</section>
+  if (editor && !selected && !access.add && !pending) return <section className="erp-card"><p>Você não tem permissão de criar vendas.</p>{access.view && <button className="erp-secondary-button" onClick={() => setEditor(false)}>Voltar às vendas</button>}</section>
   return <section className="erp-sales-page">
     {selected?.status==='completed' && selected.customer && onServiceOrder && <button type="button" className="erp-table-button" disabled={blocked} onClick={()=>onServiceOrder(selected.id)}>Abrir / acompanhar OS desta venda</button>}
     <div className="erp-page-heading erp-list-heading"><div><span className="erp-kicker">COMERCIAL</span><h1>{editor ? selected ? `Venda #${selected.id}` : 'Nova venda' : 'Vendas'}</h1><p>{editor ? 'Cliente, produtos e pagamento em um único atendimento.' : `Vendas da unidade ${store.name}.`}</p></div>
-      {editor ? <button className="erp-secondary-button" disabled={blocked} onClick={() => { if (allowedToLeave()) { setEditor(false); setDirty(false); setSelected(null) } }}>Voltar às vendas</button> : <button className="erp-action-button" disabled={blocked || catalogLoading} onClick={newSale}>Nova venda</button>}
+      {editor ? <button className="erp-secondary-button" disabled={blocked} onClick={() => { if (allowedToLeave()) { setEditor(false); setDirty(false); setSelected(null) } }}>Voltar às vendas</button> : access.add && <button className="erp-action-button" disabled={blocked || catalogLoading} onClick={newSale}>Nova venda</button>}
     </div>
     {success && <p className="erp-sales-success" role="status">{success}</p>}
     {error && <p className="erp-alert" role="alert">{error}</p>}
     {pending && <div className="erp-card erp-checkout-recovery" role="alert"><h2>Conferir o último envio</h2><p>A resposta da operação não foi confirmada. Repita o mesmo envio para recuperar o resultado com segurança.</p><button className="erp-action-button" disabled={busy} onClick={() => void persist(pending)}>{busy ? 'Conferindo…' : 'Repetir envio com segurança'}</button></div>}
     {catalogError && <div className="erp-card"><p className="erp-alert">{catalogError}</p><button className="erp-secondary-button" disabled={blocked} onClick={() => setReload((value) => value + 1)}>Recarregar cadastros</button></div>}
-    {!editor ? <div className="erp-card erp-sales-list">
+    {!editor ? !access.view ? <div className="erp-card"><p>Consulta de vendas restrita. Use Nova venda se autorizado.</p></div> : <div className="erp-card erp-sales-list">
       <div className="erp-sales-toolbar"><label>Situação<select aria-label="Situação" value={status} disabled={blocked} onChange={(event) => { setStatus(event.target.value as SaleStatus | ''); setPage(1) }}><option value="">Todas</option><option value="draft">Rascunhos</option><option value="completed">Finalizadas</option><option value="cancelled">Canceladas</option></select></label><span>{sales.count} vendas</span><button className="erp-secondary-button" disabled={blocked || loading} onClick={() => setReload((value) => value + 1)}>Atualizar lista</button></div>
       {loading ? <p role="status">Carregando vendas…</p> : !sales.results.length ? <p>Nenhuma venda encontrada.</p> : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Venda</th><th>Data</th><th>Cliente</th><th>Situação</th><th>Total</th><th>Ação</th></tr></thead><tbody>{sales.results.map((sale) => <tr key={sale.id}><td>#{sale.id}</td><td>{dateTime.format(new Date(sale.created_at))}</td><td>{sale.customer_name || 'Venda balcão'}</td><td><span className={`erp-sale-badge is-${sale.status}`}>{sale.status_label}</span>{sale.discount_requests?.some(request => request.state === "pending" && request.current) && <small className="erp-sales-item-name">Desconto aguardando autorização</small>}</td><td>{money.format(Number(sale.total))}</td><td><button className="erp-table-button" disabled={blocked} onClick={() => void openSale(sale.id)}>Abrir venda {sale.id}</button></td></tr>)}</tbody></table></div>}
       <div className="erp-sales-pagination"><button className="erp-secondary-button" disabled={blocked || loading || !sales.previous} onClick={() => setPage((value) => value - 1)}>Anterior</button><span>Página {page}</span><button className="erp-secondary-button" disabled={blocked || loading || !sales.next} onClick={() => setPage((value) => value + 1)}>Próxima</button></div>
     </div> : !pending && <div className="erp-checkout-grid" aria-busy={busy}>
       <div className="erp-checkout-main">
         <div className="erp-card"><div className="erp-checkout-section"><span>01</span><h2>Cliente</h2>{readOnly && <span className={`erp-sale-badge is-${selected?.status}`}>{selected?.status_label}</span>}</div>
-          <label>Cliente da venda<select aria-label="Cliente da venda" value={customerId} disabled={blocked || readOnly || catalogLoading} onChange={(event) => { setCustomerId(event.target.value); setPrescriptionSelection(selected?.prescription ? {prescription_id:null,expected_record_id:selected.prescription.id} : null); setDirty(true) }}><option value="">Venda balcão (sem identificação)</option>{customerId && !chosenCustomer && <option value={customerId}>{selected?.customer_name || 'Cliente indisponível'}</option>}{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.cpf ? ` · ${customer.cpf}` : customer.cnpj ? ` · ${customer.cnpj}` : ''}</option>)}</select></label>
+          <label>Cliente da venda<select aria-label="Cliente da venda" value={customerId} disabled={blocked || readOnly || catalogLoading} onChange={(event) => { setCustomerId(event.target.value); setPrescriptionSelection(selected?.prescription ? {prescription_id:null,expected_record_id:selected.prescription.id} : null); setDirty(true) }}><option value="">Venda balcão (sem identificação)</option>{customerId && !chosenCustomer && <option value={customerId}>{selected?.customer_name || 'Cliente indisponível'}</option>}{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
           {needsCustomer && !customerId && <p className="erp-alert">Selecione um cliente para boleto ou crediário.</p>}
           <details className="erp-checkout-notes" open={!!notes || undefined}><summary>Observações do atendimento</summary><label>Observações<textarea aria-label="Observações" value={notes} disabled={blocked || readOnly} maxLength={10000} onChange={(event) => { setNotes(event.target.value); setDirty(true) }} placeholder="Informações úteis para este atendimento" /></label></details>
         </div>
@@ -292,7 +323,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
           {!readOnly && <button className="erp-secondary-button" disabled={blocked || catalogLoading || !options.methods.length || !options.accounts.length || payments.length >= 20} onClick={addPayment}>+ Adicionar forma de pagamento</button>}
           {selected?.financial_status === 'legacy' && <p className="erp-alert">Esta venda foi registrada antes do financeiro. Nenhum recebimento foi presumido para ela.</p>}
         </div>
-        {!!selected?.discount_requests?.length && <div className="erp-card erp-discount-history"><h2>Autorizações de desconto</h2>{selected.discount_requests.map(request => <div className="erp-discount-request" key={request.id}><strong>{request.requester} · {brl(decimal(request.discount_amount) ?? 0n)} de desconto considerado</strong><p>Limite registrado: {request.limit_percentage}% · Base: {brl(decimal(request.reference_subtotal) ?? 0n)}</p><p>{request.reason}</p><p>{dateTime.format(new Date(request.created_at))} · {request.state === 'approve' ? 'Autorizado' : request.state === 'reject' ? 'Recusado' : 'Aguardando autorização'}{!readOnly && !request.current ? ' · Valores ou acesso alterados; não aplicável' : ''}</p>{request.decided_by && <p>{request.decided_by}: {request.decision_reason} · {request.decided_at ? dateTime.format(new Date(request.decided_at)) : ''}</p>}{request.can_decide && <><label>Motivo da decisão<textarea aria-label={`Motivo da decisão ${request.id}`} maxLength={255} disabled={blocked || dirty} value={decisionReasons[request.id] ?? ''} onChange={event=>setDecisionReasons(current=>({...current,[request.id]:event.target.value}))} /></label><div className="erp-sales-actions"><button className="erp-action-button" disabled={blocked || dirty || !decisionReasons[request.id]?.trim()} onClick={()=>void decideApproval(request.id,'approve')}>Autorizar desconto</button><button className="erp-secondary-button" disabled={blocked || dirty || !decisionReasons[request.id]?.trim()} onClick={()=>void decideApproval(request.id,'reject')}>Recusar desconto</button></div>{dirty && <p>Salve as alterações antes de analisar a solicitação.</p>}</>}</div>)}</div>}
+        {!!selected?.discount_requests?.length && <div className="erp-card erp-discount-history"><h2>Autorizações de desconto</h2>{selected.discount_requests.map(request => <div className="erp-discount-request" key={request.id}><strong>{request.requester} · {brl(decimal(request.discount_amount) ?? 0n)} de desconto considerado</strong><p>Limite registrado: {request.limit_percentage}% · Base: {brl(decimal(request.reference_subtotal) ?? 0n)}</p><p>{request.reason}</p><p>{dateTime.format(new Date(request.created_at))} · {request.state === 'approve' ? 'Autorizado' : request.state === 'reject' ? 'Recusado' : 'Aguardando autorização'}{!readOnly && !request.current ? ' · Valores ou acesso alterados; não aplicável' : ''}</p>{request.decided_by && <p>{request.decided_by}: {request.decision_reason} · {request.decided_at ? dateTime.format(new Date(request.decided_at)) : ''}</p>}{access.view && request.can_decide && <><label>Motivo da decisão<textarea aria-label={`Motivo da decisão ${request.id}`} maxLength={255} disabled={blocked || dirty} value={decisionReasons[request.id] ?? ''} onChange={event=>setDecisionReasons(current=>({...current,[request.id]:event.target.value}))} /></label><div className="erp-sales-actions"><button className="erp-action-button" disabled={blocked || dirty || !decisionReasons[request.id]?.trim()} onClick={()=>void decideApproval(request.id,'approve')}>Autorizar desconto</button><button className="erp-secondary-button" disabled={blocked || dirty || !decisionReasons[request.id]?.trim()} onClick={()=>void decideApproval(request.id,'reject')}>Recusar desconto</button></div>{dirty && <p>Salve as alterações antes de analisar a solicitação.</p>}</>}</div>)}</div>}
         {selected?.events.length ? <div className="erp-card"><h2>Histórico da venda</h2><ol className="erp-sales-history">{selected.events.map((event) => <li key={event.id}><strong>{event.event_label}</strong><span>{dateTime.format(new Date(event.created_at))} · {event.creator_username}</span>{event.reason && <p>{event.reason}</p>}</li>)}</ol></div> : null}
       </div>
       <aside className="erp-card erp-checkout-summary"><span className="erp-kicker">RESUMO DO ATENDIMENTO</span><h2>{chosenCustomer?.name || selected?.customer_name || 'Venda balcão'}</h2><p className="erp-sales-hint">{store.name} · {lines.length} itens</p>
@@ -305,9 +336,10 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
         {!readOnly && closedCashPayments.length > 0 && <p className="erp-alert" role="alert">Abra o caixa da conta selecionada em Comercial → Caixa antes de confirmar o recebimento em dinheiro. Você pode salvar este atendimento como rascunho.</p>}
         {error && <p className="erp-alert" role="alert">{error}</p>}
         {!readOnly && <><button className="erp-action-button" disabled={blocked || !canComplete} onClick={() => void reviewPayments()}>{busy ? 'Registrando…' : 'Concluir venda'}</button><button className="erp-secondary-button" disabled={blocked || !canDraft} onClick={() => void persist(buildPayload('draft'))}>Salvar rascunho</button><p className="erp-sales-hint">O rascunho mantém o atendimento sem baixar o estoque.</p></>}
-        {selected?.status === 'cancelled' && <p className="erp-alert">Venda cancelada: {selected.cancellation_reason}</p>}
-        {selected?.can_cancel && <button className="erp-table-button is-danger" disabled={blocked} onClick={() => setCancelOpen((value) => !value)}>Cancelar venda</button>}
-        {cancelOpen && <div className="erp-checkout-cancel"><label>Motivo do cancelamento<textarea aria-label="Motivo do cancelamento" maxLength={255} value={reason} disabled={blocked} onChange={(event) => setReason(event.target.value)} /></label><p className="erp-sales-hint">Os recebimentos serão estornados no registro do sistema. Uma devolução de dinheiro ao cliente deve ser realizada e conferida separadamente.</p><button className="erp-action-button" disabled={blocked || !reason.trim()} onClick={() => void cancel()}>Confirmar cancelamento</button></div>}
+        {selected?.status === 'draft' && !mayWrite && access.finalize && selected.can_finalize && <button className="erp-action-button" disabled={blocked} onClick={() => void finalizeSaved()}>Confirmar venda salva</button>}
+        {selected?.status === 'cancelled'  && <p className="erp-alert">Venda cancelada: {selected.cancellation_reason}</p>}
+        {access.cancel && selected?.can_cancel && <button className="erp-table-button is-danger" disabled={blocked} onClick={() => setCancelOpen((value) => !value)}>Cancelar venda</button>}
+        {access.cancel && selected?.can_cancel && cancelOpen && <div className="erp-checkout-cancel"><label>Motivo do cancelamento<textarea aria-label="Motivo do cancelamento" maxLength={255} value={reason} disabled={blocked} onChange={(event) => setReason(event.target.value)} /></label><p className="erp-sales-hint">Os recebimentos serão estornados no registro do sistema. Uma devolução de dinheiro ao cliente deve ser realizada e conferida separadamente.</p><button className="erp-action-button" disabled={blocked || !reason.trim()} onClick={() => void cancel()}>Confirmar cancelamento</button></div>}
       </aside>
     </div>}
     {review && <CheckoutModal titleId="checkout-review-title" busy={busy} onClose={() => setReview(false)}><div className="erp-card erp-checkout-modal"><span className="erp-kicker">CONFERÊNCIA</span><h2 id="checkout-review-title">Conferir e concluir</h2><p>{chosenCustomer?.name || 'Venda balcão'} · {store.name}</p><strong className="erp-checkout-review-total">{brl(total)}</strong><p>{lines.length} itens · Recebido agora: {brl(received)}</p>{preview?.payments.map((payment,index) => <div className="erp-payment-review" key={index}><strong>{payment.method_name} · {brl(decimal(payment.amount) ?? 0n)}</strong><p>{payment.account_name} · {payment.confirmed ? 'Recebimento confirmado' : ['credit', 'debit'].includes(payment.kind) ? 'A receber da operadora' : 'A receber do cliente'}</p><div className="erp-customer-table-wrap"><table className="erp-payment-review-table"><thead><tr><th>Parcela</th><th>Vencimento</th><th>Valor</th></tr></thead><tbody>{payment.installments.map(item => <tr key={item.number}><td>{item.number}/{payment.installments.length}</td><td>{displayDate(item.due_date)}</td><td>{brl(decimal(item.amount) ?? 0n)}</td></tr>)}</tbody></table></div></div>)}{predictedNegativeStock.length > 0 && <div className="erp-sales-warning" role="status"><strong>Atenção: estoque negativo</strong><ul>{predictedNegativeStock.map((item) => <li key={item.name}>{item.name}: saldo previsto {(Number(item.after)/1000).toLocaleString("pt-BR",{maximumFractionDigits:3})}</li>)}</ul><p>A venda será registrada e este saldo ficará no histórico.</p></div>}<p className="erp-sales-hint">Ao confirmar, a venda será concluída com a baixa do estoque e o registro financeiro.</p><div className="erp-sales-actions"><button className="erp-secondary-button" autoFocus onClick={() => setReview(false)}>Voltar à edição</button><button className="erp-action-button" disabled={busy || !canComplete || !preview} onClick={() => void persist(buildPayload('complete'))}>Confirmar venda</button></div></div></CheckoutModal>}

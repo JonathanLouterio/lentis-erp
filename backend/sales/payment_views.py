@@ -7,6 +7,9 @@ from rest_framework import serializers, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from rest_framework.permissions import IsAuthenticated
+from .access_permissions import SaleActionPermission
+
 from .models import FinancialAccount, PaymentMethod, Receivable
 from .payment_serializers import AccountSerializer, CheckoutSerializer, MethodSerializer, ReceiptWriteSerializer, ReceivableSerializer, PaymentPreviewSerializer
 from .payment_services import checkout, receive_installment
@@ -31,6 +34,9 @@ class PaymentOptionsView(SalesBaseView):
 
 
 class SaleCheckoutView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {"POST": "checkout"}
+
     def post(self, request):
         store = self._selected_store()
         if not isinstance(request.data, dict):
@@ -86,6 +92,9 @@ class ReceiveInstallmentView(SalesBaseView):
 
 
 class PaymentPreviewView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {"POST": "any"}
+
     def post(self, request):
         from .payment_schedule import schedule
         store = self._selected_store()

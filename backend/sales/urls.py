@@ -23,7 +23,11 @@ from .work_order_views import OrdersView, OrderDetailView
 
 app_name = "sales"
 
+from .access_views import SaleAccessView, SaleOptionsView
+
 urlpatterns = [
+    path("me/sales/access/", SaleAccessView.as_view(), name="sale-access"),
+    path("me/sales/options/", SaleOptionsView.as_view(), name="sale-options"),
     path("me/service-orders/", OrdersView.as_view(), name="service-orders"),
     path("me/service-orders/<int:order_id>/", OrderDetailView.as_view(), name="service-order-detail"),
     path("me/sales/prescription-access/", PrescriptionAccessView.as_view(), name="sale-prescription-access"),

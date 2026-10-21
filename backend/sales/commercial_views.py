@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from rest_framework.permissions import IsAuthenticated
+from .access_permissions import SaleActionPermission
 from .commercial_services import decide_discount, request_discount
 from .views import SalesBaseView, model_errors
 
@@ -12,6 +14,9 @@ class DiscountDecisionSerializer(DiscountReasonSerializer):
 
 
 class RequestDiscountView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {"POST": ["change"]}
+
     def post(self,request,sale_id):
         sale = self.selected_sale(sale_id)
         values = self.write_serializer(DiscountReasonSerializer,request.data,sale.store).validated_data
@@ -20,6 +25,9 @@ class RequestDiscountView(SalesBaseView):
 
 
 class DecideDiscountView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {"POST": ["view"]}
+
     def post(self,request,sale_id,request_id):
         sale = self.selected_sale(sale_id)
         values = self.write_serializer(DiscountDecisionSerializer,request.data,sale.store).validated_data

@@ -63,6 +63,13 @@ class ReportsTests(TestCase):
         with patch('django.utils.timezone.now',return_value=at):return pay_installment(user=self.user,store=self.store,installment_id=plan.installments.first().pk,values=values)
 
     def test_permissions_options_and_staff_do_not_bypass(self):
+        # A fixture de checkout agora concede direitos explícitos de vendas.
+        # Este caso começa sem consulta para continuar testando a negação do relatório.
+        permission = Permission.objects.get(content_type__app_label='sales', codename='view_sale')
+        for user in (self.user, self.admin):
+            user.user_permissions.remove(permission)
+            for cache in ('_perm_cache', '_user_perm_cache', '_group_perm_cache'):
+                if hasattr(user, cache): delattr(user, cache)
         self.report(expected=403)
         self.client.force_authenticate(self.admin);self.report(expected=403)
         response=self.client.get('/api/me/reports/options/',{'store_id':self.store.pk})

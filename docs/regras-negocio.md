@@ -305,3 +305,18 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - A tela usa capacidades do próprio usuário para esconder ações e confere acessos ao trocar de página ou retornar à janela. A API é a autoridade, mesmo se um botão antigo ainda estiver na tela.
 - Cadastrar sem consultar não libera listagem. A seleção visual de um cadastro existente requer consulta; editar e inativar continuam sendo concessões independentes na API.
 - Opções de estoque não dependem das opções de pagamento de vendas. Usuários com direito de consulta ou lançamento manual recebem apenas produtos ativos da unidade com ID, código, nome, saldo e mínimo, sem preços de custo/venda. Lançamento sem consulta não libera histórico.
+
+
+## Permissões por ação em vendas
+
+- Cada requisição de venda consulta a conta ativa e as permissões atuais. Perfil da loja e flag staff não concedem, sozinhos, as permissões de operação.
+- `sales.view_sale`: lista e consulta vendas da unidade autorizada; também é necessária para consultar o histórico de receitas da venda, somada à permissão clínica já existente.
+- `sales.add_sale`: cria rascunhos, inclusive pela conversão de orçamento. A conversão confere esta permissão antes de reutilizar uma operação anterior.
+- `sales.change_sale`: edita cabeçalho, itens, pagamentos e receita do rascunho pelo checkout; acrescentar ou remover itens é edição da venda. Permissões de SaleItem não substituem esta autorização.
+- `sales.finalize_sale`: confirma uma venda com seus dados já salvos. O checkout que cria e confirma precisa de add + finalize; o que substitui e confirma um rascunho precisa de change + finalize.
+- `sales.cancel_sale`: autoriza solicitar o cancelamento lógico. A regra anterior para vendas finalizadas permanece: somente staff ou superusuário pode cancelá-las, além desta permissão. Motivo, estornos e preservação do histórico continuam obrigatórios. `delete_sale` não autoriza cancelar nem excluir fisicamente uma venda.
+- O endpoint `/api/me/sales/access/` informa apenas as capacidades da própria conta para a unidade acessível. `/api/me/sales/options/` fornece escolhas mínimas de clientes/produtos e condições de pagamento para o atendimento: sem custos de produtos, saldos de contas ou dados completos do cadastro.
+- Usuário com add sem view pode registrar um novo atendimento e receber seu resultado; não pode listar/reabrir vendas. Para selecionar um rascunho existente pela interface, conceder view junto com a ação necessária.
+- Solicitar autorização de desconto exige change; decidir exige view e a permissão de aprovação já existente, mantendo todos os limites e a proibição de aprovar a própria solicitação.
+- Não há concessão automática a usuários ou grupos. As novas permissões são criadas por migrate e precisam ser atribuídas por um superusuário em Gestão de usuários.
+- Caixa, recebíveis, relatórios, ordens de serviço e demais módulos preservam suas políticas próprias. A função interna de domínio continua reutilizável; os pontos HTTP de criação/alteração/confirmação/cancelamento de venda são os limites de autorização desta etapa.

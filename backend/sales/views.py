@@ -19,6 +19,7 @@ from .serializers import (
     SaleCancelSerializer, SaleCreateSerializer, SaleDraftSerializer,
     SaleItemWriteSerializer, SaleSerializer,
 )
+from .access_permissions import SaleActionPermission
 from .services import cancel_sale
 from .payment_services import complete_sale
 
@@ -74,6 +75,9 @@ class SalesBaseView(SelectedStoreMixin, APIView):
 
 
 class MySalesView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {'GET': ['view'], 'POST': ['add']}
+
     def get(self, request):
         queryset = sale_queryset().filter(store=self._selected_store())
         sale_status = request.query_params.get("status")
@@ -99,6 +103,9 @@ class MySalesView(SalesBaseView):
 
 
 class MySaleDetailView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {'GET': ['view'], 'PATCH': ['change']}
+
     def get(self, request, sale_id):
         sale = self.selected_sale(sale_id)
         return Response(SaleSerializer(sale, context={"request": request}).data)
@@ -117,6 +124,9 @@ class MySaleDetailView(SalesBaseView):
 
 
 class MySaleItemsView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {'POST': ['change']}
+
     def post(self, request, sale_id):
         with model_errors(), transaction.atomic():
             sale = self.selected_sale(sale_id, lock=True)
@@ -127,6 +137,9 @@ class MySaleItemsView(SalesBaseView):
 
 
 class MySaleItemDetailView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {'PATCH': ['change'], 'DELETE': ['change']}
+
     def patch(self, request, sale_id, item_id):
         with model_errors(), transaction.atomic():
             sale = self.selected_sale(sale_id, lock=True)
@@ -151,6 +164,9 @@ class MySaleItemDetailView(SalesBaseView):
 
 
 class MySaleFinalizeView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {'POST': ['finalize']}
+
     def post(self, request, sale_id):
         self.selected_sale(sale_id)
         with model_errors():
@@ -159,6 +175,9 @@ class MySaleFinalizeView(SalesBaseView):
 
 
 class MySaleCancelView(SalesBaseView):
+    permission_classes = [IsAuthenticated, SaleActionPermission]
+    sale_actions = {'POST': ['cancel']}
+
     def post(self, request, sale_id):
         selected = self.selected_sale(sale_id)
         serializer = self.write_serializer(SaleCancelSerializer, request.data, selected.store)

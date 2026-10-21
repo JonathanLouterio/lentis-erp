@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import type { PaymentOptions } from '../api'
+import type { SalePaymentOptions } from '../api'
 import { brl, decimal, decimalText, paymentSchedule, today } from './saleMoney'
 
 export type PaymentPlanRow = {
   key: string; methodId: string; accountId: string; amount: string; auto: boolean
   count: number; due: string; confirmed: boolean; intervalUnit: 'months' | 'days'; intervalCount: number
 }
-type Props = { options: PaymentOptions; total: bigint; blocked: boolean; onApply: (payments: PaymentPlanRow[]) => void }
+type Props = { options: SalePaymentOptions; total: bigint; blocked: boolean; onApply: (payments: PaymentPlanRow[]) => void }
 
 export default function PaymentPlanBuilder({ options, total, blocked, onApply }: Props) {
   const immediate = options.methods.filter(method => ['cash', 'pix', 'transfer'].includes(method.kind))

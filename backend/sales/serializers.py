@@ -103,14 +103,21 @@ class SaleSerializer(serializers.ModelSerializer):
         } for row in links]
 
     def get_can_edit(self, sale):
-        return sale.status == Sale.Status.DRAFT
+        from organizations.access_permissions import fresh_actor
+        user = fresh_actor(self.context["request"])
+        return bool(user and user.has_perm("sales.change_sale") and sale.status == Sale.Status.DRAFT)
 
     def get_can_finalize(self, sale):
         control = self.get_discount_control(sale)
-        return sale.status == Sale.Status.DRAFT and bool(sale.items.all()) and (not control['required'] or control['state'] == 'approved')
+        from organizations.access_permissions import fresh_actor
+        user = fresh_actor(self.context["request"])
+        return bool(user and user.has_perm("sales.finalize_sale")) and sale.status == Sale.Status.DRAFT and bool(sale.items.all()) and (not control['required'] or control['state'] == 'approved')
 
     def get_can_cancel(self, sale):
-        user = self.context["request"].user
+        from organizations.access_permissions import fresh_actor
+        user = fresh_actor(self.context["request"])
+        if not user or not user.has_perm("sales.cancel_sale"):
+            return False
         return sale.status == Sale.Status.DRAFT or (
             sale.status == Sale.Status.COMPLETED and (user.is_staff or user.is_superuser)
         )

@@ -1,3 +1,4 @@
+from django.contrib.auth.models import Permission
 from datetime import date
 from decimal import Decimal
 from io import StringIO
@@ -20,7 +21,9 @@ from .payment_services import schedule
 class PaymentCheckoutTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='seller_pay', password='test-only-password')
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         self.admin = get_user_model().objects.create_user(username='admin_pay', is_staff=True, password='test-only-password')
+        self.admin.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         company = Company.objects.create(name='Empresa pagamentos')
         self.store = Store.objects.create(company=company, code='PAY1', name='Matriz', allow_negative_stock=False)
         self.other = Store.objects.create(company=company, code='PAY2', name='Filial')

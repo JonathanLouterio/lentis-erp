@@ -1,3 +1,5 @@
+import { getSaleAccess } from '../api'
+import type { SaleAccess } from '../api'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
@@ -176,7 +178,16 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   function refreshAccessOnDenial(err: unknown) {
     if (err instanceof ApiError && err.status === 403) setCatalogRetry(value => value + 1)
   }
+  const [saleAccess, setSaleAccess] = useState<SaleAccess | null>(null)
+  useEffect(() => {
+    if (!selectedStore) { setSaleAccess(null); return }
+    let ignore = false
+    void getSaleAccess(selectedStore.id).then(next => { if (!ignore) setSaleAccess(next) })
+      .catch(() => { if (!ignore) setSaleAccess(null) })
+    return () => { ignore = true }
+  }, [selectedStore?.id, page, catalogRetry])
   function catalogMenuVisible(item: string) {
+    if (item === 'Vendas') return !!saleAccess && saleAccess.store_id === selectedStore?.id && Object.entries(saleAccess).some(([key,value]) => key !== 'store_id' && value === true)
     if (!access || catalogError) return !['Clientes', 'Produtos', 'Estoque'].includes(item)
     if (item === 'Clientes') return Object.values(access.customers).some(Boolean)
     if (item === 'Produtos') return Object.values(access.products).some(Boolean)

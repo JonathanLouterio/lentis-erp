@@ -1,3 +1,4 @@
+from django.contrib.auth.models import Permission
 from datetime import date
 from decimal import Decimal
 
@@ -15,7 +16,9 @@ from .services import finalize_sale
 class SalesAPITests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="sales_api", password="test-only-password")
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         self.admin = get_user_model().objects.create_user(username="sales_admin", is_staff=True)
+        self.admin.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         company = Company.objects.create(name="Empresa API vendas")
         self.store = Store.objects.create(company=company, code="01", name="Matriz", allow_negative_stock=False)
         self.other_store = Store.objects.create(company=company, code="02", name="Filial")

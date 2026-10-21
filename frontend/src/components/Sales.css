@@ -148,3 +148,7 @@
 .erp-payment-review-table th:last-child, .erp-payment-review-table td:last-child { text-align: right; white-space: nowrap; }
 [data-theme='dark'] .erp-payment-builder { background: #182235; }
 @media (max-width: 760px) { .erp-payment-builder-fields, .erp-payment-interval { grid-template-columns: 1fr; } .erp-payment-builder { padding: 16px; } }
+
+/* Mantém os controles dentro das colunas, inclusive em telas pequenas. */
+.erp-sales-page :is(input, select, textarea) { box-sizing: border-box; max-width: 100%; min-width: 0; }
+.erp-sales-page label { min-width: 0; }
