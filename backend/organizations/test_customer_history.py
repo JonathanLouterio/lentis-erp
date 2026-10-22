@@ -34,6 +34,7 @@ class CustomerHistoryTests(TestCase):
             if hasattr(self.user,key):delattr(self.user,key)
 
     def test_empty_history_customer_identity_and_read_only(self):
+        self.grant("sales","view_quote")
         result=self.get();self.assertEqual(result['customer']['id'],self.customer.pk)
         self.assertEqual(result['summary']['completed_sales'],0)
         self.assertEqual(result['summary']['customer_pending'],'0.00')
@@ -117,6 +118,7 @@ class CustomerHistoryTests(TestCase):
         self.assertEqual(self.get()['summary']['orders'],1)
 
     def test_quotes_include_current_snapshot_and_link(self):
+        self.grant("sales","view_quote")
         quote=Quote.objects.create(store=self.store,customer=self.customer,created_by=self.user,valid_until='2026-12-01')
         QuoteItem.objects.create(quote=quote,product=self.product,quantity='1',unit_price='700')
         result=self.get('quotes',record_id=quote.pk)

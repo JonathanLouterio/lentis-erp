@@ -27,7 +27,11 @@ from .access_views import SaleAccessView, SaleOptionsView
 
 from .finance_access_views import FinanceAccessView
 
+from .quote_access_views import QuoteAccessView,QuoteOptionsView
+
 urlpatterns = [
+    path("me/quotes/access/",QuoteAccessView.as_view(),name="quote-access"),
+    path("me/quotes/options/",QuoteOptionsView.as_view(),name="quote-options"),
     path("me/finance-access/",FinanceAccessView.as_view(),name="finance-access"),
     path("me/sales/access/", SaleAccessView.as_view(), name="sale-access"),
     path("me/sales/options/", SaleOptionsView.as_view(), name="sale-options"),

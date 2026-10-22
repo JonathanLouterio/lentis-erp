@@ -1,3 +1,4 @@
+from django.contrib.auth.models import Permission
 from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
@@ -13,6 +14,8 @@ from organizations.models import StockMovement
 class QuoteAPITests(TestCase):
     def setUp(self):
         fixtures.PaymentCheckoutTests.setUp(self)
+        for actor in (self.user,self.admin):
+            actor.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales",content_type__model="quote"))
         self.base = '/api/me/quotes/'
 
     def payload(self, **overrides):

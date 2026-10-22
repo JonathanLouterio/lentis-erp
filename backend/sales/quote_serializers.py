@@ -43,6 +43,13 @@ class QuoteEventSerializer(serializers.ModelSerializer):
 
 
 class QuoteSerializer(serializers.ModelSerializer):
+    actions=serializers.SerializerMethodField()
+    def get_actions(self,obj):
+        from organizations.access_permissions import fresh_actor
+        from .quote_permissions import available_quote_actions
+        request=self.context.get('request')
+        return available_quote_actions(obj,fresh_actor(request) if request else None)
+
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
     creator_username = serializers.CharField(source='created_by.username', read_only=True)
     status_label = serializers.CharField(source='get_status_display', read_only=True)
@@ -53,4 +60,4 @@ class QuoteSerializer(serializers.ModelSerializer):
     events = QuoteEventSerializer(many=True, read_only=True)
     class Meta:
         model = Quote
-        fields = ['id','store','customer','customer_name','creator_username','status','status_label','is_expired','valid_until','notes','discount_amount','version','sale','created_at','updated_at','subtotal','total','items','events']
+        fields = ['id','store','customer','customer_name','creator_username','status','status_label','is_expired','valid_until','notes','discount_amount','version','sale','created_at','updated_at','subtotal','total','items','events','actions']

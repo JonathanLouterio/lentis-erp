@@ -1,3 +1,7 @@
+from rest_framework.permissions import IsAuthenticated
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from .quote_permissions import QuoteActionPermission
 import hashlib
 import json
 from django.shortcuts import get_object_or_404
@@ -16,7 +20,10 @@ def quote_queryset(store):
     return Quote.objects.filter(store=store).select_related('customer','created_by').prefetch_related('items','events__created_by')
 
 
+@method_decorator(never_cache,name="dispatch")
 class QuoteBaseView(SalesBaseView):
+    permission_classes=[IsAuthenticated,QuoteActionPermission]
+
     def operate(self, request, action, quote_id=None):
         store = self._selected_store()
         if not isinstance(request.data, dict): raise ValidationError('Envie os dados do orçamento em um objeto JSON.')
@@ -26,10 +33,12 @@ class QuoteBaseView(SalesBaseView):
             return self.write_serializer(QuoteWriteSerializer if action == 'save' else QuoteActionSerializer, request.data, store).validated_data
         with model_errors():
             quote = operate_quote(user=request.user, store=store, quote_id=quote_id, action=action, request_id=request_id, digest=digest, validated_values=validated)
-        return Response(QuoteSerializer(quote_queryset(store).get(pk=quote.pk)).data)
+        return Response(QuoteSerializer(quote_queryset(store).get(pk=quote.pk),context={"request":request}).data)
 
 
 class QuotesView(QuoteBaseView):
+    quote_actions={"GET":"view","POST":"add"}
+
     def get(self, request):
         store = self._selected_store()
         queryset = quote_queryset(store)
@@ -40,17 +49,21 @@ class QuotesView(QuoteBaseView):
         elif state != 'all': raise ValidationError({'status': 'Selecione uma situação válida.'})
         pagination = SalesPagination()
         rows = pagination.paginate_queryset(queryset, request, view=self)
-        return pagination.get_paginated_response(QuoteSerializer(rows, many=True).data)
+        return pagination.get_paginated_response(QuoteSerializer(rows, many=True,context={"request":request}).data)
     def post(self, request): return self.operate(request, 'save')
 
 
 class QuoteDetailView(QuoteBaseView):
+    quote_actions={"GET":"view","PUT":"change"}
+
     def get(self, request, quote_id):
-        return Response(QuoteSerializer(get_object_or_404(quote_queryset(self._selected_store()), pk=quote_id)).data)
+        return Response(QuoteSerializer(get_object_or_404(quote_queryset(self._selected_store()), pk=quote_id),context={"request":request}).data)
     def put(self, request, quote_id): return self.operate(request, 'save', quote_id)
 
 
 class QuoteTransitionView(QuoteBaseView):
+    quote_actions={"POST":"transition"}
+
     def post(self, request, quote_id, action):
         if action not in ('send','accept','reject','convert'): raise ValidationError('Operação inválida.')
         return self.operate(request, action, quote_id)

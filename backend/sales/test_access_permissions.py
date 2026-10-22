@@ -184,6 +184,8 @@ class SaleAccessTests(TestCase):
 
     def test_quote_conversion_needs_add_sale_even_on_replay(self):
         from .models import Quote, QuoteItem
+        permission=Permission.objects.get(content_type__app_label="sales",codename="convert_quote")
+        self.user.user_permissions.add(permission)
         quote=Quote.objects.create(store=self.store,created_by=self.user,valid_until=date.today())
         QuoteItem.objects.create(quote=quote,product=self.product,quantity=1,unit_price=100)
         quote.status='accepted';quote.save(_allow_transition=True)
@@ -191,10 +193,10 @@ class SaleAccessTests(TestCase):
         data={'request_id':str(uuid.uuid4()),'expected_version':quote.version}
         self.assertEqual(self.client.post(endpoint,data,format='json').status_code,403)
         self.assertEqual(Sale.objects.count(),1)
-        self.grant('add')
+        self.grant('add');self.user.user_permissions.add(permission)
         self.assertEqual(self.client.post(endpoint,data,format='json').status_code,200)
         self.assertEqual(Sale.objects.count(),2)
-        self.grant()
+        self.grant();self.user.user_permissions.add(permission)
         self.assertEqual(self.client.post(endpoint,data,format='json').status_code,403)
         self.assertEqual(Sale.objects.count(),2)
 

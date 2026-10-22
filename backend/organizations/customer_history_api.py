@@ -75,6 +75,11 @@ class CustomerHistoryView(SalesBaseView):
         section=request.query_params.get('section','summary')
         if section not in ('summary','sales','quotes','prescriptions','orders','installments'):
             raise ValidationError({'section':'Seção de histórico inválida.'})
+        from organizations.access_permissions import fresh_actor
+        actor=fresh_actor(request)
+        can_quotes=bool(actor and actor.has_perm('sales.view_quote'))
+        if section=='quotes' and not can_quotes:
+            raise PermissionDenied('Você não tem permissão de consultar orçamentos.')
         can_rx=request.user.has_perm('organizations.view_prescription')
         can_orders=request.user.has_perm('sales.view_serviceorder')
         if section=='prescriptions' and not can_rx:
@@ -95,8 +100,8 @@ class CustomerHistoryView(SalesBaseView):
                 totals[debtor]=money(qs.aggregate(total=Sum('open_amount'))['total'] or ZERO)
             overdue=pending.filter(debtor='customer',due_date__lt=timezone.localdate())
             return Response({'customer':CustomerSerializer(customer).data,'generated_at':timezone.now(),
-                'permissions':{'prescriptions':can_rx,'orders':can_orders},
-                'summary':{'completed_sales':sales.filter(status='completed').count(),'draft_sales':sales.filter(status='draft').count(),'quotes':quotes.count(),
+                'permissions':{'quotes':can_quotes,'prescriptions':can_rx,'orders':can_orders},
+                'summary':{'completed_sales':sales.filter(status='completed').count(),'draft_sales':sales.filter(status='draft').count(),'quotes':quotes.count() if can_quotes else None,
                     'orders':orders.count() if can_orders else None,'prescriptions':prescriptions.count() if can_rx else None,
                     'customer_pending':totals['customer'],'operator_pending':totals['operator'],
                     'customer_overdue':money(overdue.aggregate(total=Sum('open_amount'))['total'] or ZERO)}},headers=headers)

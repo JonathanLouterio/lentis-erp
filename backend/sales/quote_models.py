@@ -27,6 +27,7 @@ class Quote(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
+        permissions = [('send_quote','Pode preparar proposta de orçamento'), ('accept_quote','Pode registrar aceite de orçamento'), ('reject_quote','Pode recusar orçamento'), ('print_quote','Pode imprimir orçamento'), ('convert_quote','Pode converter orçamento em venda')]
         verbose_name = 'Orçamento'
         verbose_name_plural = 'Orçamentos'
         ordering = ['-created_at', '-pk']

@@ -1,3 +1,4 @@
+import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useEffect, useState } from 'react'
 import { getCustomerHistorySummary, getCustomerHistoryRecords, getCustomerHistoryRecord } from '../api'
 import type { AccessibleStore, CashPage, CustomerHistorySummary, CustomerHistoryRecord, CustomerHistorySection } from '../api'
@@ -22,6 +23,8 @@ export default function CustomerHistory({store,customerId,onBack,onSale,onOrder}
   const [summaryError,setSummaryError]=useState('')
   const [reload,setReload]=useState(0)
   const [detailId,setDetailId]=useState<number|null>(null)
+  const quoteRights=useQuoteAccess(store.id,reload)
+  const canQuotes=!!summary?.permissions.quotes && !!quoteRights.access?.actions.view
 
   useEffect(()=>{
     let ignore=false
@@ -33,19 +36,19 @@ export default function CustomerHistory({store,customerId,onBack,onSale,onOrder}
     let ignore=false
     setRecords(emptyPage);setDetail(null);setDetailId(null);setError('');setLoading(true)
     if(!summary){setLoading(false);return()=>{ignore=true}}
-    const restricted=(section==='prescriptions'&&!summary.permissions.prescriptions)||(section==='orders'&&!summary.permissions.orders)
+    const restricted=(section==='quotes'&&!canQuotes)||(section==='prescriptions'&&!summary.permissions.prescriptions)||(section==='orders'&&!summary.permissions.orders)
     if(restricted){setError('Você não tem permissão para esta seção.');setLoading(false);return()=>{ignore=true}}
     void getCustomerHistoryRecords(store.id,customerId,section,page).then(v=>{if(!ignore)setRecords(v)}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoading(false)})
     return()=>{ignore=true}
-  },[store.id,customerId,section,page,summary])
+  },[store.id,customerId,section,page,summary,canQuotes])
   useEffect(()=>{
     let ignore=false
     setDetail(null);setLoadingDetail(false)
-    if(detailId===null)return()=>{ignore=true}
+    if(detailId===null || (section==='quotes'&&!canQuotes))return()=>{ignore=true}
     setLoadingDetail(true);setError('')
     void getCustomerHistoryRecord(store.id,customerId,section,detailId).then(v=>{if(!ignore)setDetail(v)}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoadingDetail(false)})
     return()=>{ignore=true}
-  },[store.id,customerId,section,detailId,reload])
+  },[store.id,customerId,section,detailId,reload,canQuotes])
   const customer=summary?.customer
   const address=customer?[customer.street,customer.address_number,customer.address_complement,customer.neighborhood,customer.city,customer.state,customer.zip_code].filter(Boolean).join(' · '):''
 
@@ -54,8 +57,8 @@ export default function CustomerHistory({store,customerId,onBack,onSale,onOrder}
     {loadingSummary?<p role="status">Carregando histórico…</p>:summaryError?<p role="alert" className="erp-alert">{summaryError}</p>:customer&&summary?<>
       <div className="erp-card ch-customer"><div><h2>{customer.name}</h2><p>{customer.person_type==='company'?'Pessoa jurídica':'Pessoa física'} · {customer.cpf||customer.cnpj||'Documento não informado'}{!customer.is_active?' · Cadastro inativo':''}</p><p>{[customer.phone,customer.whatsapp,customer.email].filter(Boolean).join(' · ')||'Contato não informado'}</p>{address&&<p>{address}</p>}</div><small>Atualizado em {dateTime.format(new Date(summary.generated_at))}</small></div>
       <div className="ch-metrics"><div className="erp-card"><span>Vendas finalizadas</span><strong>{summary.summary.completed_sales}</strong><small>{summary.summary.draft_sales} rascunho(s)</small></div><div className="erp-card"><span>Saldo a receber do cliente</span><strong>{money.format(Number(summary.summary.customer_pending))}</strong><small>Vencido: {money.format(Number(summary.summary.customer_overdue))}</small></div><div className="erp-card"><span>A receber da operadora</span><strong>{money.format(Number(summary.summary.operator_pending))}</strong><small>Não é uma dívida do cliente.</small></div></div>
-      <nav className="ch-tabs" aria-label="Seções do histórico">{(Object.keys(tabs) as CustomerHistorySection[]).map(key=><button type="button" key={key} className={section===key?'is-current':''} aria-pressed={section===key} disabled={key==='prescriptions'&&!summary.permissions.prescriptions||key==='orders'&&!summary.permissions.orders} onClick={()=>{setSection(key);setPage(1)}}>{tabs[key]}{key==='quotes'?` (${summary.summary.quotes})`:key==='prescriptions'&&summary.summary.prescriptions!==null?` (${summary.summary.prescriptions})`:key==='orders'&&summary.summary.orders!==null?` (${summary.summary.orders})`:''}</button>)}</nav>
-      {(!summary.permissions.prescriptions||!summary.permissions.orders)&&<p className="ch-hint">Algumas seções exigem permissões específicas do usuário.</p>}
+      <nav className="ch-tabs" aria-label="Seções do histórico">{(Object.keys(tabs) as CustomerHistorySection[]).map(key=><button type="button" key={key} className={section===key?'is-current':''} aria-pressed={section===key} disabled={key==='quotes'&&!canQuotes||key==='prescriptions'&&!summary.permissions.prescriptions||key==='orders'&&!summary.permissions.orders} onClick={()=>{setSection(key);setPage(1)}}>{tabs[key]}{key==='quotes'&&canQuotes&&summary.summary.quotes!==null?` (${summary.summary.quotes})`:key==='prescriptions'&&summary.summary.prescriptions!==null?` (${summary.summary.prescriptions})`:key==='orders'&&summary.summary.orders!==null?` (${summary.summary.orders})`:''}</button>)}</nav>
+      {(!canQuotes||!summary.permissions.prescriptions||!summary.permissions.orders)&&<p className="ch-hint">Algumas seções exigem permissões específicas do usuário.</p>}
       {error&&<p role="alert" className="erp-alert">{error}</p>}
       {section==='installments'&&<p className="ch-hint">Parcelas do cliente e da operadora são identificadas separadamente. Vendas canceladas não compõem o saldo pendente.</p>}
       <div className="ch-grid"><div className="erp-card"><h2>{tabs[section]} <small>({records.count})</small></h2>{loading?<p role="status">Carregando registros…</p>:records.results.length===0?<p>Nenhum registro nesta seção.</p>:records.results.map(r=><button type="button" key={r.id} className={`ch-record${detailId===r.id?' is-selected':''}`} onClick={()=>setDetailId(r.id)} aria-label={`Detalhes de ${r.title}`}><span><strong>{r.title}</strong><small>{dateTime.format(new Date(r.date))}</small></span><span className="ch-status">{r.status_label}</span>{r.amount!==null&&<strong>{money.format(Number(r.amount))}</strong>}{r.remaining!==undefined&&<small>Saldo {money.format(Number(r.remaining))} · Vencimento {r.due_date?dateOnly(r.due_date):'—'} · {r.debtor==='operator'?'Operadora':'Cliente'}{r.overdue?' · Em atraso':''}</small>}</button>)}<div className="ch-pagination"><button type="button" disabled={loading||!records.previous} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={loading||!records.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div></div>

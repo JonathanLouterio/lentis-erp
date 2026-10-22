@@ -2,14 +2,17 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from accounts.selectors import get_accessible_stores
+from .quote_permissions import require_quote_action
 from .models import Quote, QuoteItem, QuoteEvent, QuoteOperation, Sale, SaleItem
 
 
 def operate_quote(*, user, store, quote_id, action, request_id, digest, validated_values):
+    if not getattr(user,'is_authenticated',False):
+        raise PermissionDenied('Entre com uma conta ativa.')
     with transaction.atomic():
         actor = get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
-        if action == "convert" and not actor.has_perm("sales.add_sale"):
-            raise PermissionDenied("Você não tem permissão de criar vendas para converter este orçamento.")
+        require_quote_action(actor,action,quote_id)
+        user=actor
         if not user.is_active or not get_accessible_stores(user).filter(pk=store.pk).exists():
             raise PermissionDenied('O acesso à unidade não está mais disponível.')
         previous = QuoteOperation.objects.select_related('quote').filter(request_id=request_id).first()

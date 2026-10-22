@@ -333,3 +333,17 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Pagar ou estornar fornecedor em dinheiro exige o direito da operação em contas a pagar e `sales.move_cash`, com caixa aberto e responsabilidade/gerenciamento conforme as regras existentes. O replay de um pagamento ou estorno em dinheiro também confere move_cash. Pagamentos bancários não exigem permissão de movimentação manual do caixa.
 - O admin financeiro global de contas/formas e históricos de caixa, pagamentos de venda, parcelas e lançamentos financeiros fica reservado a superusuários; operadores usam o fluxo do ERP por unidade. Os históricos permanecem somente para leitura inclusive para superusuário.
 - As permissões são reconsultadas na requisição; ações diretas, sessões abertas e repetições não dispensam autorização. A migração cria permissões sem atribuí-las automaticamente. A combinação de consulta e ação é recomendada para selecionar registros existentes pela interface.
+
+
+## Permissões por ação em orçamentos
+
+- `sales.view_quote` autoriza listar e consultar propostas da unidade acessível; o histórico do cliente confere o mesmo direito para lista, detalhes e contador de orçamentos.
+- `sales.add_quote` cria; `sales.change_quote` revisa proposta não terminal. Revisar uma proposta preparada/aceita retorna ao rascunho, preservando a exigência de novo preparo e aceite.
+- `sales.send_quote` prepara a proposta; `sales.accept_quote` registra o aceite; `sales.reject_quote` registra a recusa com motivo. São direitos independentes de editar. Situação, validade, itens e versão continuam conferidos pelo domínio.
+- Imprimir/salvar PDF exige `sales.view_quote` + `sales.print_quote`. A impressão usa os dados persistidos e não grava eventos de movimentação. Dados de cliente presentes no documento são divulgados somente a quem tem esses direitos.
+- Converter exige `sales.convert_quote` + `sales.add_sale`; não concede confirmação da venda, aprovação de desconto ou recebimento. A conversão cria somente venda em rascunho, sem estoque/financeiro.
+- A autorização é reconsultada antes de validar/gravar e antes de reapresentar resultados de envios repetidos, inclusive para orçamento já convertido. Revogar o direito de conversão ou criação de venda bloqueia novas tentativas e replays.
+- A consulta própria de opções de orçamento aceita add/change, fornece apenas id/nome do cliente e id/código/nome/preço de venda do produto ativo da loja. Não exige consulta aos cadastros completos, nem informa custo, estoque, documentos ou contatos.
+- A interface separa o bloqueio de edição da disponibilidade de transições: um perfil de aceite pode aceitar sem alterar os termos; um perfil de impressão pode imprimir sem editar. Consultar permite selecionar propostas existentes; add sem view permite cadastrar e receber confirmação sem listar/reabrir registros.
+- O admin dos históricos de proposta e seus itens/eventos/operações exige consulta de orçamento e mantém o filtro por unidade, além dos direitos de leitura próprios do admin. Não permite editar ou excluir históricos.
+- Staff, gerente e direitos de venda não substituem ações de orçamento. Os direitos são globais de modelo e operam somente sobre unidades acessíveis. A migração cria as permissões e não as atribui automaticamente.

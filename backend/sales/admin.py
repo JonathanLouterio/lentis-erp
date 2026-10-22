@@ -146,9 +146,19 @@ from .models import Quote, QuoteItem, QuoteEvent, QuoteOperation
 
 
 class QuoteHistoryAdmin(ReadOnlyFinancialAdmin):
+    def quote_reader(self,request):
+        from organizations.access_permissions import fresh_actor
+        actor=fresh_actor(request)
+        return bool(actor and actor.has_perm('sales.view_quote'))
+    def has_module_permission(self,request):
+        return self.quote_reader(request) and super().has_module_permission(request)
+    def has_view_permission(self,request,obj=None):
+        return self.quote_reader(request) and super().has_view_permission(request,obj)
+
     def get_queryset(self, request):
         from accounts.selectors import get_accessible_stores
         field = 'store' if self.model is Quote else 'quote__store'
+        if not self.quote_reader(request):return super().get_queryset(request).none()
         return super().get_queryset(request).filter(**{field + '__in': get_accessible_stores(request.user)})
 
 

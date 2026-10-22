@@ -1,3 +1,4 @@
+import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useFinanceAccess } from '../hooks/useFinanceAccess'
 import { getSaleAccess } from '../api'
 import type { SaleAccess } from '../api'
@@ -188,7 +189,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return () => { ignore = true }
   }, [selectedStore?.id, page, catalogRetry])
   const financeRights=useFinanceAccess(selectedStore?.id ?? 0,catalogRetry)
+  const quoteRights=useQuoteAccess(selectedStore?.id ?? 0,catalogRetry)
   function catalogMenuVisible(item: string) {
+    if(item==='Orçamentos')return !!quoteRights.access && Object.values(quoteRights.access.actions).some(Boolean)
     if(item==='Caixa')return !!financeRights.access && Object.values(financeRights.access.cash).some(Boolean)
     if(item==='Financeiro')return !!financeRights.access && (financeRights.access.receipts.view || financeRights.access.receipts.receive)
     if (item === 'Vendas') return !!saleAccess && saleAccess.store_id === selectedStore?.id && Object.entries(saleAccess).some(([key,value]) => key !== 'store_id' && value === true)

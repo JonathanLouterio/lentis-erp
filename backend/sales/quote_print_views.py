@@ -4,6 +4,8 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 from .models import Quote
+from rest_framework.permissions import IsAuthenticated
+from .quote_permissions import QuoteActionPermission
 from .views import SalesBaseView
 
 
@@ -16,6 +18,9 @@ def quantity(value):
 
 
 class QuotePrintView(SalesBaseView):
+    permission_classes=[IsAuthenticated,QuoteActionPermission]
+    quote_actions={"GET":"print"}
+
     renderer_classes = [JSONRenderer, BrowsableAPIRenderer]
 
     def get(self, request, quote_id):

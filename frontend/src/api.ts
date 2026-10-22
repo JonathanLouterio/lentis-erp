@@ -566,6 +566,7 @@ export function getDashboard(storeId: number, period: DashboardPeriod): Promise<
 
 export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted'
 export type Quote = {
+  actions: QuoteActions;
   id: number; store: number; customer: number | null; customer_name: string | null; creator_username: string
   status: QuoteStatus; status_label: string; is_expired: boolean; valid_until: string; notes: string
   discount_amount: string; version: number; sale: number | null; created_at: string; updated_at: string
@@ -633,8 +634,8 @@ export async function submitServiceOrder(storeId:number,attempt:ServiceOrderAtte
 
 export type CustomerHistorySection = 'sales'|'quotes'|'prescriptions'|'orders'|'installments'
 export type CustomerHistorySummary = {
-  customer:Customer; generated_at:string; permissions:{prescriptions:boolean;orders:boolean}
-  summary:{completed_sales:number;draft_sales:number;quotes:number;orders:number|null;prescriptions:number|null;customer_pending:string;operator_pending:string;customer_overdue:string}
+  customer:Customer; generated_at:string; permissions:{quotes:boolean;prescriptions:boolean;orders:boolean}
+  summary:{completed_sales:number;draft_sales:number;quotes:number|null;orders:number|null;prescriptions:number|null;customer_pending:string;operator_pending:string;customer_overdue:string}
 }
 export type CustomerHistoryRecord = {
   id:number;kind:CustomerHistorySection;date:string;title:string;status:string;status_label:string;amount:string|null;sale_id:number|null
@@ -792,3 +793,11 @@ export function getSaleOptions(storeId: number): Promise<SaleOptions> { return r
 
 export type FinanceAccess = {store_id:number;cash:{view:boolean;open:boolean;move:boolean;close:boolean};receipts:{view:boolean;receive:boolean;balances:boolean}}
 export function getFinanceAccess(storeId:number):Promise<FinanceAccess>{return request(`/api/me/finance-access/?store_id=${storeId}`)}
+
+
+export type QuoteActions = {view:boolean;add:boolean;change:boolean;send:boolean;accept:boolean;reject:boolean;convert:boolean;print:boolean}
+export type QuoteAccess = {store_id:number;actions:QuoteActions;can_open_sale:boolean}
+export type QuoteCustomerChoice = Pick<Customer,'id'|'name'>
+export type QuoteProductChoice = Pick<Product,'id'|'internal_code'|'name'|'sale_price'>
+export function getQuoteAccess(storeId:number):Promise<QuoteAccess>{return request(`/api/me/quotes/access/?store_id=${storeId}`)}
+export function getQuoteOptions(storeId:number):Promise<{customers:QuoteCustomerChoice[];products:QuoteProductChoice[]}>{return request(`/api/me/quotes/options/?store_id=${storeId}`)}
