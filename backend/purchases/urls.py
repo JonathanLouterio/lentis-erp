@@ -1,8 +1,9 @@
+from .views import PurchaseAccessView, PurchaseOptionsView
 from django.urls import path
 from .views import PurchasesView, PurchaseDetailView
 
 app_name='purchases'
-urlpatterns=[path('me/purchases/',PurchasesView.as_view(),name='purchases'),path('me/purchases/<int:purchase_id>/',PurchaseDetailView.as_view(),name='purchase-detail')]
+urlpatterns=[path('me/purchases/access/',PurchaseAccessView.as_view()),path('me/purchases/options/',PurchaseOptionsView.as_view()),path('me/purchases/',PurchasesView.as_view(),name='purchases'),path('me/purchases/<int:purchase_id>/',PurchaseDetailView.as_view(),name='purchase-detail')]
 
 from .payable_views import PayablesView, PayableDetailView, PayableOptionsView, PayablePaymentView, PayableReversalView
 urlpatterns += [

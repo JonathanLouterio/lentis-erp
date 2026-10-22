@@ -21,7 +21,7 @@ class PurchaseTests(TestCase):
 
     def grant(self,user=None,*codes):
         user=user or self.user
-        codes=codes or ('view_purchase','add_purchase','change_purchase','receive_purchase')
+        codes=codes or ('view_purchase','add_purchase','change_purchase','receive_purchase','cancel_purchase','update_purchase_cost')
         user.user_permissions.add(*Permission.objects.filter(content_type__app_label='purchases',codename__in=codes))
         for key in ('_perm_cache','_user_perm_cache','_group_perm_cache'):
             if hasattr(user,key):delattr(user,key)

@@ -44,7 +44,7 @@ class Purchase(ProtectedRecord):
         verbose_name='Compra'
         verbose_name_plural='Compras'
         ordering=['-pk']
-        permissions=[('receive_purchase','Confirmar entrada de compra')]
+        permissions=[('receive_purchase','Confirmar entrada de compra'),('cancel_purchase','Cancelar rascunho de compra'),('update_purchase_cost','Atualizar custo cadastrado pela entrada de compra')]
         constraints=[
             models.UniqueConstraint(fields=['store','supplier','reference'],condition=~models.Q(reference='') & models.Q(status__in=['draft','received']),name='unique_purchase_supplier_reference'),
             models.CheckConstraint(condition=models.Q(version__gte=1),name='purchase_version_positive'),

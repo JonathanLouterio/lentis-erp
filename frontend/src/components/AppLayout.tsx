@@ -1,3 +1,4 @@
+import { usePurchaseAccess } from '../hooks/usePurchaseAccess'
 import { useOrderAccess } from '../hooks/useOrderAccess'
 import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useFinanceAccess } from '../hooks/useFinanceAccess'
@@ -190,9 +191,12 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return () => { ignore = true }
   }, [selectedStore?.id, page, catalogRetry])
   const financeRights=useFinanceAccess(selectedStore?.id ?? 0,catalogRetry)
+  const purchaseRights=usePurchaseAccess(selectedStore?.id ?? 0,catalogRetry)
   const orderRights=useOrderAccess(selectedStore?.id ?? 0,catalogRetry)
   const quoteRights=useQuoteAccess(selectedStore?.id ?? 0,catalogRetry)
   function catalogMenuVisible(item: string) {
+    if(item==='Compras')return !!purchaseRights.access?.purchases.view
+    if(item==='Contas a pagar')return !!purchaseRights.access?.payables.view
     if(item==='Ordens de serviço')return !!orderRights.access?.actions.view
     if(item==='Orçamentos')return !!quoteRights.access && Object.values(quoteRights.access.actions).some(Boolean)
     if(item==='Caixa')return !!financeRights.access && Object.values(financeRights.access.cash).some(Boolean)
@@ -598,7 +602,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           ) : page === 'Histórico do cliente' && historyCustomerId ? (
             <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
           ) : page === 'Compras' ? (
-            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={id => { if (leaveSaleAllowed()) { setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } }} />
+            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={purchaseRights.access?.payables.view ? id => { if (leaveSaleAllowed()) { setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } } : undefined} />
           ) : page === 'Relatórios' ? (
             <Reports key={selectedStore.id} store={selectedStore} onSavingChange={setSavingSale} />
           ) : page === 'Contas a pagar' ? (

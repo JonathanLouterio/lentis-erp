@@ -6,17 +6,18 @@ from django.utils import timezone
 from accounts.selectors import get_accessible_stores
 from organizations.models import Product, Supplier
 from organizations.stock_services import register_stock_movement
+from .access_permissions import require_purchase
 from .models import Purchase, PurchaseItem, PurchaseEvent, PurchaseStockMovement, PurchaseOperation
 
 
 def operate_purchase(*,user,store,purchase_id,values,digest):
+    if not user or not user.is_authenticated:
+        raise PermissionDenied('Entre com uma conta ativa.')
     with transaction.atomic():
         user=get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
         if not get_accessible_stores(user).filter(pk=store.pk).exists():raise PermissionDenied('O acesso à unidade não está disponível.')
-        permission='add' if purchase_id is None else 'change'
-        if not user.has_perm('purchases.view_purchase') or not user.has_perm(f'purchases.{permission}_purchase'):raise PermissionDenied('Você não tem permissão para esta operação de compra.')
-        action=values['action']
-        if action=='receive' and not user.has_perm('purchases.receive_purchase'):raise PermissionDenied('Seu usuário não tem permissão de confirmar entrada de compra.')
+        action=values.get('action')
+        require_purchase(user,action,values.get('update_cost',False))
         previous=PurchaseOperation.objects.select_related('purchase').filter(request_id=values['request_id']).first()
         if previous:
             if previous.created_by_id!=user.pk or previous.purchase.store_id!=store.pk:raise PermissionDenied('Este envio pertence a outra conta ou unidade.')

@@ -664,7 +664,7 @@ export type PurchaseItemPayload = {product_id:number;quantity:string;unit_cost:s
 export type Purchase = {
   id:number;store:number;supplier_id:number;supplier_name:string;reference:string;document_date:string|null;notes:string
   status:'draft'|'received'|'cancelled';status_label:string;version:number;total:string;updates_cost:boolean
-  created_at:string;received_at:string|null;can_edit:boolean;can_receive:boolean;supplier_snapshot?:Record<string,string>
+  created_at:string;received_at:string|null;can_edit:boolean;can_receive:boolean;actions:PurchaseActions;supplier_snapshot?:Record<string,string>
   items?: (PurchaseItemPayload & {id:number;product_code:string;product_name:string;total:string;movement_id:number|null})[]
   events?: {version:number;action:string;action_label:string;reason:string;creator_username:string;created_at:string}[]
 }
@@ -806,3 +806,9 @@ export type OrderActions = {view:boolean;create:boolean;update:boolean;advance:b
 export type OrderAccess = {store_id:number;actions:OrderActions}
 export function getOrderAccess(storeId:number):Promise<OrderAccess>{return request(`/api/me/service-orders/access/?store_id=${storeId}`)}
 export function getOrderSales(storeId:number,page:number):Promise<{results:{id:number;customer_name:string}[];next:string|null}>{return request(`/api/me/service-orders/sales/?store_id=${storeId}&page=${page}`)}
+
+export type PurchaseActions={view:boolean;create:boolean;update:boolean;receive:boolean;cancel:boolean;update_cost:boolean}
+export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{view:boolean;generate:boolean;pay:boolean;reverse:boolean}}
+export type PurchaseOptions={results:{id:number;name:string;document:string}[];next:string|null;products:{id:number;internal_code:string;name:string;cost_price:string}[]}
+export function getPurchaseAccess(storeId:number):Promise<PurchaseAccess>{return request(`/api/me/purchases/access/?store_id=${storeId}`)}
+export function getPurchaseOptions(storeId:number,page:number):Promise<PurchaseOptions>{return request(`/api/me/purchases/options/?store_id=${storeId}&page=${page}`)}

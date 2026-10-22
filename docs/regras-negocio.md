@@ -360,3 +360,18 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Conferência e entrega continuam exigindo confirmação; entrega, retrabalho e cancelamento mantêm os motivos obrigatórios. Cancelar OS não cancela venda, estoque ou pagamentos.
 - OS entregue ou cancelada permanece imutável; receita continua sujeita à permissão clínica separada.
 - A migração cria as permissões, sem concedê-las automaticamente. Configure concessões diretas e herdadas em Usuários e acessos.
+
+
+## Permissões de compras e contas a pagar
+
+- A consulta de compras (`purchases.view_purchase`) é pré-requisito para abertura, edição, recebimento e cancelamento. As ações exigem respectivamente `add_purchase`, `change_purchase`, `receive_purchase` e `cancel_purchase`.
+- Confirmar a entrada de itens já salvos não exige permissão de edição. A edição de rascunho não autoriza recebimento nem cancelamento.
+- Atualizar o custo cadastrado dos produtos na entrada exige adicionalmente `purchases.update_purchase_cost`. Sem essa concessão, a entrada pode ocorrer preservando o custo atual. O preço de venda permanece preservado.
+- Compras recebidas ou canceladas continuam imutáveis. Cancelar rascunho exige motivo e não movimenta estoque ou contas. A confirmação de recebimento preserva a conferência obrigatória e os bloqueios de versão.
+- A seleção de fornecedores e produtos para a compra exige abertura ou edição, além da consulta. Retorna somente fornecedor (id, nome e documento) e produto (id, código, nome e custo), ativos e da unidade autorizada.
+- A consulta de títulos (`purchases.view_payableplan`) é pré-requisito para geração, pagamento e estorno. A geração exige também `add_payableplan` e `view_purchase`; pagamento exige `pay_payable`; estorno exige `reverse_payable`.
+- Consultar títulos não libera listas de contas e métodos para pagamento. Essas opções exigem o direito de pagar; saldos continuam dependentes de `sales.view_financialaccount`.
+- Pagamento ou estorno em dinheiro mantém a exigência de `sales.move_cash`, de sessão de caixa compatível e das regras de proprietário/gerenciamento. Pagamento bancário não exige movimentação manual de caixa.
+- Direitos diretos e herdados são lidos da conta atual; revogação bloqueia também reenvio idempotente. Permissões de uma ação não substituem vínculo ativo à unidade.
+- Django Admin permanece somente leitura para compras e contas a pagar. A consulta dos registros técnicos de pagamento também exige consulta de títulos.
+- As novas permissões não são concedidas automaticamente pela migração.

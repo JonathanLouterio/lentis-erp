@@ -9,6 +9,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from sales.models import FinancialAccount, PaymentMethod
 from sales.views import SalesBaseView, SalesPagination, model_errors
+from .access_permissions import PayableActionPermission, payable_capabilities
 from .models import PayablePlan, PayableInstallment
 from .payable_services import generate_plan, pay_installment, reverse_payment, ALLOWED_METHODS
 
@@ -37,7 +38,8 @@ class ReversalInput(serializers.Serializer):
 
 
 def permissions(user):
-    return {'can_create': user.has_perm('purchases.add_payableplan') and user.has_perm('purchases.view_purchase'), 'can_pay': user.has_perm('purchases.pay_payable'), 'can_reverse': user.has_perm('purchases.reverse_payable')}
+    caps=payable_capabilities(user)
+    return {'can_create':caps['generate'],'can_pay':caps['pay'],'can_reverse':caps['reverse']}
 
 
 def plan_query(store):
@@ -63,6 +65,11 @@ def output(plan, user, detail=False):
 
 
 class PayablesView(SalesBaseView):
+    permission_classes=[PayableActionPermission]
+    def finalize_response(self,request,response,*args,**kwargs):
+        response=super().finalize_response(request,response,*args,**kwargs)
+        response['Cache-Control']='no-store, private'
+        return response
     def check_access(self):
         store = self._selected_store()
         from organizations.access_permissions import fresh_actor
@@ -118,6 +125,7 @@ class PayableDetailView(PayablesView):
 
 
 class PayablePaymentView(PayablesView):
+    payable_action='pay'
     http_method_names = ['post', 'options']
     def post(self, request, installment_id):
         return self.write(pay_installment, PaymentInput, installment_id=installment_id)
@@ -127,6 +135,7 @@ class PayablePaymentView(PayablesView):
 
 
 class PayableReversalView(PayablesView):
+    payable_action='reverse'
     http_method_names = ['post', 'options']
     def post(self, request, payment_id):
         return self.write(reverse_payment, ReversalInput, payment_id=payment_id)
@@ -139,6 +148,8 @@ class PayableOptionsView(PayablesView):
     http_method_names = ['get', 'head', 'options']
     def get(self, request):
         store = self.check_access()
+        if not payable_capabilities(request.user)['pay']:
+            return Response({'can_cash':False,'can_view_balances':False,'accounts':[],'methods':[],**permissions(request.user)})
         accounts = FinancialAccount.objects.filter(store=store, is_active=True)
         methods = PaymentMethod.objects.filter(store=store, is_active=True, kind__in=ALLOWED_METHODS)
         can_cash=request.user.has_perm('sales.move_cash')

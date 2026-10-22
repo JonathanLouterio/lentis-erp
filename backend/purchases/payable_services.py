@@ -22,6 +22,8 @@ def digest_data(action, target, values):
 
 
 def actor(user, store, permission):
+    if not user or not user.is_authenticated:
+        raise PermissionDenied('Entre com uma conta ativa.')
     user = get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
     if not user.is_active or not get_accessible_stores(user).filter(pk=store.pk).exists():
         raise PermissionDenied('Entre com uma conta ativa com acesso à unidade.')
