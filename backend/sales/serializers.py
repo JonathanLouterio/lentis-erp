@@ -111,7 +111,7 @@ class SaleSerializer(serializers.ModelSerializer):
         control = self.get_discount_control(sale)
         from organizations.access_permissions import fresh_actor
         user = fresh_actor(self.context["request"])
-        return bool(user and user.has_perm("sales.finalize_sale")) and sale.status == Sale.Status.DRAFT and bool(sale.items.all()) and (not control['required'] or control['state'] == 'approved')
+        return bool(user and user.has_perm("sales.finalize_sale") and (not sale.payments.filter(confirmed=True).exists() or user.has_perm("sales.receive_receivable"))) and sale.status == Sale.Status.DRAFT and bool(sale.items.all()) and (not control['required'] or control['state'] == 'approved')
 
     def get_can_cancel(self, sale):
         from organizations.access_permissions import fresh_actor

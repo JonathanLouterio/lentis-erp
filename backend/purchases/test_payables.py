@@ -22,6 +22,7 @@ from .payable_services import pay_installment, reverse_payment
 class PayablesTests(TestCase):
     def setUp(self):
         purchase_fixtures.PurchaseTests.setUp(self)
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales",codename__in=["add_cashsession","view_cashsession","move_cash","close_cash"]))
         purchase_fixtures.PurchaseTests.grant(self)
         record = purchase_fixtures.PurchaseTests.write(self, purchase_fixtures.PurchaseTests.data(self, items=[{'product_id': self.product.pk, 'quantity': '1', 'unit_cost': '100.01'}]))
         self.purchase_id = record['id']

@@ -2,8 +2,24 @@ from django.contrib import admin
 from .models import CheckoutRequest, FinancialAccount, FinancialEntry, PaymentMethod, Receivable, SalePayment
 
 
+class FinanceSystemAdminMixin:
+    """A operação por loja fica na interface do ERP; o admin financeiro é global."""
+    def allowed(self,request):
+        from organizations.access_permissions import fresh_actor
+        user=fresh_actor(request)
+        return bool(user and user.is_superuser)
+    def has_module_permission(self,request): return self.allowed(request)
+    def has_view_permission(self,request,obj=None): return self.allowed(request)
+    def has_add_permission(self,request): return self.allowed(request)
+    def has_change_permission(self,request,obj=None): return self.allowed(request)
+    def has_delete_permission(self,request,obj=None): return self.allowed(request)
+    def get_queryset(self,request):
+        query=super().get_queryset(request)
+        return query if self.allowed(request) else query.none()
+
+
 @admin.register(FinancialAccount)
-class AccountAdmin(admin.ModelAdmin):
+class AccountAdmin(FinanceSystemAdminMixin, admin.ModelAdmin):
     @admin.display(description='Dinheiro físico')
     def is_physical_cash(self, obj):
         return obj.cash_box
@@ -14,7 +30,7 @@ class AccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(PaymentMethod)
-class MethodAdmin(admin.ModelAdmin):
+class MethodAdmin(FinanceSystemAdminMixin, admin.ModelAdmin):
     @admin.display(description='Limite de parcelas')
     def effective_installment_limit(self, obj):
         return obj.installment_limit
@@ -34,19 +50,32 @@ class ReadOnlyFinancialAdmin(admin.ModelAdmin):
 
 
 @admin.register(Receivable)
-class ReceivableAdmin(ReadOnlyFinancialAdmin):
+class ReceivableAdmin(FinanceSystemAdminMixin, ReadOnlyFinancialAdmin):
+    def has_add_permission(self,request): return False
+    def has_change_permission(self,request,obj=None): return False
+    def has_delete_permission(self,request,obj=None): return False
+
     list_display = ['id', 'payment', 'number', 'due_date', 'amount', 'debtor']
     list_filter = ['debtor', 'due_date', 'payment__sale__store']
 
 
 @admin.register(FinancialEntry)
-class EntryAdmin(ReadOnlyFinancialAdmin):
+class EntryAdmin(FinanceSystemAdminMixin, ReadOnlyFinancialAdmin):
+    def has_add_permission(self,request): return False
+    def has_change_permission(self,request,obj=None): return False
+    def has_delete_permission(self,request,obj=None): return False
+
     list_display = ['id', 'receivable', 'account', 'amount', 'created_by', 'created_at', 'reversal_of']
     list_filter = ['account__store', 'account']
 
 
-admin.site.register(SalePayment, ReadOnlyFinancialAdmin)
-admin.site.register(CheckoutRequest, ReadOnlyFinancialAdmin)
+class SaleFinancialHistoryAdmin(FinanceSystemAdminMixin, ReadOnlyFinancialAdmin):
+    def has_add_permission(self,request): return False
+    def has_change_permission(self,request,obj=None): return False
+    def has_delete_permission(self,request,obj=None): return False
+
+admin.site.register(SalePayment, SaleFinancialHistoryAdmin)
+admin.site.register(CheckoutRequest, SaleFinancialHistoryAdmin)
 
 
 from .models import DiscountPolicy, DiscountAuthorization
@@ -89,7 +118,11 @@ class DiscountAuthorizationAdmin(ReadOnlyFinancialAdmin):
 from .models import CashSession, CashPosting
 
 
-class CashHistoryAdmin(ReadOnlyFinancialAdmin):
+class CashHistoryAdmin(FinanceSystemAdminMixin, ReadOnlyFinancialAdmin):
+    def has_add_permission(self,request): return False
+    def has_change_permission(self,request,obj=None): return False
+    def has_delete_permission(self,request,obj=None): return False
+
     def get_queryset(self, request):
         from accounts.selectors import get_accessible_stores
         query = super().get_queryset(request)

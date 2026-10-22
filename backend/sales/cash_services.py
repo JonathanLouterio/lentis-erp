@@ -4,6 +4,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from accounts.selectors import get_accessible_stores
+from .finance_permissions import require_finance
 from .models import CashPosting, CashSession, FinancialAccount
 
 
@@ -37,6 +38,7 @@ def _session(store, session_id):
 
 
 def open_cash(*, user, store, account_id, amount, note, request_id):
+    user = require_finance(user, 'add_cashsession')
     authorized(user, store); cash_value(amount, zero=True)
     with transaction.atomic():
         account = _account(store, account_id)
@@ -57,6 +59,7 @@ def open_cash(*, user, store, account_id, amount, note, request_id):
 
 
 def move_cash(*, user, store, session_id, kind, amount, reason, request_id):
+    user = require_finance(user, 'move_cash')
     authorized(user, store); cash_value(amount)
     if kind not in ('supply', 'withdrawal') or not reason.strip():
         raise ValidationError('Selecione suprimento ou retirada e informe um motivo.')
@@ -82,6 +85,7 @@ def move_cash(*, user, store, session_id, kind, amount, reason, request_id):
 
 
 def close_cash(*, user, store, session_id, counted_amount, note, request_id):
+    user = require_finance(user, 'close_cash')
     authorized(user, store); cash_value(counted_amount, zero=True)
     with transaction.atomic():
         session = _session(store, session_id)
@@ -135,6 +139,7 @@ def post_payable_cash(*, user, store, account, method, amount, reason, request_i
         if account.cash_box:
             raise ValidationError('Selecione uma conta bancária para uma saída sem dinheiro físico.')
         return None
+    user = require_finance(user, 'move_cash')
     account = _account(store, account.pk)
     if not account.is_active or not account.cash_box:
         raise ValidationError('Selecione uma conta ativa de caixa físico para dinheiro.')

@@ -174,6 +174,7 @@ class Receivable(ImmutableRecord):
 
     class Meta:
         ordering = ['due_date', 'pk']
+        permissions = [('receive_receivable', 'Pode registrar recebimento de parcela')]
         verbose_name = 'Parcela a receber'
         verbose_name_plural = 'Parcelas a receber'
         constraints = [

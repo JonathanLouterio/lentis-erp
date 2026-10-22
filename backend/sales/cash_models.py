@@ -25,7 +25,7 @@ class CashSession(models.Model):
         verbose_name = 'Abertura de caixa'
         verbose_name_plural = 'Aberturas de caixa'
         ordering = ['-opened_at', '-pk']
-        permissions = [('manage_cash', 'Pode operar e fechar caixas de outros responsáveis')]
+        permissions = [('manage_cash', 'Pode operar e fechar caixas de outros responsáveis'), ('move_cash', 'Pode registrar suprimento e retirada de caixa'), ('close_cash', 'Pode fechar caixa')]
         constraints = [
             models.UniqueConstraint(fields=['account'], condition=models.Q(closed_at__isnull=True), name='one_open_session_per_cash_account'),
             models.CheckConstraint(condition=models.Q(opening_amount__gte=0), name='cash_opening_non_negative'),

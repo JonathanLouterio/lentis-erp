@@ -1,3 +1,4 @@
+from .finance_permissions import FinanceActionPermission
 import hashlib
 import json
 
@@ -17,19 +18,27 @@ from .views import SalesBaseView, SalesPagination, model_errors
 
 
 class PaymentOptionsView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'GET': 'payment-options'}
+
     def get(self, request):
         store = self._selected_store()
         from .commercial_services import current_policy, can_approve
         role, limit, configured = current_policy(request.user, store)
+        accounts=AccountSerializer(FinancialAccount.objects.filter(store=store,is_active=True),many=True).data
+        balances=request.user.has_perm('sales.view_financialaccount')
+        if not balances:
+            for account in accounts: account.pop('balance',None)
         return Response({
             'methods': MethodSerializer(PaymentMethod.objects.filter(store=store, is_active=True), many=True).data,
-            'accounts': AccountSerializer(FinancialAccount.objects.filter(store=store, is_active=True), many=True).data,
+            'accounts': accounts,
+            'can_view_balances':balances,
             'allow_negative_stock': store.allow_negative_stock,
             'discount_limit_percentage': str(limit),
             'discount_policy_configured': configured,
             'can_approve_discount': can_approve(request.user, store),
             'discount_role': role,
-            'can_receive': request.user.is_staff or request.user.is_superuser,
+            'can_receive': request.user.has_perm('sales.receive_receivable'),
         })
 
 
@@ -41,6 +50,11 @@ class SaleCheckoutView(SalesBaseView):
         store = self._selected_store()
         if not isinstance(request.data, dict):
             raise ValidationError('Envie um objeto JSON com os dados da venda.')
+        if request.data.get('action') == 'complete' and isinstance(request.data.get('payments'), list):
+            for payment in request.data['payments']:
+                if isinstance(payment, dict) and serializers.BooleanField().run_validation(payment.get('confirmed', False)):
+                    from .finance_permissions import require_finance
+                    with model_errors(): require_finance(request.user, 'receive_receivable')
         identity = serializers.UUIDField().run_validation(request.data.get('request_id'))
         digest = hashlib.sha256(json.dumps(request.data, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
         def validated_values():
@@ -51,6 +65,9 @@ class SaleCheckoutView(SalesBaseView):
 
 
 class ReceivablesView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'GET': ['view_receivable']}
+
     def get(self, request):
         store = self._selected_store()
         queryset = Receivable.objects.filter(payment__sale__store=store).select_related(
@@ -79,6 +96,9 @@ class ReceivablesView(SalesBaseView):
 
 
 class ReceiveInstallmentView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'POST': ['receive_receivable']}
+
     def post(self, request, receivable_id):
         store = self._selected_store()
         serializer = self.write_serializer(ReceiptWriteSerializer, request.data, store)

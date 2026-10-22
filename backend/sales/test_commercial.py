@@ -19,9 +19,11 @@ class DiscountRulesTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.seller = User.objects.create_user(username='discount_seller',password='test-only-password')
+        self.seller.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", codename__in=["view_cashsession","add_cashsession","move_cash","close_cash","view_receivable","receive_receivable"]))
         self.seller.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         self.reviewer = User.objects.create_superuser(username='discount_reviewer',email='test@example.com',password='test-only-password')
         self.staff = User.objects.create_user(username='discount_staff',is_staff=True)
+        self.staff.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", codename__in=["view_cashsession","add_cashsession","move_cash","close_cash","view_receivable","receive_receivable"]))
         self.staff.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         self.store = Store.objects.create(company=Company.objects.create(name='Regras comerciais'),code='DC',name='Matriz')
         for user in [self.seller,self.staff]:StoreMembership.objects.create(user=user,store=self.store,role=StoreMembership.Role.SELLER)

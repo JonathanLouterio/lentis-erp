@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from accounts.selectors import get_accessible_stores
 from .models import CheckoutRequest, FinancialAccount, FinancialEntry, PaymentMethod, Receivable, Sale, SaleItem, SalePayment
+from .finance_permissions import require_finance
 from .services import _locked_sale
 from .payment_schedule import schedule, validate_terms
 
@@ -38,6 +39,8 @@ def book_sale_payments(sale, user):
     # O chamador mantém o lock da venda até o fim da transação de estoque e financeiro.
     if sale.payments.filter(installments__isnull=False).exists():
         raise ValidationError('Esta venda já possui parcelas registradas.')
+    if sale.payments.filter(confirmed=True).exists():
+        user = require_finance(user, 'receive_receivable')
     for payment in sale.payments.select_related('method', 'account'):
         for number, (due_date, amount) in enumerate(schedule(payment.amount, payment.installment_count, payment.first_due_date, payment.interval_unit, payment.interval_count), 1):
             receivable = Receivable.objects.create(
@@ -69,6 +72,8 @@ def complete_sale(*, user, sale_id):
     from .services import finalize_sale
     with transaction.atomic():
         sale = _locked_sale(user, sale_id)
+        if sale.payments.filter(confirmed=True).exists():
+            require_finance(user, 'receive_receivable')
         if sale.status == Sale.Status.DRAFT:
             validate_payments(sale)
         return finalize_sale(user=user, sale_id=sale_id)
@@ -132,11 +137,10 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
 
 def receive_installment(*, user, store, receivable_id, account, method, amount, request_id):
     with transaction.atomic():
-        get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
+        user = get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
+        user = require_finance(user, 'receive_receivable')
         if not user.is_active or not get_accessible_stores(user).filter(pk=store.pk).exists():
             raise PermissionDenied('Entre com uma conta ativa com acesso à unidade.')
-        if not (user.is_staff or user.is_superuser):
-            raise PermissionDenied('Somente administradores podem registrar recebimentos no financeiro.')
         candidate = Receivable.objects.filter(pk=receivable_id, payment__sale__store=store).first()
         if candidate is None:
             raise ValidationError('Parcela não encontrada nesta unidade.')

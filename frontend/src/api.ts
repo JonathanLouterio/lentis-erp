@@ -442,8 +442,8 @@ export function cancelSale(storeId: number, saleId: number, reason: string): Pro
 
 export type PaymentKind = 'cash' | 'pix' | 'transfer' | 'debit' | 'credit' | 'store_credit' | 'boleto'
 export type PaymentMethod = { id: number; name: string; code: string; kind: PaymentKind; installment_limit: number }
-export type FinancialAccount = { id: number; name: string; code: string; balance: string; cash_box: boolean; cash_control_enabled: boolean; cash_is_open: boolean }
-export type PaymentOptions = { methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean; discount_limit_percentage: string; discount_policy_configured: boolean; can_approve_discount: boolean; discount_role: string }
+export type FinancialAccount = { id: number; name: string; code: string; balance?: string; cash_box: boolean; cash_control_enabled: boolean; cash_is_open: boolean }
+export type PaymentOptions = { can_view_balances?: boolean; methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean; discount_limit_percentage: string; discount_policy_configured: boolean; can_approve_discount: boolean; discount_role: string }
 export type FinancialEntry = {
   id: number; account: number; account_name: string; method_name: string; amount: string
   created_at: string; creator_username: string; reason: string; reversal_of: number | null
@@ -516,6 +516,7 @@ export async function getPaymentPreview(storeId: number, total: string, payments
 }
 
 export type CashSession = {
+  can_move: boolean; can_close: boolean;
   id: number; account: number; account_name: string; opened_by: number; owner_username: string
   opened_at: string; opening_amount: string; opening_note: string; closed_at: string | null
   closer_username: string | null; counted_amount: string | null; expected_cash: string
@@ -677,7 +678,7 @@ export type PayableInstallment = {id:number;number:number;due_date:string;amount
 export type PayablePermissions = {can_create:boolean;can_pay:boolean;can_reverse:boolean}
 export type PayablePlan = PayablePermissions & {id:number;purchase_id:number;supplier_name:string;reference:string;total:string;paid:string;remaining:string;status:'pending'|'partial'|'paid';overdue:boolean;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;creator_username:string;created_at:string;installments?:PayableInstallment[]}
 export type PayablesPage = CashPage<PayablePlan> & PayablePermissions
-export type PayableOptions = PayablePermissions & {accounts:{id:number;name:string;cash_box:boolean;balance:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
+export type PayableOptions = PayablePermissions & {accounts:{id:number;name:string;cash_box:boolean;balance?:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
 export type PayableAttempt =
   | {kind:'generate';payload:{request_id:string;purchase_id:number;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number}}
   | {kind:'pay';installmentId:number;payload:{request_id:string;account_id:number;method_id:number;amount:string;paid_on:string;reason:string}}
@@ -787,3 +788,7 @@ export type SalePaymentOptions = Omit<PaymentOptions, 'accounts'> & { accounts: 
 export type SaleOptions = { customers: SaleCustomerChoice[]; products: SaleProductChoice[]; payment_options: SalePaymentOptions }
 export function getSaleAccess(storeId: number): Promise<SaleAccess> { return request(`/api/me/sales/access/?store_id=${storeId}`) }
 export function getSaleOptions(storeId: number): Promise<SaleOptions> { return request(`/api/me/sales/options/?store_id=${storeId}`) }
+
+
+export type FinanceAccess = {store_id:number;cash:{view:boolean;open:boolean;move:boolean;close:boolean};receipts:{view:boolean;receive:boolean;balances:boolean}}
+export function getFinanceAccess(storeId:number):Promise<FinanceAccess>{return request(`/api/me/finance-access/?store_id=${storeId}`)}

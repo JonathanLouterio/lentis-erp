@@ -25,7 +25,10 @@ app_name = "sales"
 
 from .access_views import SaleAccessView, SaleOptionsView
 
+from .finance_access_views import FinanceAccessView
+
 urlpatterns = [
+    path("me/finance-access/",FinanceAccessView.as_view(),name="finance-access"),
     path("me/sales/access/", SaleAccessView.as_view(), name="sale-access"),
     path("me/sales/options/", SaleOptionsView.as_view(), name="sale-options"),
     path("me/service-orders/", OrdersView.as_view(), name="service-orders"),

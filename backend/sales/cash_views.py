@@ -1,3 +1,5 @@
+from rest_framework.permissions import IsAuthenticated
+from .finance_permissions import FinanceActionPermission
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
@@ -9,6 +11,9 @@ from .views import SalesBaseView, SalesPagination, model_errors
 
 
 class CashSessionsView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'GET': ['view_cashsession'], 'POST': ['add_cashsession']}
+
     def get(self, request):
         store = self._selected_store()
         queryset = CashSession.objects.filter(account__store=store).select_related('account', 'opened_by', 'closed_by')
@@ -30,6 +35,9 @@ class CashSessionsView(SalesBaseView):
 
 
 class CashDetailView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'GET': ['view_cashsession']}
+
     def selected(self, session_id):
         return get_object_or_404(CashSession.objects.select_related('account', 'opened_by', 'closed_by'), pk=session_id, account__store=self._selected_store())
     def get(self, request, session_id):
@@ -37,6 +45,9 @@ class CashDetailView(SalesBaseView):
 
 
 class CashPostingsView(CashDetailView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'GET': ['view_cashsession'], 'POST': ['move_cash']}
+
     def get(self, request, session_id):
         session = self.selected(session_id)
         pagination = SalesPagination()
@@ -51,6 +62,9 @@ class CashPostingsView(CashDetailView):
 
 
 class CashCloseView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'POST': ['close_cash']}
+
     def post(self, request, session_id):
         store = self._selected_store()
         values = self.write_serializer(CloseCashSerializer, request.data, store).validated_data
@@ -60,8 +74,14 @@ class CashCloseView(SalesBaseView):
 
 
 class CashOptionsView(SalesBaseView):
+    permission_classes=[IsAuthenticated,FinanceActionPermission]
+    finance_actions={'GET': 'cash-any'}
+
     def get(self, request):
         store = self._selected_store()
         from django.db.models import Q
         accounts = FinancialAccount.objects.filter(store=store, is_active=True).filter(Q(is_cash_box=True) | Q(code='cash'))
-        return Response({'accounts': AccountSerializer(accounts, many=True).data})
+        data=AccountSerializer(accounts, many=True).data
+        if not request.user.has_perm('sales.view_financialaccount'):
+            for account in data: account.pop('balance',None)
+        return Response({'accounts':data},headers={'Cache-Control':'no-store, private'})

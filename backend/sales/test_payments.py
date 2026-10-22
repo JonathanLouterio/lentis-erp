@@ -21,8 +21,10 @@ from .payment_services import schedule
 class PaymentCheckoutTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='seller_pay', password='test-only-password')
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", codename__in=["view_cashsession","add_cashsession","move_cash","close_cash","view_receivable","receive_receivable"]))
         self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         self.admin = get_user_model().objects.create_user(username='admin_pay', is_staff=True, password='test-only-password')
+        self.admin.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", codename__in=["view_cashsession","add_cashsession","move_cash","close_cash","view_receivable","receive_receivable"]))
         self.admin.user_permissions.add(*Permission.objects.filter(content_type__app_label="sales", content_type__model="sale"))
         company = Company.objects.create(name='Empresa pagamentos')
         self.store = Store.objects.create(company=company, code='PAY1', name='Matriz', allow_negative_stock=False)
@@ -230,6 +232,7 @@ class PaymentCheckoutTests(TestCase):
 
     def test_seller_cannot_confirm_later_receipt(self):
         self.send(self.data(kind='store_credit', confirmed=False))
+        self.user.user_permissions.remove(Permission.objects.get(codename='receive_receivable'))
         self.receive(Receivable.objects.first(), user=self.user, expected=403)
         self.assertFalse(FinancialEntry.objects.exists())
 

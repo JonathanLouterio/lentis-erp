@@ -31,11 +31,21 @@ class CashSessionSerializer(serializers.ModelSerializer):
     expected_cash = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
     difference = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True, allow_null=True)
     can_operate = serializers.SerializerMethodField()
+    can_move = serializers.SerializerMethodField()
+    can_close = serializers.SerializerMethodField()
     class Meta:
         model = CashSession
-        fields = ['id', 'account', 'account_name', 'opened_by', 'owner_username', 'opened_at', 'opening_amount', 'opening_note', 'closed_at', 'closer_username', 'counted_amount', 'expected_cash', 'difference', 'closing_note', 'can_operate']
+        fields = ['id', 'account', 'account_name', 'opened_by', 'owner_username', 'opened_at', 'opening_amount', 'opening_note', 'closed_at', 'closer_username', 'counted_amount', 'expected_cash', 'difference', 'closing_note', 'can_operate', 'can_move', 'can_close']
     def get_can_operate(self, obj):
-        return obj.closed_at is None and can_operate(self.context['request'].user, obj)
+        return self.get_can_move(obj) or self.get_can_close(obj)
+
+    def allowed(self,obj,code):
+        from organizations.access_permissions import fresh_actor
+        user=fresh_actor(self.context['request'])
+        return bool(user and not obj.closed_at and user.has_perm('sales.'+code) and can_operate(user,obj))
+
+    def get_can_move(self,obj): return self.allowed(obj,'move_cash')
+    def get_can_close(self,obj): return self.allowed(obj,'close_cash')
 
 
 class CashPostingSerializer(serializers.ModelSerializer):

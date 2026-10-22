@@ -47,6 +47,6 @@ class SaleOptionsView(SalesBaseView):
                 'allow_negative_stock': store.allow_negative_stock,
                 'discount_limit_percentage': str(limit), 'discount_policy_configured': configured,
                 'can_approve_discount': can_approve(user, store), 'discount_role': role,
-                'can_receive': user.is_staff or user.is_superuser,
+                'can_receive': user.has_perm('sales.receive_receivable'),
             },
         })

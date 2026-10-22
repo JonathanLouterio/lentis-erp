@@ -320,3 +320,16 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Solicitar autorização de desconto exige change; decidir exige view e a permissão de aprovação já existente, mantendo todos os limites e a proibição de aprovar a própria solicitação.
 - Não há concessão automática a usuários ou grupos. As novas permissões são criadas por migrate e precisam ser atribuídas por um superusuário em Gestão de usuários.
 - Caixa, recebíveis, relatórios, ordens de serviço e demais módulos preservam suas políticas próprias. A função interna de domínio continua reutilizável; os pontos HTTP de criação/alteração/confirmação/cancelamento de venda são os limites de autorização desta etapa.
+
+
+## Permissões de caixa e recebimentos
+
+- Consultar caixas exige `sales.view_cashsession`; abrir exige `sales.add_cashsession`; registrar suprimento/retirada exige `sales.move_cash`; fechar exige `sales.close_cash`.
+- Ser responsável pela abertura, staff ou gerente não substitui a permissão da ação. Operar ou fechar caixa de outro responsável exige também `sales.manage_cash`. Esta última não concede, sozinha, suprimento, retirada ou fechamento.
+- Consultar parcelas exige `sales.view_receivable`; registrar recebimentos exige `sales.receive_receivable`. A permissão específica substitui a antiga exigência de staff para recebimentos posteriores à venda.
+- Exibir o saldo agregado das contas nas opções financeiras exige `sales.view_financialaccount`, separadamente de receber ou consultar parcelas. Os valores da própria parcela e do caixa continuam pertencendo às respectivas consultas autorizadas.
+- Confirmar recebimento dentro da venda também exige `sales.receive_receivable`, além das ações de venda já necessárias. A confirmação de um rascunho com pagamentos marcados como recebidos confere a mesma permissão. Sem ela, a venda pode ser concluída com valores a receber, sem registrar entrada financeira.
+- Direitos de recebimento não concedem movimentos manuais de caixa; a entrada automática em dinheiro deriva do recebimento autorizado. Estornos automáticos decorrentes do cancelamento da venda preservam sua autorização e regras anteriores.
+- Pagar ou estornar fornecedor em dinheiro exige o direito da operação em contas a pagar e `sales.move_cash`, com caixa aberto e responsabilidade/gerenciamento conforme as regras existentes. O replay de um pagamento ou estorno em dinheiro também confere move_cash. Pagamentos bancários não exigem permissão de movimentação manual do caixa.
+- O admin financeiro global de contas/formas e históricos de caixa, pagamentos de venda, parcelas e lançamentos financeiros fica reservado a superusuários; operadores usam o fluxo do ERP por unidade. Os históricos permanecem somente para leitura inclusive para superusuário.
+- As permissões são reconsultadas na requisição; ações diretas, sessões abertas e repetições não dispensam autorização. A migração cria permissões sem atribuí-las automaticamente. A combinação de consulta e ação é recomendada para selecionar registros existentes pela interface.

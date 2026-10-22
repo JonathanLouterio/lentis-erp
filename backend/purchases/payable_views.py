@@ -65,6 +65,10 @@ def output(plan, user, detail=False):
 class PayablesView(SalesBaseView):
     def check_access(self):
         store = self._selected_store()
+        from organizations.access_permissions import fresh_actor
+        actor=fresh_actor(self.request)
+        if actor is None: raise PermissionDenied('Entre com uma conta ativa.')
+        self.request.user=actor
         if not self.request.user.has_perm('purchases.view_payableplan'):
             raise PermissionDenied('Seu usuário precisa da permissão de visualizar contas a pagar.')
         return store
@@ -137,4 +141,7 @@ class PayableOptionsView(PayablesView):
         store = self.check_access()
         accounts = FinancialAccount.objects.filter(store=store, is_active=True)
         methods = PaymentMethod.objects.filter(store=store, is_active=True, kind__in=ALLOWED_METHODS)
-        return Response({'accounts': [{'id': a.pk, 'name': a.name, 'cash_box': a.cash_box, 'balance': f'{a.balance:.2f}'} for a in accounts], 'methods': [{'id': m.pk, 'name': m.name, 'kind': m.kind} for m in methods], **permissions(request.user)}, headers={'Cache-Control': 'no-store, private'})
+        can_cash=request.user.has_perm('sales.move_cash')
+        if not can_cash: methods=methods.exclude(kind='cash')
+        balances=request.user.has_perm('sales.view_financialaccount')
+        return Response({'can_cash':can_cash,'can_view_balances':balances,'accounts': [{'id': a.pk, 'name': a.name, 'cash_box': a.cash_box, **({'balance': f'{a.balance:.2f}'} if balances else {})} for a in accounts], 'methods': [{'id': m.pk, 'name': m.name, 'kind': m.kind} for m in methods], **permissions(request.user)}, headers={'Cache-Control': 'no-store, private'})

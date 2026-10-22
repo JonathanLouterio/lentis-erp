@@ -11,6 +11,7 @@ from accounts.selectors import get_accessible_stores
 from sales.models import FinancialAccount, PaymentMethod
 from sales.payment_schedule import schedule
 from sales.cash_services import post_payable_cash
+from sales.finance_permissions import require_finance
 from .models import Purchase, PayablePlan, PayableInstallment, PayablePayment
 
 ALLOWED_METHODS = ('cash', 'pix', 'transfer', 'debit')
@@ -46,6 +47,8 @@ def generate_plan(*, user, store, values):
     digest = digest_data('generate', values['purchase_id'], values)
     previous = PayablePlan.objects.filter(request_id=values['request_id']).first()
     if previous:
+        if isinstance(previous, PayablePayment) and previous.method.kind == "cash":
+            require_finance(user, "move_cash")
         return replay(previous, user, store, digest)
     purchase = get_object_or_404(Purchase.objects.select_for_update(), pk=values['purchase_id'], store=store)
     if purchase.status != 'received':
@@ -72,6 +75,8 @@ def pay_installment(*, user, store, installment_id, values):
     digest = digest_data('pay', installment_id, values)
     previous = PayablePayment.objects.filter(request_id=values['request_id']).first()
     if previous:
+        if isinstance(previous, PayablePayment) and previous.method.kind == "cash":
+            require_finance(user, "move_cash")
         return replay(previous, user, store, digest)
     installment = locked_installment(store, installment_id)
     amount = values['amount']
@@ -99,6 +104,8 @@ def reverse_payment(*, user, store, payment_id, values):
     digest = digest_data('reverse', payment_id, values)
     previous = PayablePayment.objects.filter(request_id=values['request_id']).first()
     if previous:
+        if isinstance(previous, PayablePayment) and previous.method.kind == "cash":
+            require_finance(user, "move_cash")
         return replay(previous, user, store, digest)
     original = get_object_or_404(PayablePayment.objects.filter(installment__plan__purchase__store=store), pk=payment_id)
     installment = locked_installment(store, original.installment_id)

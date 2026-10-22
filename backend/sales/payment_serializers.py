@@ -117,8 +117,9 @@ class ReceivableSerializer(serializers.ModelSerializer):
         fields = ['id', 'sale_id', 'number', 'installment_count', 'due_date', 'amount', 'paid_amount', 'remaining_amount', 'status', 'debtor', 'customer_name', 'method_name', 'account_name', 'can_receive', 'entries']
 
     def get_can_receive(self, obj):
-        user = self.context['request'].user
-        return (user.is_staff or user.is_superuser) and obj.status in ('pending', 'partial')
+        from organizations.access_permissions import fresh_actor
+        user = fresh_actor(self.context['request'])
+        return bool(user and user.has_perm('sales.receive_receivable')) and obj.status in ('pending', 'partial')
 
 
 class SalePaymentSerializer(serializers.ModelSerializer):
