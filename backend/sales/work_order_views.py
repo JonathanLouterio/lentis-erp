@@ -8,6 +8,9 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from .views import SalesBaseView, SalesPagination, model_errors
 from .work_order_models import ServiceOrder
+from .work_order_permissions import OrderActionPermission, order_capabilities, available_order_actions
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from .work_order_services import operate_order, NEXT
 from .prescription_services import can_view_prescriptions, prescription_output
 
@@ -41,7 +44,8 @@ def output(order, user, detail=False):
         'lens_description':order.lens_description,'notes':order.notes,'created_at':order.created_at,'updated_at':order.updated_at,
         'overdue':order.status not in ('delivered','cancelled') and order.promised_on < timezone.localdate(),
         'has_prescription':bool(order.prescription_record_id),'next_status':NEXT.get(order.status),
-        'can_change':user.has_perm('sales.change_serviceorder') and order.status not in ('delivered','cancelled')}
+        'actions':available_order_actions(order,user),
+        'can_change':available_order_actions(order,user)['update']}
     if detail:
         data['items']=order.snapshot.get('items',[])
         data['prescription']=prescription_output(order.prescription_record) if can_view_prescriptions(user) else None
@@ -50,7 +54,9 @@ def output(order, user, detail=False):
     return data
 
 
+@method_decorator(never_cache, name='dispatch')
 class OrdersView(SalesBaseView):
+    permission_classes = [OrderActionPermission]
     def check_access(self):
         store=self._selected_store()
         if not self.request.user.has_perm('sales.view_serviceorder'):
@@ -99,3 +105,19 @@ class OrderDetailView(OrdersView):
     def get(self,request,order_id):
         order=get_object_or_404(self.queryset(self.check_access()),pk=order_id)
         return Response(output(order,request.user,True),headers={'Cache-Control':'no-store, private'})
+
+
+class OrderAccessView(OrdersView):
+    def get(self,request):
+        store=self.check_access()
+        return Response({'store_id':store.pk,'actions':order_capabilities(request.user)})
+
+class OrderSalesView(OrdersView):
+    creation_options=True
+    def get(self,request):
+        from .models import Sale
+        store=self.check_access()
+        sales=Sale.objects.filter(store=store,status='completed',customer__isnull=False,service_order__isnull=True).select_related('customer').order_by('-pk')
+        pagination=SalesPagination()
+        page=pagination.paginate_queryset(sales,request,view=self)
+        return pagination.get_paginated_response([{'id':s.pk,'customer_name':s.customer.name} for s in page])

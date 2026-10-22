@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from accounts.selectors import get_accessible_stores
+from .work_order_permissions import require_order_action
 from .models import Sale
 from .work_order_models import ServiceOrder, ServiceOrderEvent, ServiceOrderOperation
 
@@ -14,13 +15,13 @@ def order_fields(order):
 
 
 def operate_order(*, user, store, sale_id, order_id, values, digest):
+    if not user or not user.is_authenticated:
+        raise PermissionDenied('A autenticação é obrigatória.')
     with transaction.atomic():
         user = get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
         if not user.is_active or not get_accessible_stores(user).filter(pk=store.pk).exists():
             raise PermissionDenied('O acesso à unidade não está disponível.')
-        permission = 'add' if order_id is None else 'change'
-        if not user.has_perm('sales.view_serviceorder') or not user.has_perm(f'sales.{permission}_serviceorder'):
-            raise PermissionDenied('Você não tem permissão para esta operação de OS.')
+        require_order_action(user, values.get('action'))
         previous = ServiceOrderOperation.objects.select_related('order__sale').filter(request_id=values['request_id']).first()
         if previous:
             if previous.created_by_id != user.pk or previous.order.sale.store_id != store.pk:

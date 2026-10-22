@@ -347,3 +347,16 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - A interface separa o bloqueio de edição da disponibilidade de transições: um perfil de aceite pode aceitar sem alterar os termos; um perfil de impressão pode imprimir sem editar. Consultar permite selecionar propostas existentes; add sem view permite cadastrar e receber confirmação sem listar/reabrir registros.
 - O admin dos históricos de proposta e seus itens/eventos/operações exige consulta de orçamento e mantém o filtro por unidade, além dos direitos de leitura próprios do admin. Não permite editar ou excluir históricos.
 - Staff, gerente e direitos de venda não substituem ações de orçamento. Os direitos são globais de modelo e operam somente sobre unidades acessíveis. A migração cria as permissões e não as atribui automaticamente.
+
+
+## Permissões por ação nas ordens de serviço
+
+- A consulta (`sales.view_serviceorder`) é pré-requisito de toda operação de OS.
+- Abertura exige também `sales.add_serviceorder`; edição exige `sales.change_serviceorder`.
+- Avanço, retrabalho e cancelamento exigem respectivamente `sales.advance_serviceorder`, `sales.rework_serviceorder` e `sales.cancel_serviceorder`.
+- Editar não concede avanço, retrabalho nem cancelamento. Perfil de vínculo e acesso ao Django Admin não substituem essas permissões.
+- Direitos do usuário e de grupos são consultados novamente por requisição. Repetições idempotentes também verificam a permissão vigente antes de recuperar o resultado.
+- A seleção de vendas para abertura fornece somente identificador e nome do cliente de vendas finalizadas com cliente, sem OS, da unidade autorizada. Não exige consulta ao módulo comercial completo.
+- Conferência e entrega continuam exigindo confirmação; entrega, retrabalho e cancelamento mantêm os motivos obrigatórios. Cancelar OS não cancela venda, estoque ou pagamentos.
+- OS entregue ou cancelada permanece imutável; receita continua sujeita à permissão clínica separada.
+- A migração cria as permissões, sem concedê-las automaticamente. Configure concessões diretas e herdadas em Usuários e acessos.

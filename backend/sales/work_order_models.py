@@ -31,6 +31,7 @@ class ServiceOrder(models.Model):
         verbose_name = 'Ordem de serviço'
         verbose_name_plural = 'Ordens de serviço'
         ordering = ['-pk']
+        permissions = [('advance_serviceorder','Pode avançar etapas da OS'), ('rework_serviceorder','Pode registrar retrabalho da OS'), ('cancel_serviceorder','Pode cancelar a OS')]
         constraints = [models.CheckConstraint(condition=models.Q(status__in=['open','laboratory','mounting','checking','ready','delivered','cancelled']), name='service_order_status_valid'), models.CheckConstraint(condition=models.Q(version__gte=1), name='service_order_version_positive')]
 
     def save(self, *args, _service=False, **kwargs):

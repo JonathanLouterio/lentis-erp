@@ -1,3 +1,4 @@
+import { useOrderAccess } from '../hooks/useOrderAccess'
 import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useFinanceAccess } from '../hooks/useFinanceAccess'
 import { getSaleAccess } from '../api'
@@ -189,8 +190,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return () => { ignore = true }
   }, [selectedStore?.id, page, catalogRetry])
   const financeRights=useFinanceAccess(selectedStore?.id ?? 0,catalogRetry)
+  const orderRights=useOrderAccess(selectedStore?.id ?? 0,catalogRetry)
   const quoteRights=useQuoteAccess(selectedStore?.id ?? 0,catalogRetry)
   function catalogMenuVisible(item: string) {
+    if(item==='Ordens de serviço')return !!orderRights.access?.actions.view
     if(item==='Orçamentos')return !!quoteRights.access && Object.values(quoteRights.access.actions).some(Boolean)
     if(item==='Caixa')return !!financeRights.access && Object.values(financeRights.access.cash).some(Boolean)
     if(item==='Financeiro')return !!financeRights.access && (financeRights.access.receipts.view || financeRights.access.receipts.receive)
@@ -536,7 +539,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           ) : !catalogMenuVisible(page) ? (
             <section className="erp-card"><h1>Acesso não permitido</h1><p>Solicite ao administrador as permissões para este módulo nesta unidade.</p><button type="button" className="erp-action-button" onClick={() => setCatalogRetry(value => value + 1)}>Atualizar acessos</button></section>
           ) : page === 'Vendas' ? (
-            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} onServiceOrder={(id) => { if (!leaveSaleAllowed()) return; setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} onServiceOrder={orderRights.access?.actions.view ? (id) => { if (!leaveSaleAllowed()) return; setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') } : undefined} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Ordens de serviço' ? (
             <ServiceOrders initialSaleId={orderSaleId} key={`${selectedStore.id}.${orderSaleId ?? "list"}`} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Receitas' ? (

@@ -15,7 +15,7 @@ class ServiceOrderTests(TestCase):
 
     def grant(self, user=None, *codes):
         user = user or self.user
-        codes = codes or ('view_serviceorder','add_serviceorder','change_serviceorder')
+        codes = codes or ('view_serviceorder','add_serviceorder','change_serviceorder','advance_serviceorder','rework_serviceorder','cancel_serviceorder')
         user.user_permissions.add(*Permission.objects.filter(content_type__app_label='sales',codename__in=codes))
         for attr in ('_perm_cache','_user_perm_cache','_group_perm_cache'):
             if hasattr(user,attr):delattr(user,attr)

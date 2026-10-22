@@ -81,7 +81,7 @@ class CustomerHistoryView(SalesBaseView):
         if section=='quotes' and not can_quotes:
             raise PermissionDenied('Você não tem permissão de consultar orçamentos.')
         can_rx=request.user.has_perm('organizations.view_prescription')
-        can_orders=request.user.has_perm('sales.view_serviceorder')
+        can_orders=bool(actor and actor.has_perm('sales.view_serviceorder'))
         if section=='prescriptions' and not can_rx:
             raise PermissionDenied('Você não tem permissão de consultar receitas.')
         if section=='orders' and not can_orders:

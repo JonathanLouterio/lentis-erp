@@ -613,7 +613,7 @@ export type ServiceOrderStatus = 'open'|'laboratory'|'mounting'|'checking'|'read
 export type ServiceOrder = {
   id:number; sale_id:number; sale_status:SaleStatus; customer_name:string; status:ServiceOrderStatus; status_label:string
   version:number; promised_on:string; laboratory:string; frame_description:string; lens_description:string; notes:string
-  created_at:string; updated_at:string; overdue:boolean; has_prescription:boolean; can_change:boolean; next_status:ServiceOrderStatus|null
+  created_at:string; updated_at:string; overdue:boolean; has_prescription:boolean; can_change:boolean; actions:OrderActions; next_status:ServiceOrderStatus|null
   items?:{product_id:number;code:string;name:string;quantity:string}[]
   prescription?:SalePrescriptionRecord|null; can_view_prescription?:boolean
   events?:{version:number;action:string;from_status:string;to_status:string;reason:string;snapshot:Record<string,string>;creator_username:string;created_at:string}[]
@@ -801,3 +801,8 @@ export type QuoteCustomerChoice = Pick<Customer,'id'|'name'>
 export type QuoteProductChoice = Pick<Product,'id'|'internal_code'|'name'|'sale_price'>
 export function getQuoteAccess(storeId:number):Promise<QuoteAccess>{return request(`/api/me/quotes/access/?store_id=${storeId}`)}
 export function getQuoteOptions(storeId:number):Promise<{customers:QuoteCustomerChoice[];products:QuoteProductChoice[]}>{return request(`/api/me/quotes/options/?store_id=${storeId}`)}
+
+export type OrderActions = {view:boolean;create:boolean;update:boolean;advance:boolean;rework:boolean;cancel:boolean}
+export type OrderAccess = {store_id:number;actions:OrderActions}
+export function getOrderAccess(storeId:number):Promise<OrderAccess>{return request(`/api/me/service-orders/access/?store_id=${storeId}`)}
+export function getOrderSales(storeId:number,page:number):Promise<{results:{id:number;customer_name:string}[];next:string|null}>{return request(`/api/me/service-orders/sales/?store_id=${storeId}&page=${page}`)}
