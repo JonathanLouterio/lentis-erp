@@ -12,7 +12,7 @@ class PrescriptionAPITests(TestCase):
 
     def grant(self, user=None, *codes):
         user = user or self.user
-        codes = codes or ('view_prescription','add_prescription','change_prescription')
+        codes = codes or ('view_prescription','add_prescription','change_prescription','archive_prescription')
         user.user_permissions.add(*Permission.objects.filter(content_type__app_label='organizations',codename__in=codes))
         for attr in ('_perm_cache','_user_perm_cache','_group_perm_cache'):
             if hasattr(user,attr):delattr(user,attr)

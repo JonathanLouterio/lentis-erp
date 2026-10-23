@@ -10,7 +10,10 @@ from . import test_prescriptions as rx_fixtures
 
 
 class CustomerHistoryTests(TestCase):
-    setUp=fixtures.PaymentCheckoutTests.setUp
+    def setUp(self):
+        fixtures.PaymentCheckoutTests.setUp(self)
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='organizations',codename__in=['view_customer','view_customer_history']))
+        self.user.user_permissions.add(Permission.objects.get(content_type__app_label='sales',codename='view_receivable'))
     data=fixtures.PaymentCheckoutTests.data
 
     def url_history(self,section='summary',customer=None,store=None,**query):

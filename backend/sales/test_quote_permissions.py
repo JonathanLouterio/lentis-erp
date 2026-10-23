@@ -134,15 +134,19 @@ class QuotePermissionTests(TestCase):
         self.grant('view');self.assertEqual(self.client.get(self.url('options/')).status_code,403)
 
     def test_customer_history_also_requires_quote_consultation(self):
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='organizations',codename__in=['view_customer','view_customer_history']))
         base=f'/api/me/customers/{self.customer.pk}/history/?store_id={self.store.pk}'
         for suffix in ['&section=quotes',f'&section=quotes&record_id={self.quote.pk}']:
             self.assertEqual(self.client.get(base+suffix).status_code,403)
         summary=self.client.get(base).data
         self.assertFalse(summary['permissions']['quotes']);self.assertIsNone(summary['summary']['quotes'])
         self.grant('view')
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='organizations',codename__in=['view_customer','view_customer_history']))
         self.assertEqual(self.client.get(base+'&section=quotes').status_code,200)
         self.assertEqual(self.client.get(base).data['summary']['quotes'],1)
-        self.grant();self.assertEqual(self.client.get(base+'&section=quotes').status_code,403)
+        self.grant()
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='organizations',codename__in=['view_customer','view_customer_history']))
+        self.assertEqual(self.client.get(base+'&section=quotes').status_code,403)
 
     def test_service_permission_is_checked_before_replay_and_validation(self):
         with self.assertRaises(PermissionDenied):operate_quote(user=self.user,store=self.store,quote_id=self.quote.pk,action='send',request_id=uuid.uuid4(),digest='test',validated_values=lambda:{'expected_version':1})

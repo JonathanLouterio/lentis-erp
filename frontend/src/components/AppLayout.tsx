@@ -1,3 +1,4 @@
+import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { usePurchaseAccess } from '../hooks/usePurchaseAccess'
 import { useOrderAccess } from '../hooks/useOrderAccess'
 import { useQuoteAccess } from '../hooks/useQuoteAccess'
@@ -191,10 +192,13 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return () => { ignore = true }
   }, [selectedStore?.id, page, catalogRetry])
   const financeRights=useFinanceAccess(selectedStore?.id ?? 0,catalogRetry)
+  const clinicalRights=useClinicalAccess(selectedStore?.id ?? 0,catalogRetry)
   const purchaseRights=usePurchaseAccess(selectedStore?.id ?? 0,catalogRetry)
   const orderRights=useOrderAccess(selectedStore?.id ?? 0,catalogRetry)
   const quoteRights=useQuoteAccess(selectedStore?.id ?? 0,catalogRetry)
   function catalogMenuVisible(item: string) {
+    if(item==='Receitas')return !!clinicalRights.access?.prescriptions.view
+    if(item==='Histórico do cliente')return !!clinicalRights.access?.history
     if(item==='Compras')return !!purchaseRights.access?.purchases.view
     if(item==='Contas a pagar')return !!purchaseRights.access?.payables.view
     if(item==='Ordens de serviço')return !!orderRights.access?.actions.view
@@ -656,7 +660,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {loadingCustomers ? <p role="status">Carregando clientes…</p>
                   : customersError ? <p className="erp-alert" role="alert">{customersError}</p>
                   : filteredCustomers.length === 0 ? <p>Nenhum cliente encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions"><button type="button" className="erp-table-button" disabled={workspaceBusy} onClick={() => { setHistoryCustomerId(customer.id); setPage('Histórico do cliente') }}>Histórico</button>{access?.customers.change && <button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button>}{access?.customers.delete && <button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Inativar</button>}</td></tr>)}</tbody></table></div>}
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>E-mail</th><th>Ações</th></tr></thead><tbody>{filteredCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.person_type === 'company' ? customer.cnpj || '—' : customer.cpf || '—'}</td><td>{customer.phone || '—'}</td><td>{customer.email || '—'}</td><td className="erp-customer-actions">{clinicalRights.access?.history&&<button type="button" className="erp-table-button" disabled={workspaceBusy} onClick={() => { setHistoryCustomerId(customer.id); setPage('Histórico do cliente') }}>Histórico</button>}{access?.customers.change && <button type="button" className="erp-table-button" onClick={() => openEditCustomer(customer)}>Editar</button>}{access?.customers.delete && <button type="button" className="erp-table-button is-danger" onClick={() => void handleDeleteCustomer(customer)}>Inativar</button>}</td></tr>)}</tbody></table></div>}
               </div> : <div className="erp-card"><p>Você não tem permissão para consultar a lista de clientes. O cadastro de novos registros depende da permissão de cadastrar.</p></div>}
             </section>
           ) : page === 'Visão geral' ? (

@@ -16,15 +16,16 @@ from rest_framework.views import APIView
 from accounts.selectors import get_accessible_stores
 from .models import Customer, Prescription, PrescriptionRevision, PrescriptionOperation
 from .prescription_models import CLINICAL_FIELDS
+from .clinical_permissions import ClinicalActionPermission, prescription_capabilities, clinical_access, current_clinical_user
 from .views import SelectedStoreMixin
 
 
 def require_permission(user, action):
-    permission = 'add' if action == 'created' else 'change'
-    if not user.is_active or not user.has_perm('organizations.view_prescription'):
-        raise PermissionDenied('Seu usuário precisa da permissão de visualizar receitas oftalmológicas.')
-    if action and not user.has_perm(f'organizations.{permission}_prescription'):
-        raise PermissionDenied('Seu usuário não tem permissão para registrar ou corrigir receitas.')
+    user=current_clinical_user(user)
+    caps=prescription_capabilities(user)
+    key={None:'view','created':'create','updated':'update','archived':'archive'}.get(action)
+    if not key or not caps[key]:
+        raise PermissionDenied('Seu usuário não tem permissão para esta ação de receita oftalmológica.')
 
 
 def snapshot(record):
@@ -109,7 +110,7 @@ def operate(request, store, action, record_id=None):
 
 class PrescriptionBase(SelectedStoreMixin, APIView):
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClinicalActionPermission]
     def output(self, record): return Response(PrescriptionOutput(query(record.store).get(pk=record.pk)).data)
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request,response,*args,**kwargs)
@@ -133,6 +134,7 @@ class PrescriptionsView(PrescriptionBase):
         response = pagination.get_paginated_response(PrescriptionOutput(rows,many=True).data)
         response.data['can_create']=request.user.has_perm('organizations.add_prescription')
         response.data['can_edit']=request.user.has_perm('organizations.change_prescription')
+        response.data['can_archive']=prescription_capabilities(request.user)['archive']
         return response
     def post(self,request): return self.output(operate(request,self._selected_store(),'created'))
 
@@ -148,4 +150,23 @@ class PrescriptionDetailView(PrescriptionBase):
 
 
 class PrescriptionArchiveView(PrescriptionBase):
+    clinical_action='archive'
+    http_method_names=['post','options']
     def post(self,request,record_id): return self.output(operate(request,self._selected_store(),'archived',record_id))
+
+
+class ClinicalAccessView(PrescriptionBase):
+    access_only=True
+    http_method_names=['get','head','options']
+    def get(self,request):
+        store=self._selected_store()
+        return Response({'store_id':store.pk,**clinical_access(request.user)})
+
+class PrescriptionCustomersView(PrescriptionBase):
+    http_method_names=['get','head','options']
+    def get(self,request):
+        store=self._selected_store()
+        records=Customer.objects.filter(store=store,is_active=True).order_by('name','pk')
+        pagination=PageNumberPagination();pagination.page_size=25
+        rows=pagination.paginate_queryset(records,request,view=self)
+        return pagination.get_paginated_response([{'id':r.pk,'name':r.name} for r in rows])

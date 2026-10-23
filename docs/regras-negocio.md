@@ -375,3 +375,16 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Direitos diretos e herdados são lidos da conta atual; revogação bloqueia também reenvio idempotente. Permissões de uma ação não substituem vínculo ativo à unidade.
 - Django Admin permanece somente leitura para compras e contas a pagar. A consulta dos registros técnicos de pagamento também exige consulta de títulos.
 - As novas permissões não são concedidas automaticamente pela migração.
+
+
+## Permissões de receitas e histórico do cliente
+
+- Toda leitura de receita, incluindo cópias em vendas e OS, exige `organizations.view_prescription` na conta ativa atual. Permissões diretas e herdadas são reavaliadas por requisição.
+- Cadastro exige adicionalmente `add_prescription`; correção exige `change_prescription`; arquivamento exige `archive_prescription`. Corrigir não autoriza arquivar. A migração não concede direitos automaticamente.
+- Arquivamento exige motivo e versão atual, preserva revisões e cópias já utilizadas e não admite alterações posteriores nem exclusão física pelo fluxo da API.
+- O seletor de clientes das receitas fornece apenas id/nome de clientes ativos da unidade autorizada, com paginação. Não exige nem libera o cadastro completo de clientes.
+- Consultar o histórico consolidado exige `organizations.view_customer` e `organizations.view_customer_history`, além de acesso à unidade.
+- Cada seção do histórico exige também o direito próprio: `sales.view_sale`, `sales.view_quote`, `sales.view_serviceorder`, `sales.view_receivable` ou `organizations.view_prescription`.
+- Sem o direito de uma seção, a API nega lista/detalhe e retorna contagens/resumos correspondentes como null. Sem consulta de recebíveis, os saldos financeiros do histórico ficam ocultos; sem consulta de vendas, suas contagens ficam ocultas.
+- O histórico não concede alteração de receitas, vendas ou OS. Permissões comerciais não concedem leitura clínica. A escolha de receita na venda mantém os direitos clínicos e de alteração comercial já exigidos.
+- Ao retornar o foco ao navegador, os acessos clínicos são atualizados e as telas ocultam cópias/valores para os quais o acesso foi revogado. As chamadas diretas permanecem protegidas no servidor.

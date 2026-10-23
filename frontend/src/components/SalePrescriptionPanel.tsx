@@ -1,5 +1,6 @@
+import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { useEffect, useState } from 'react'
-import { getPrescriptions, getSalePrescriptionAccess, getSalePrescriptionHistory } from '../api'
+import { getPrescriptions, getSalePrescriptionHistory } from '../api'
 import type { Prescription, PrescriptionField, PrescriptionValues, SalePrescriptionRecord, SalePrescriptionSelection } from '../api'
 import {dateTime,displayDate,failure} from './saleMoney'
 import './Prescriptions.css'
@@ -10,14 +11,16 @@ function format(value:string|number|null|undefined){return value===null||value==
 function Readout({data}:{data:PrescriptionValues & {customer_name?:string}}){return <>{data.customer_name&&<p>Cliente na cópia: {data.customer_name}</p>}<p>Data da receita: {displayDate(data.issued_on)} · Prescritor: {data.prescriber_name||'Não informado'}</p>{data.prescriber_registration&&<p>Registro: {data.prescriber_registration}</p>}<dl className="erp-rx-history-values">{(Object.keys(labels) as PrescriptionField[]).map(field=><div key={field}><dt>{labels[field]}</dt><dd>{format(data[field])}</dd></div>)}</dl>{data.notes&&<p className="erp-rx-notes">{data.notes}</p>}</>}
 
 export default function SalePrescriptionPanel({storeId,customerId,saleId,current,selection,readOnly,blocked,onChange}:Props){
-  const [access,setAccess]=useState<boolean|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[rows,setRows]=useState<Prescription[]>([]),[page,setPage]=useState(1),[hasNext,setHasNext]=useState(false),[reload,setReload]=useState(0)
+  const [error,setError]=useState(''),[loading,setLoading]=useState(false),[rows,setRows]=useState<Prescription[]>([]),[page,setPage]=useState(1),[hasNext,setHasNext]=useState(false),[reload,setReload]=useState(0)
   const [savedCopy,setSavedCopy]=useState<SalePrescriptionRecord|null>(null)
   const [candidate,setCandidate]=useState<Prescription|null>(null),[history,setHistory]=useState<SalePrescriptionRecord[]|null>(null),[historyLoading,setHistoryLoading]=useState(false)
-  useEffect(()=>{let ignore=false;void getSalePrescriptionAccess(storeId).then(value=>{if(!ignore)setAccess(value.can_view)}).catch((err:unknown)=>{if(!ignore)setError(failure(err))});return()=>{ignore=true}},[storeId])
-  useEffect(()=>{if(!access||!customerId||readOnly)return;let ignore=false;setLoading(true);setError('');void getPrescriptions(storeId,page,String(customerId),'active').then(data=>{if(!ignore){setRows(data.results);setHasNext(!!data.next)}}).catch((err:unknown)=>{if(!ignore){setRows([]);setError(failure(err))}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[storeId,customerId,access,page,reload,readOnly])
+  const rights=useClinicalAccess(storeId,reload)
+  const access=rights.loading&&!rights.access?null:!!rights.access?.prescriptions.view
+
+  useEffect(()=>{if(!access||!customerId||readOnly){setRows([]);setCandidate(null);return;}let ignore=false;setLoading(true);setError('');void getPrescriptions(storeId,page,String(customerId),'active').then(data=>{if(!ignore){setRows(data.results);setHasNext(!!data.next)}}).catch((err:unknown)=>{if(!ignore){setRows([]);setError(failure(err))}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[storeId,customerId,access,page,reload,readOnly])
   useEffect(()=>{if(!selection)setCandidate(null)},[selection])
   useEffect(()=>{setSavedCopy(null);setHistory(null);if(!access||!saleId||!current?.id)return;let ignore=false;void getSalePrescriptionHistory(storeId,saleId).then(records=>{if(!ignore)setSavedCopy(records.find(record=>record.id===current.id)??null)}).catch((err:unknown)=>{if(!ignore)setError(failure(err))});return()=>{ignore=true}},[storeId,saleId,current?.id,access])
-  async function loadHistory(){if(!saleId)return;setHistoryLoading(true);setError('');try{setHistory(await getSalePrescriptionHistory(storeId,saleId))}catch(err){setError(failure(err))}finally{setHistoryLoading(false)}}
+  async function loadHistory(){if(!saleId||!access)return;setHistoryLoading(true);setError('');try{setHistory(await getSalePrescriptionHistory(storeId,saleId))}catch(err){setError(failure(err))}finally{setHistoryLoading(false)}}
   const value=selection?selection.prescription_id===null?'none':`${selection.prescription_id}:${selection.version}`:'keep'
   function choose(next:string){if(next==='keep'){onChange(null);setCandidate(null);return}if(next==='none'){onChange({prescription_id:null,expected_record_id:current?.id??null});setCandidate(null);return}const record=rows.find(item=>`${item.id}:${item.version}`===next);if(record){setCandidate(record);onChange({prescription_id:record.id,version:record.version,expected_record_id:current?.id??null})}}
   if(access===false)return <div className="erp-card"><h2>Receita do atendimento</h2><p className="erp-sales-hint">A consulta e a seleção de receitas exigem a permissão de visualizar receitas oftalmológicas. Os demais dados da venda continuam disponíveis.</p></div>

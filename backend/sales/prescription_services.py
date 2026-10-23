@@ -6,7 +6,8 @@ from .prescription_models import SalePrescription
 
 
 def can_view_prescriptions(user):
-    return bool(user.is_active and user.has_perm('organizations.view_prescription'))
+    from organizations.clinical_permissions import current_clinical_user, prescription_capabilities
+    return prescription_capabilities(current_clinical_user(user))['view']
 
 
 def apply_prescription(sale, user, selection):

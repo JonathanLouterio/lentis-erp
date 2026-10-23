@@ -151,6 +151,7 @@ class Customer(models.Model):
     class Meta:
         verbose_name = "Cliente"
         verbose_name_plural = "Clientes"
+        permissions = [("view_customer_history","Consultar histórico consolidado do cliente")]
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(

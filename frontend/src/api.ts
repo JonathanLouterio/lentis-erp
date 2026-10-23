@@ -590,7 +590,7 @@ export const prescriptionFields = ['od_sphere','od_cylinder','od_axis','od_addit
 export type PrescriptionField = typeof prescriptionFields[number]
 export type PrescriptionValues = Record<PrescriptionField, string | number | null> & { issued_on: string; prescriber_name: string; prescriber_registration: string; notes: string }
 export type Prescription = PrescriptionValues & { id: number; store: number; customer: number; customer_name: string; version: number; is_active: boolean; creator_username: string; editor_username: string; created_at: string; updated_at: string; revisions?: { version:number; action:string; reason:string; created_at:string; creator_username:string; snapshot: PrescriptionValues & {customer_id:number;is_active:boolean} }[] }
-export type PrescriptionPage = CashPage<Prescription> & {can_create: boolean;can_edit:boolean}
+export type PrescriptionPage = CashPage<Prescription> & {can_create: boolean;can_edit:boolean;can_archive:boolean}
 export type PrescriptionAttempt = { action:'save'|'archive'; id:number|null; payload: Record<string,unknown> & {request_id:string} }
 export function getPrescriptions(storeId:number, page=1, customerId='', status='active'):Promise<PrescriptionPage> {
   const query = new URLSearchParams({store_id:String(storeId),page:String(page),status})
@@ -634,8 +634,8 @@ export async function submitServiceOrder(storeId:number,attempt:ServiceOrderAtte
 
 export type CustomerHistorySection = 'sales'|'quotes'|'prescriptions'|'orders'|'installments'
 export type CustomerHistorySummary = {
-  customer:Customer; generated_at:string; permissions:{quotes:boolean;prescriptions:boolean;orders:boolean}
-  summary:{completed_sales:number;draft_sales:number;quotes:number|null;orders:number|null;prescriptions:number|null;customer_pending:string;operator_pending:string;customer_overdue:string}
+  customer:Customer; generated_at:string; permissions:{sales:boolean;quotes:boolean;prescriptions:boolean;orders:boolean;installments:boolean}
+  summary:{completed_sales:number|null;draft_sales:number|null;quotes:number|null;orders:number|null;prescriptions:number|null;customer_pending:string|null;operator_pending:string|null;customer_overdue:string|null}
 }
 export type CustomerHistoryRecord = {
   id:number;kind:CustomerHistorySection;date:string;title:string;status:string;status_label:string;amount:string|null;sale_id:number|null
@@ -812,3 +812,7 @@ export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{
 export type PurchaseOptions={results:{id:number;name:string;document:string}[];next:string|null;products:{id:number;internal_code:string;name:string;cost_price:string}[]}
 export function getPurchaseAccess(storeId:number):Promise<PurchaseAccess>{return request(`/api/me/purchases/access/?store_id=${storeId}`)}
 export function getPurchaseOptions(storeId:number,page:number):Promise<PurchaseOptions>{return request(`/api/me/purchases/options/?store_id=${storeId}&page=${page}`)}
+
+export type ClinicalAccess={store_id:number;prescriptions:{view:boolean;create:boolean;update:boolean;archive:boolean};history:boolean;sections:Record<CustomerHistorySection,boolean>}
+export function getClinicalAccess(storeId:number):Promise<ClinicalAccess>{return request(`/api/me/clinical-access/?store_id=${storeId}`)}
+export function getPrescriptionCustomers(storeId:number,page=1):Promise<CashPage<{id:number;name:string}>>{return request(`/api/me/prescriptions/customers/?store_id=${storeId}&page=${page}`)}

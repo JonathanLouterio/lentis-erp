@@ -1,5 +1,4 @@
-import { useOrderAccess } from '../hooks/useOrderAccess'
-import { useQuoteAccess } from '../hooks/useQuoteAccess'
+import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { useEffect, useState } from 'react'
 import { getCustomerHistorySummary, getCustomerHistoryRecords, getCustomerHistoryRecord } from '../api'
 import type { AccessibleStore, CashPage, CustomerHistorySummary, CustomerHistoryRecord, CustomerHistorySection } from '../api'
@@ -24,44 +23,45 @@ export default function CustomerHistory({store,customerId,onBack,onSale,onOrder}
   const [summaryError,setSummaryError]=useState('')
   const [reload,setReload]=useState(0)
   const [detailId,setDetailId]=useState<number|null>(null)
-  const orderRights=useOrderAccess(store.id,reload)
-  const canOrders=!!orderRights.access?.actions.view
-  const quoteRights=useQuoteAccess(store.id,reload)
-  const canQuotes=!!summary?.permissions.quotes && !!quoteRights.access?.actions.view
+  const rights=useClinicalAccess(store.id,reload)
+  const allowed=rights.access?.sections
+
 
   useEffect(()=>{
+    if(!rights.access?.history)return
     let ignore=false
     setLoadingSummary(true);setSummary(null);setSummaryError('')
     void getCustomerHistorySummary(store.id,customerId).then(v=>{if(!ignore)setSummary(v)}).catch(e=>{if(!ignore)setSummaryError(failure(e))}).finally(()=>{if(!ignore)setLoadingSummary(false)})
     return()=>{ignore=true}
-  },[store.id,customerId,reload])
+  },[store.id,customerId,reload,rights.access?.history])
   useEffect(()=>{
     let ignore=false
     setRecords(emptyPage);setDetail(null);setDetailId(null);setError('');setLoading(true)
     if(!summary){setLoading(false);return()=>{ignore=true}}
-    const restricted=(section==='quotes'&&!canQuotes)||(section==='prescriptions'&&!summary.permissions.prescriptions)||(section==='orders'&&(!summary.permissions.orders||!canOrders))
+    const restricted=!allowed?.[section]
     if(restricted){setError('Você não tem permissão para esta seção.');setLoading(false);return()=>{ignore=true}}
     void getCustomerHistoryRecords(store.id,customerId,section,page).then(v=>{if(!ignore)setRecords(v)}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoading(false)})
     return()=>{ignore=true}
-  },[store.id,customerId,section,page,summary,canQuotes,canOrders])
+  },[store.id,customerId,section,page,summary,allowed])
   useEffect(()=>{
     let ignore=false
     setDetail(null);setLoadingDetail(false)
-    if(detailId===null || (section==='quotes'&&!canQuotes)||(section==='orders'&&!canOrders))return()=>{ignore=true}
+    if(detailId===null||!allowed?.[section])return()=>{ignore=true}
     setLoadingDetail(true);setError('')
     void getCustomerHistoryRecord(store.id,customerId,section,detailId).then(v=>{if(!ignore)setDetail(v)}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoadingDetail(false)})
     return()=>{ignore=true}
-  },[store.id,customerId,section,detailId,reload,canQuotes,canOrders])
+  },[store.id,customerId,section,detailId,reload,allowed])
   const customer=summary?.customer
   const address=customer?[customer.street,customer.address_number,customer.address_complement,customer.neighborhood,customer.city,customer.state,customer.zip_code].filter(Boolean).join(' · '):''
 
+  if(!rights.access?.history)return <section className="erp-card"><h1>Histórico do cliente</h1><p>{rights.loading?'Conferindo acessos…':rights.error||'Solicite permissão para consultar o histórico deste cliente.'}</p><button type="button" onClick={onBack}>Voltar aos clientes</button></section>
   return <section className="customer-history">
     <header className="ch-heading"><div><span className="erp-kicker">CLIENTES · {store.name}</span><h1>Histórico do cliente</h1><p>Atendimentos e pendências reunidos por unidade.</p></div><div className="ch-buttons"><button type="button" className="erp-secondary-button" onClick={onBack}>Voltar aos clientes</button><button type="button" className="erp-secondary-button" onClick={()=>setReload(v=>v+1)} disabled={loadingSummary}>Atualizar histórico</button></div></header>
     {loadingSummary?<p role="status">Carregando histórico…</p>:summaryError?<p role="alert" className="erp-alert">{summaryError}</p>:customer&&summary?<>
       <div className="erp-card ch-customer"><div><h2>{customer.name}</h2><p>{customer.person_type==='company'?'Pessoa jurídica':'Pessoa física'} · {customer.cpf||customer.cnpj||'Documento não informado'}{!customer.is_active?' · Cadastro inativo':''}</p><p>{[customer.phone,customer.whatsapp,customer.email].filter(Boolean).join(' · ')||'Contato não informado'}</p>{address&&<p>{address}</p>}</div><small>Atualizado em {dateTime.format(new Date(summary.generated_at))}</small></div>
-      <div className="ch-metrics"><div className="erp-card"><span>Vendas finalizadas</span><strong>{summary.summary.completed_sales}</strong><small>{summary.summary.draft_sales} rascunho(s)</small></div><div className="erp-card"><span>Saldo a receber do cliente</span><strong>{money.format(Number(summary.summary.customer_pending))}</strong><small>Vencido: {money.format(Number(summary.summary.customer_overdue))}</small></div><div className="erp-card"><span>A receber da operadora</span><strong>{money.format(Number(summary.summary.operator_pending))}</strong><small>Não é uma dívida do cliente.</small></div></div>
-      <nav className="ch-tabs" aria-label="Seções do histórico">{(Object.keys(tabs) as CustomerHistorySection[]).map(key=><button type="button" key={key} className={section===key?'is-current':''} aria-pressed={section===key} disabled={key==='quotes'&&!canQuotes||key==='prescriptions'&&!summary.permissions.prescriptions||key==='orders'&&(!summary.permissions.orders||!canOrders)} onClick={()=>{setSection(key);setPage(1)}}>{tabs[key]}{key==='quotes'&&canQuotes&&summary.summary.quotes!==null?` (${summary.summary.quotes})`:key==='prescriptions'&&summary.summary.prescriptions!==null?` (${summary.summary.prescriptions})`:key==='orders'&&canOrders&&summary.summary.orders!==null?` (${summary.summary.orders})`:''}</button>)}</nav>
-      {(!canQuotes||!summary.permissions.prescriptions||(!summary.permissions.orders||!canOrders))&&<p className="ch-hint">Algumas seções exigem permissões específicas do usuário.</p>}
+      <div className="ch-metrics"><div className="erp-card"><span>Vendas finalizadas</span><strong>{allowed?.sales?summary.summary.completed_sales??'—':'Acesso restrito'}</strong><small>{allowed?.sales?summary.summary.draft_sales??'—':'—'} rascunho(s)</small></div><div className="erp-card"><span>Saldo a receber do cliente</span><strong>{allowed?.installments&&summary.summary.customer_pending!==null?money.format(Number(summary.summary.customer_pending)):'Acesso restrito'}</strong><small>Vencido: {allowed?.installments&&summary.summary.customer_overdue!==null?money.format(Number(summary.summary.customer_overdue)):'Acesso restrito'}</small></div><div className="erp-card"><span>A receber da operadora</span><strong>{allowed?.installments&&summary.summary.operator_pending!==null?money.format(Number(summary.summary.operator_pending)):'Acesso restrito'}</strong><small>Não é uma dívida do cliente.</small></div></div>
+      <nav className="ch-tabs" aria-label="Seções do histórico">{(Object.keys(tabs) as CustomerHistorySection[]).map(key=><button type="button" key={key} className={section===key?'is-current':''} aria-pressed={section===key} disabled={!allowed?.[key]} onClick={()=>{setSection(key);setPage(1)}}>{tabs[key]}{key==='quotes'&&allowed?.quotes&&summary.summary.quotes!==null?` (${summary.summary.quotes})`:key==='prescriptions'&&allowed?.prescriptions&&summary.summary.prescriptions!==null?` (${summary.summary.prescriptions})`:key==='orders'&&allowed?.orders&&summary.summary.orders!==null?` (${summary.summary.orders})`:''}</button>)}</nav>
+      {Object.values(allowed||{}).some(v=>!v)&&<p className="ch-hint">Algumas seções exigem permissões específicas do usuário.</p>}
       {error&&<p role="alert" className="erp-alert">{error}</p>}
       {section==='installments'&&<p className="ch-hint">Parcelas do cliente e da operadora são identificadas separadamente. Vendas canceladas não compõem o saldo pendente.</p>}
       <div className="ch-grid"><div className="erp-card"><h2>{tabs[section]} <small>({records.count})</small></h2>{loading?<p role="status">Carregando registros…</p>:records.results.length===0?<p>Nenhum registro nesta seção.</p>:records.results.map(r=><button type="button" key={r.id} className={`ch-record${detailId===r.id?' is-selected':''}`} onClick={()=>setDetailId(r.id)} aria-label={`Detalhes de ${r.title}`}><span><strong>{r.title}</strong><small>{dateTime.format(new Date(r.date))}</small></span><span className="ch-status">{r.status_label}</span>{r.amount!==null&&<strong>{money.format(Number(r.amount))}</strong>}{r.remaining!==undefined&&<small>Saldo {money.format(Number(r.remaining))} · Vencimento {r.due_date?dateOnly(r.due_date):'—'} · {r.debtor==='operator'?'Operadora':'Cliente'}{r.overdue?' · Em atraso':''}</small>}</button>)}<div className="ch-pagination"><button type="button" disabled={loading||!records.previous} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={loading||!records.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div></div>
@@ -69,7 +69,7 @@ export default function CustomerHistory({store,customerId,onBack,onSale,onOrder}
         <dl className="ch-fields">{detail.fields.filter(f=>f.value).map((f,i)=><div key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>)}</dl>
         {detail.items.length>0&&<><h3>Itens registrados</h3><div className="ch-table"><table><thead><tr><th>Item</th><th>Quantidade</th><th>Total</th></tr></thead><tbody>{detail.items.map((item,i)=><tr key={i}><td>{item.code} · {item.name}</td><td>{item.quantity}</td><td>{item.total===null?'—':money.format(Number(item.total))}</td></tr>)}</tbody></table></div></>}
         {detail.clinical&&<><h3>Receita atual · versão do cadastro</h3><div className="ch-table"><table><thead><tr><th>Olho</th><th>Esférico</th><th>Cilíndrico</th><th>Eixo</th><th>Adição</th><th>DNP</th></tr></thead><tbody>{(['od','oe'] as const).map(eye=><tr key={eye}><th>{eye.toUpperCase()}</th>{(['sphere','cylinder','axis','addition','dnp'] as const).map(field=><td key={field}>{String(detail.clinical?.[`${eye}_${field}`]??'—')}</td>)}</tr>)}</tbody></table></div><p>DP: {detail.clinical.pd??'—'}</p><p className="ch-hint">As cópias usadas em vendas e OS são preservadas separadamente. Consulte-as no atendimento correspondente.</p></>}
-        <div className="ch-buttons">{detail.sale_id&&<button type="button" className="erp-action-button" onClick={()=>onSale(detail.sale_id!)}>Abrir venda #{detail.sale_id}</button>}{detail.kind==='orders'&&canOrders&&detail.sale_id&&<button type="button" className="erp-secondary-button" onClick={()=>onOrder(detail.sale_id!)}>Acompanhar OS</button>}</div>
+        <div className="ch-buttons">{allowed?.sales&&detail.sale_id&&<button type="button" className="erp-action-button" onClick={()=>onSale(detail.sale_id!)}>Abrir venda #{detail.sale_id}</button>}{detail.kind==='orders'&&allowed?.orders&&detail.sale_id&&<button type="button" className="erp-secondary-button" onClick={()=>onOrder(detail.sale_id!)}>Acompanhar OS</button>}</div>
       </>}</div></div>
     </>:null}
   </section>

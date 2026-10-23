@@ -42,6 +42,7 @@ class Prescription(models.Model):
         verbose_name = 'Receita oftalmológica'
         verbose_name_plural = 'Receitas oftalmológicas'
         ordering = ['-issued_on', '-pk']
+        permissions = [('archive_prescription','Arquivar receita oftalmológica')]
         constraints = [
             models.CheckConstraint(condition=models.Q(version__gte=1), name='prescription_version_positive'),
             models.CheckConstraint(condition=models.Q(od_axis__isnull=True) | models.Q(od_axis__gte=0, od_axis__lte=180), name='prescription_od_axis_valid'),

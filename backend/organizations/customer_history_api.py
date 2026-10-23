@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from sales.models import Sale, Quote, Receivable, FinancialEntry, ServiceOrder
 from sales.views import SalesBaseView, SalesPagination
 from .models import Customer, Prescription
+from .clinical_permissions import ClinicalActionPermission, clinical_access
 from .serializers import CustomerSerializer
 from .prescription_api import snapshot as prescription_snapshot
 
@@ -68,6 +69,12 @@ def row(record, section, detail=False):
 
 
 class CustomerHistoryView(SalesBaseView):
+    permission_classes=[ClinicalActionPermission]
+    customer_history=True
+    def finalize_response(self,request,response,*args,**kwargs):
+        response=super().finalize_response(request,response,*args,**kwargs)
+        response['Cache-Control']='no-store, private'
+        return response
     def get(self,request,customer_id):
         store=self._selected_store()
         # Inativos também mantêm seu histórico; a identidade e a unidade são sempre obrigatórias.
@@ -75,17 +82,10 @@ class CustomerHistoryView(SalesBaseView):
         section=request.query_params.get('section','summary')
         if section not in ('summary','sales','quotes','prescriptions','orders','installments'):
             raise ValidationError({'section':'Seção de histórico inválida.'})
-        from organizations.access_permissions import fresh_actor
-        actor=fresh_actor(request)
-        can_quotes=bool(actor and actor.has_perm('sales.view_quote'))
-        if section=='quotes' and not can_quotes:
-            raise PermissionDenied('Você não tem permissão de consultar orçamentos.')
-        can_rx=request.user.has_perm('organizations.view_prescription')
-        can_orders=bool(actor and actor.has_perm('sales.view_serviceorder'))
-        if section=='prescriptions' and not can_rx:
-            raise PermissionDenied('Você não tem permissão de consultar receitas.')
-        if section=='orders' and not can_orders:
-            raise PermissionDenied('Você não tem permissão de consultar ordens de serviço.')
+        allowed=clinical_access(request.user)['sections']
+        can_quotes=allowed['quotes'];can_rx=allowed['prescriptions'];can_orders=allowed['orders']
+        if section!='summary' and not allowed[section]:
+            raise PermissionDenied('Você não tem permissão de consultar esta seção do histórico.')
         sales=Sale.objects.filter(store=store,customer=customer)
         quotes=Quote.objects.filter(store=store,customer=customer)
         orders=ServiceOrder.objects.filter(sale__store=store,sale__customer=customer)
@@ -97,14 +97,14 @@ class CustomerHistoryView(SalesBaseView):
             totals={}
             for debtor in ('customer','operator'):
                 qs=pending.filter(debtor=debtor)
-                totals[debtor]=money(qs.aggregate(total=Sum('open_amount'))['total'] or ZERO)
+                totals[debtor]=money(qs.aggregate(total=Sum('open_amount'))['total'] or ZERO) if allowed['installments'] else None
             overdue=pending.filter(debtor='customer',due_date__lt=timezone.localdate())
             return Response({'customer':CustomerSerializer(customer).data,'generated_at':timezone.now(),
-                'permissions':{'quotes':can_quotes,'prescriptions':can_rx,'orders':can_orders},
-                'summary':{'completed_sales':sales.filter(status='completed').count(),'draft_sales':sales.filter(status='draft').count(),'quotes':quotes.count() if can_quotes else None,
+                'permissions':allowed,
+                'summary':{'completed_sales':sales.filter(status='completed').count() if allowed['sales'] else None,'draft_sales':sales.filter(status='draft').count() if allowed['sales'] else None,'quotes':quotes.count() if can_quotes else None,
                     'orders':orders.count() if can_orders else None,'prescriptions':prescriptions.count() if can_rx else None,
                     'customer_pending':totals['customer'],'operator_pending':totals['operator'],
-                    'customer_overdue':money(overdue.aggregate(total=Sum('open_amount'))['total'] or ZERO)}},headers=headers)
+                    'customer_overdue':money(overdue.aggregate(total=Sum('open_amount'))['total'] or ZERO) if allowed['installments'] else None}},headers=headers)
         qs={'sales':sales.select_related('created_by').prefetch_related('items','payments__method'),
             'quotes':quotes.prefetch_related('items'), 'orders':orders,
             'prescriptions':prescriptions,'installments':installments}[section].order_by('-created_at','-pk')
