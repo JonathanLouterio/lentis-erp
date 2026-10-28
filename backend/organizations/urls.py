@@ -1,3 +1,4 @@
+from .supplier_api import SupplierAccessView
 from .prescription_api import ClinicalAccessView, PrescriptionCustomersView
 from django.urls import path
 
@@ -20,6 +21,7 @@ from .supplier_api import SuppliersView, SupplierDetailView
 app_name = "organizations"
 
 urlpatterns = [
+    path("me/suppliers/access/", SupplierAccessView.as_view()),
     path("me/clinical-access/", ClinicalAccessView.as_view()),
     path("me/prescriptions/customers/", PrescriptionCustomersView.as_view()),
     path("me/catalog-access/", CatalogAccessView.as_view(), name="catalog-access"),

@@ -546,16 +546,18 @@ export type DashboardPeriod = { preset: 'today' | '7days' | 'month' | 'custom'; 
 export type DashboardData = {
   store_id: number; generated_at: string; today: string; timezone: string
   period: { preset: string; start: string; end: string; previous_start: string; previous_end: string }
-  sales: { count: number; total: string; ticket: string; previous_total: string; previous_count: number; variation: string | null }
-  receipts: { gross: string; refunds: string; net: string }
+  permissions: {sales:boolean;receipts:boolean;receivables:boolean;stock:boolean;cash:boolean}
+  shortcuts:Record<InsightShortcut,boolean>
+  sales: { count: number; total: string; ticket: string; previous_total: string; previous_count: number; variation: string | null } | null
+  receipts: { gross: string; refunds: string; net: string } | null
   receivables: {
     customer: { count: number; amount: string }; operator: { count: number; amount: string }
     overdue: { count: number; amount: string }; due_today: { count: number; amount: string }
     attention: { id: number; sale_id: number; customer_name: string; due_date: string; remaining: string; overdue: boolean }[]
-  }
-  stock: { low_count: number; negative_count: number; items: { id: number; name: string; code: string; quantity: string; minimum: string }[] }
-  cash: { count: number; expected_cash: string; items: { id: number; account_name: string; owner: string; opened_at: string; expected_cash: string }[] }
-  chart: { date: string; sales_count: number; sales: string; received: string }[]
+  } | null
+  stock: { low_count: number; negative_count: number; items: { id: number; name: string; code: string; quantity: string; minimum: string }[] } | null
+  cash: { count: number; expected_cash: string; items: { id: number; account_name: string; owner: string; opened_at: string; expected_cash: string }[] } | null
+  chart: { date: string; sales_count: number|null; sales: string|null; received: string|null }[]
   recent_sales: { id: number; customer_name: string; completed_at: string; total: string }[]
 }
 export function getDashboard(storeId: number, period: DashboardPeriod): Promise<DashboardData> {
@@ -816,3 +818,9 @@ export function getPurchaseOptions(storeId:number,page:number):Promise<PurchaseO
 export type ClinicalAccess={store_id:number;prescriptions:{view:boolean;create:boolean;update:boolean;archive:boolean};history:boolean;sections:Record<CustomerHistorySection,boolean>}
 export function getClinicalAccess(storeId:number):Promise<ClinicalAccess>{return request(`/api/me/clinical-access/?store_id=${storeId}`)}
 export function getPrescriptionCustomers(storeId:number,page=1):Promise<CashPage<{id:number;name:string}>>{return request(`/api/me/prescriptions/customers/?store_id=${storeId}&page=${page}`)}
+
+export type InsightShortcut='new-sale'|'new-customer'|'receivables'|'stock'|'cash'|'sale'
+export type InsightAccess={store_id:number;dashboard:boolean;sections:DashboardData['permissions'];reports:Record<ReportKind,boolean>;export:boolean;shortcuts:Record<InsightShortcut,boolean>}
+export function getInsightAccess(storeId:number):Promise<InsightAccess>{return request(`/api/me/insight-access/?store_id=${storeId}`)}
+export type SupplierAccess={store_id:number;actions:{view:boolean;create:boolean;update:boolean;archive:boolean;restore:boolean}}
+export function getSupplierAccess(storeId:number):Promise<SupplierAccess>{return request(`/api/me/suppliers/access/?store_id=${storeId}`)}

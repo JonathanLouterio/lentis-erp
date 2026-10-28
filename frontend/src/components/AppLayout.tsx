@@ -1,3 +1,5 @@
+import { useInsightAccess } from '../hooks/useInsightAccess'
+import { useSupplierAccess } from '../hooks/useSupplierAccess'
 import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { usePurchaseAccess } from '../hooks/usePurchaseAccess'
 import { useOrderAccess } from '../hooks/useOrderAccess'
@@ -192,11 +194,15 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     return () => { ignore = true }
   }, [selectedStore?.id, page, catalogRetry])
   const financeRights=useFinanceAccess(selectedStore?.id ?? 0,catalogRetry)
+  const insightRights=useInsightAccess(selectedStore?.id ?? 0,catalogRetry)
+  const supplierRights=useSupplierAccess(selectedStore?.id ?? 0,catalogRetry)
   const clinicalRights=useClinicalAccess(selectedStore?.id ?? 0,catalogRetry)
   const purchaseRights=usePurchaseAccess(selectedStore?.id ?? 0,catalogRetry)
   const orderRights=useOrderAccess(selectedStore?.id ?? 0,catalogRetry)
   const quoteRights=useQuoteAccess(selectedStore?.id ?? 0,catalogRetry)
   function catalogMenuVisible(item: string) {
+    if(item==='Fornecedores')return !!supplierRights.access?.actions.view
+    if(item==='Relatórios')return Object.values(insightRights.access?.reports||{}).some(Boolean)
     if(item==='Receitas')return !!clinicalRights.access?.prescriptions.view
     if(item==='Histórico do cliente')return !!clinicalRights.access?.history
     if(item==='Compras')return !!purchaseRights.access?.purchases.view

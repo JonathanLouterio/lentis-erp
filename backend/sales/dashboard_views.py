@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from organizations.models import Product
 from .models import CashSession, FinancialEntry, Receivable, Sale, SaleItem
 from .views import SalesBaseView
+from .insight_permissions import InsightPermission, dashboard_sections, insight_access
 
 BUSINESS_TZ = ZoneInfo('America/Sao_Paulo')
 MONEY = DecimalField(max_digits=28, decimal_places=2)
@@ -65,27 +66,34 @@ def sales_stats(queryset, start, end):
 
 
 class DashboardView(SalesBaseView):
+    permission_classes=[InsightPermission]
+    insight_action='dashboard'
+    def finalize_response(self,request,response,*args,**kwargs):
+        response=super().finalize_response(request,response,*args,**kwargs)
+        response['Cache-Control']='no-store, private'
+        return response
     def get(self, request):
         store = self._selected_store()
         now = timezone.now()
         today = timezone.localtime(now, BUSINESS_TZ).date()
         preset, start, end, previous_start, previous_end = period_for(request.query_params, today)
         lower, upper = bounds(start, end)
+        allowed=dashboard_sections(request.user)
         sales = sales_for(store)
-        current, daily = sales_stats(sales, start, end)
-        previous, _ = sales_stats(sales, previous_start, previous_end)
+        current, daily = sales_stats(sales, start, end) if allowed['sales'] else ({'count':0,'total':'0.00','ticket':'0.00'}, {})
+        previous, _ = sales_stats(sales, previous_start, previous_end) if allowed['sales'] else ({'count':0,'total':'0.00'}, {})
         previous_total = Decimal(previous['total'])
         variation = money((Decimal(current['total']) - previous_total) * 100 / previous_total) if previous_total else None
 
         entries = FinancialEntry.objects.filter(receivable__payment__sale__store=store)
         selected_entries = entries.filter(created_at__gte=lower, created_at__lt=upper)
-        receipts = selected_entries.aggregate(gross=Sum('amount', filter=Q(amount__gt=0)), refunds=Sum('amount', filter=Q(amount__lt=0)))
-        gross, refunds = receipts['gross'] or ZERO, -(receipts['refunds'] or ZERO)
-        entry_days = {row['day'].isoformat(): row['amount'] for row in selected_entries.annotate(day=TruncDate('created_at', tzinfo=BUSINESS_TZ)).values('day').annotate(amount=Sum('amount')).order_by('day')}
+        receipts = selected_entries.aggregate(gross=Sum('amount', filter=Q(amount__gt=0)), refunds=Sum('amount', filter=Q(amount__lt=0))) if allowed['receipts'] else {}
+        gross, refunds = receipts.get('gross') or ZERO, -(receipts.get('refunds') or ZERO)
+        entry_days = {row['day'].isoformat(): row['amount'] for row in selected_entries.annotate(day=TruncDate('created_at', tzinfo=BUSINESS_TZ)).values('day').annotate(amount=Sum('amount')).order_by('day')} if allowed['receipts'] else {}
         chart = []
         for index in range((end - start).days + 1):
             day = (start + timedelta(days=index)).isoformat()
-            chart.append({'date': day, 'sales_count': daily.get(day, (0, ZERO))[0], 'sales': money(daily.get(day, (0, ZERO))[1]), 'received': money(entry_days.get(day, ZERO))})
+            chart.append({'date': day, 'sales_count': daily.get(day, (0, ZERO))[0] if allowed['sales'] else None, 'sales': money(daily.get(day, (0, ZERO))[1]) if allowed['sales'] else None, 'received': money(entry_days.get(day, ZERO)) if allowed['receipts'] else None})
 
         # Estado atual das parcelas: exclui vendas canceladas e conta o saldo
         # parcial, sem multiplicar os valores pela quantidade de recebimentos.
@@ -102,23 +110,24 @@ class DashboardView(SalesBaseView):
         next_due = [
             {'id': item.pk, 'sale_id': item.payment.sale_id, 'customer_name': item.customer_name, 'due_date': item.due_date.isoformat(), 'remaining': money(item.remaining), 'overdue': item.due_date < today}
             for item in customer.filter(due_date__lte=today).select_related('payment').order_by('due_date', 'pk')[:5]
-        ]
+        ] if allowed['receivables'] else []
         products = Product.objects.filter(store=store, is_active=True)
         low = products.filter(stock_quantity__lte=F('minimum_stock'))
-        low_rows = [{'id': item.pk, 'name': item.name, 'code': item.internal_code, 'quantity': str(item.stock_quantity), 'minimum': str(item.minimum_stock)} for item in low.order_by('stock_quantity', 'pk')[:5]]
+        low_rows = [{'id': item.pk, 'name': item.name, 'code': item.internal_code, 'quantity': str(item.stock_quantity), 'minimum': str(item.minimum_stock)} for item in low.order_by('stock_quantity', 'pk')[:5]] if allowed['stock'] else []
         cash = CashSession.objects.filter(account__store=store, closed_at__isnull=True).annotate(
             dashboard_balance=ExpressionWrapper(F('opening_amount') + Coalesce(Sum('postings__amount'), Value(ZERO), output_field=MONEY), output_field=MONEY),
         )
-        cash_summary = cash.aggregate(count=Count('pk'), amount=Sum('dashboard_balance'))
-        cash_rows = [{'id': item.pk, 'account_name': item.account.name, 'owner': item.opened_by.username, 'opened_at': item.opened_at.isoformat(), 'expected_cash': money(item.dashboard_balance)} for item in cash.select_related('account', 'opened_by').order_by('-opened_at', '-pk')[:5]]
-        recent = [{'id': item.pk, 'customer_name': item.customer.name if item.customer_id else 'Venda balcão', 'completed_at': item.completed_at.isoformat(), 'total': money(item.dashboard_total)} for item in sales.filter(completed_at__gte=lower, completed_at__lt=upper).select_related('customer').order_by('-completed_at', '-pk')[:5]]
+        cash_summary = cash.aggregate(count=Count('pk'), amount=Sum('dashboard_balance')) if allowed['cash'] else {}
+        cash_rows = [{'id': item.pk, 'account_name': item.account.name, 'owner': item.opened_by.username, 'opened_at': item.opened_at.isoformat(), 'expected_cash': money(item.dashboard_balance)} for item in cash.select_related('account', 'opened_by').order_by('-opened_at', '-pk')[:5]] if allowed['cash'] else []
+        recent = [{'id': item.pk, 'customer_name': item.customer.name if item.customer_id else 'Venda balcão', 'completed_at': item.completed_at.isoformat(), 'total': money(item.dashboard_total)} for item in sales.filter(completed_at__gte=lower, completed_at__lt=upper).select_related('customer').order_by('-completed_at', '-pk')[:5]] if allowed['sales'] else []
         return Response({
+            'permissions':allowed,'shortcuts':insight_access(request.user)['shortcuts'],
             'store_id': store.pk, 'generated_at': now.isoformat(), 'today': today.isoformat(), 'timezone': 'America/Sao_Paulo',
             'period': {'preset': preset, 'start': start.isoformat(), 'end': end.isoformat(), 'previous_start': previous_start.isoformat(), 'previous_end': previous_end.isoformat()},
-            'sales': {**current, 'previous_total': previous['total'], 'previous_count': previous['count'], 'variation': variation},
-            'receipts': {'gross': money(gross), 'refunds': money(refunds), 'net': money(gross - refunds)},
-            'receivables': {'customer': balance(customer), 'operator': balance(operator), 'overdue': balance(overdue), 'due_today': balance(due_today), 'attention': next_due},
-            'stock': {'low_count': low.count(), 'negative_count': products.filter(stock_quantity__lt=0).count(), 'items': low_rows},
-            'cash': {'count': cash_summary['count'], 'expected_cash': money(cash_summary['amount']), 'items': cash_rows},
+            'sales': {**current, 'previous_total': previous['total'], 'previous_count': previous['count'], 'variation': variation} if allowed['sales'] else None,
+            'receipts': {'gross': money(gross), 'refunds': money(refunds), 'net': money(gross - refunds)} if allowed['receipts'] else None,
+            'receivables': {'customer': balance(customer), 'operator': balance(operator), 'overdue': balance(overdue), 'due_today': balance(due_today), 'attention': next_due} if allowed['receivables'] else None,
+            'stock': {'low_count': low.count(), 'negative_count': products.filter(stock_quantity__lt=0).count(), 'items': low_rows} if allowed['stock'] else None,
+            'cash': {'count': cash_summary['count'], 'expected_cash': money(cash_summary['amount']), 'items': cash_rows} if allowed['cash'] else None,
             'chart': chart, 'recent_sales': recent,
         })

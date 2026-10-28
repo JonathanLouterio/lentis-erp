@@ -27,7 +27,7 @@ class ReportsTests(TestCase):
 
     def grant(self,user=None,app='sales',codes=None):
         user=user or self.user
-        codes=codes or ['view_sale','view_financialentry','view_receivable']
+        codes=codes or ['view_sale','view_financialentry','view_receivable','view_reports','export_reports']
         user.user_permissions.add(*Permission.objects.filter(content_type__app_label=app,codename__in=codes))
         for key in ('_perm_cache','_user_perm_cache','_group_perm_cache'):
             if hasattr(user,key):delattr(user,key)
@@ -83,7 +83,7 @@ class ReportsTests(TestCase):
     def test_anonymous_inactive_user_and_unlinked_unit(self):
         self.grant_all();self.client.force_authenticate(None);self.report(expected=403)
         self.client.force_authenticate(self.user);self.report(expected=400,store_id=self.other.pk)
-        self.user.is_active=False;self.user.save();self.report(expected=400)
+        self.user.is_active=False;self.user.save();self.report(expected=403)
 
     def test_empty_reports_and_no_write_endpoints(self):
         self.grant_all()

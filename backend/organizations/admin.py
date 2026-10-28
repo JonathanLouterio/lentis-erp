@@ -248,6 +248,13 @@ from .supplier_models import Supplier
 
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
+    def current_reader(self,request):
+        from .access_permissions import fresh_actor
+        actor=fresh_actor(request)
+        return bool(actor and actor.has_perm('organizations.view_supplier'))
+    def has_view_permission(self,request,obj=None):return self.current_reader(request) and super().has_view_permission(request,obj)
+    def has_module_permission(self,request):return self.current_reader(request) and super().has_module_permission(request)
+
     list_display=('name','document','store','contact_name','phone','is_active')
     list_filter=('store','person_type','is_active')
     search_fields=('name','trade_name','document','contact_name','phone','email')
@@ -256,7 +263,7 @@ class SupplierAdmin(admin.ModelAdmin):
     actions=None
 
     def get_queryset(self,request):
-        return super().get_queryset(request).filter(store__in=get_accessible_stores(request.user))
+        return super().get_queryset(request).filter(store__in=get_accessible_stores(request.user)) if self.current_reader(request) else super().get_queryset(request).none()
 
     def has_add_permission(self,request):return False
     def has_change_permission(self,request,obj=None):return False

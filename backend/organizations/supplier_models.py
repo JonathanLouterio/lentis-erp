@@ -65,6 +65,7 @@ class Supplier(models.Model):
         verbose_name='Fornecedor'
         verbose_name_plural='Fornecedores'
         ordering=['name','pk']
+        permissions=[('archive_supplier','Inativar fornecedor'),('restore_supplier','Reativar fornecedor')]
         constraints=[models.UniqueConstraint(fields=['store','document'],condition=~models.Q(document=''),name='unique_supplier_document_per_store'),models.CheckConstraint(condition=models.Q(version__gte=1),name='supplier_version_positive')]
 
     def clean(self):

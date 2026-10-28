@@ -13,7 +13,11 @@ NOW = datetime(2026, 10, 13, 15, 0, tzinfo=utc.utc)
 
 
 class DashboardTests(TestCase):
-    setUp = fixtures.PaymentCheckoutTests.setUp
+    def setUp(self):
+        fixtures.PaymentCheckoutTests.setUp(self)
+        from django.contrib.auth.models import Permission
+        for user in (self.user,self.admin):
+            user.user_permissions.add(*Permission.objects.filter(codename__in=['view_dashboard','view_financialentry','view_product']))
     data = fixtures.PaymentCheckoutTests.data
 
     def dashboard(self, **params):

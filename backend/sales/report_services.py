@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from purchases.models import PayableInstallment, PayablePayment
+from .insight_permissions import report_allowed
 from .models import FinancialAccount, FinancialEntry, Receivable
 from .dashboard_views import BUSINESS_TZ, MONEY, ZERO, bounds, money, sales_for
 
@@ -31,7 +32,7 @@ class ReportInput(serializers.Serializer):
 
 
 def available_reports(user):
-    return [dict(key=key, title=spec['title'], basis=spec['basis']) for key, spec in REPORTS.items() if all(user.has_perm(p) for p in spec['permissions'])]
+    return [dict(key=key, title=spec['title'], basis=spec['basis']) for key, spec in REPORTS.items() if report_allowed(user,spec['permissions'])]
 
 
 def parse_filters(request, store, now):
@@ -39,8 +40,10 @@ def parse_filters(request, store, now):
     serializer.is_valid(raise_exception=True)
     values = serializer.validated_data
     spec = REPORTS[values['report']]
-    if not all(request.user.has_perm(p) for p in spec['permissions']):
+    if not report_allowed(request.user,spec['permissions']):
         raise PermissionDenied('Seu usuário não tem as permissões de consulta exigidas por este relatório.')
+    if values.get('export')=='csv' and not request.user.has_perm('sales.export_reports'):
+        raise PermissionDenied('Seu usuário não tem permissão de exportar relatórios.')
     today = timezone.localtime(now, BUSINESS_TZ).date()
     if ('start' in values) != ('end' in values):
         raise ValidationError('Informe as datas inicial e final juntas.')

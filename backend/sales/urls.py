@@ -1,3 +1,4 @@
+from .insight_views import InsightAccessView
 from .work_order_views import OrderAccessView, OrderSalesView
 from django.urls import path
 
@@ -31,6 +32,7 @@ from .finance_access_views import FinanceAccessView
 from .quote_access_views import QuoteAccessView,QuoteOptionsView
 
 urlpatterns = [
+    path("me/insight-access/", InsightAccessView.as_view()),
     path("me/quotes/access/",QuoteAccessView.as_view(),name="quote-access"),
     path("me/quotes/options/",QuoteOptionsView.as_view(),name="quote-options"),
     path("me/finance-access/",FinanceAccessView.as_view(),name="finance-access"),

@@ -5,6 +5,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from .insight_permissions import InsightPermission
 from .models import FinancialAccount
 from .views import SalesBaseView, SalesPagination
 from .report_services import REPORTS, BUSINESS_TZ, available_reports, parse_filters, prepare_report, serialize_row
@@ -23,16 +24,23 @@ def csv_value(value,column):
     return text
 
 
-class ReportOptionsView(SalesBaseView):
+class InsightReadView(SalesBaseView):
+    permission_classes=[InsightPermission]
+    def finalize_response(self,request,response,*args,**kwargs):
+        response=super().finalize_response(request,response,*args,**kwargs)
+        response['Cache-Control']='no-store, private'
+        return response
+
+class ReportOptionsView(InsightReadView):
     http_method_names=['get','head','options']
     def get(self,request):
         store=self._selected_store();now=timezone.now();today=timezone.localtime(now,BUSINESS_TZ).date()
         reports=available_reports(request.user)
         accounts=FinancialAccount.objects.filter(store=store) if any(r['key']=='movements' for r in reports) else []
-        return Response({'reports':reports,'accounts':[{'id':a.pk,'name':a.name,'is_active':a.is_active} for a in accounts],'timezone':str(BUSINESS_TZ),'start':today.replace(day=1).isoformat(),'end':today.isoformat(),'max_export_rows':MAX_EXPORT_ROWS},headers={'Cache-Control':'no-store, private'})
+        return Response({'can_export':request.user.has_perm('sales.export_reports'),'reports':reports,'accounts':[{'id':a.pk,'name':a.name,'is_active':a.is_active} for a in accounts],'timezone':str(BUSINESS_TZ),'start':today.replace(day=1).isoformat(),'end':today.isoformat(),'max_export_rows':MAX_EXPORT_ROWS},headers={'Cache-Control':'no-store, private'})
 
 
-class ReportsView(SalesBaseView):
+class ReportsView(InsightReadView):
     http_method_names=['get','head','options']
     def get(self,request):
         store=self._selected_store();now=timezone.now()

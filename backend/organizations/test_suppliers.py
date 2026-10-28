@@ -20,7 +20,7 @@ class SupplierTests(TestCase):
 
     def grant(self,user=None,*codes):
         user=user or self.user
-        codes=codes or ('view_supplier','add_supplier','change_supplier')
+        codes=codes or ('view_supplier','add_supplier','change_supplier','archive_supplier','restore_supplier')
         user.user_permissions.add(*Permission.objects.filter(content_type__app_label='organizations',codename__in=codes))
         for key in ('_perm_cache','_user_perm_cache','_group_perm_cache'):
             if hasattr(user,key):delattr(user,key)

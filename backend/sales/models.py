@@ -42,7 +42,7 @@ class Sale(models.Model):
     cancellation_reason = models.CharField("Motivo do cancelamento", max_length=255, blank=True, editable=False)
 
     class Meta:
-        permissions = [("finalize_sale", "Pode confirmar venda"), ("cancel_sale", "Pode cancelar venda")]
+        permissions = [("finalize_sale", "Pode confirmar venda"), ("cancel_sale", "Pode cancelar venda"), ("view_dashboard", "Consultar painel operacional"), ("view_reports", "Consultar relatórios gerenciais"), ("export_reports", "Exportar relatórios gerenciais")]
         verbose_name = "Venda"
         verbose_name_plural = "Vendas"
         ordering = ["-created_at", "-pk"]

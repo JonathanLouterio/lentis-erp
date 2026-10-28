@@ -10,6 +10,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from accounts.selectors import get_accessible_stores
 from sales.views import SalesBaseView, SalesPagination, model_errors
+from .supplier_permissions import SupplierPermission, require_supplier, supplier_capabilities
 from .supplier_models import Supplier, SupplierEvent, SupplierOperation, normalize_document
 
 FIELDS=('person_type','name','trade_name','document','state_registration','contact_name','phone','whatsapp','email','zip_code','street','address_number','address_complement','neighborhood','city','state','notes')
@@ -41,11 +42,12 @@ def output(supplier,detail=False):
 
 
 def operate_supplier(*,user,store,supplier_id,values,digest):
+    if not user or not user.is_authenticated:
+        raise PermissionDenied('Entre com uma conta ativa.')
     with transaction.atomic():
         user=get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
         if not get_accessible_stores(user).filter(pk=store.pk).exists():raise PermissionDenied('O acesso à unidade não está disponível.')
-        action=values['action']; permission='add' if supplier_id is None else 'change'
-        if not user.has_perm('organizations.view_supplier') or not user.has_perm(f'organizations.{permission}_supplier'):raise PermissionDenied('Você não tem permissão para esta operação com fornecedores.')
+        action=values.get('action'); require_supplier(user,action)
         previous=SupplierOperation.objects.select_related('supplier').filter(request_id=values['request_id']).first()
         if previous:
             if previous.created_by_id!=user.pk or previous.supplier.store_id!=store.pk:raise PermissionDenied('Este envio pertence a outra conta ou unidade.')
@@ -78,6 +80,11 @@ def operate_supplier(*,user,store,supplier_id,values,digest):
 
 
 class SuppliersView(SalesBaseView):
+    permission_classes=[SupplierPermission]
+    def finalize_response(self,request,response,*args,**kwargs):
+        response=super().finalize_response(request,response,*args,**kwargs)
+        response['Cache-Control']='no-store, private'
+        return response
     def check_access(self):
         store=self._selected_store()
         if not self.request.user.has_perm('organizations.view_supplier'):raise PermissionDenied('Seu usuário precisa da permissão de visualizar fornecedores.')
@@ -116,3 +123,11 @@ class SupplierDetailView(SuppliersView):
     def get(self,request,supplier_id):
         supplier=get_object_or_404(Supplier,store=self.check_access(),pk=supplier_id)
         return Response(output(supplier,True),headers={'Cache-Control':'no-store, private'})
+
+
+class SupplierAccessView(SuppliersView):
+    access_only=True
+    http_method_names=['get','head','options']
+    def get(self,request):
+        store=self._selected_store()
+        return Response({'store_id':store.pk,'actions':supplier_capabilities(request.user)})

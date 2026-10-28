@@ -388,3 +388,18 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Sem o direito de uma seção, a API nega lista/detalhe e retorna contagens/resumos correspondentes como null. Sem consulta de recebíveis, os saldos financeiros do histórico ficam ocultos; sem consulta de vendas, suas contagens ficam ocultas.
 - O histórico não concede alteração de receitas, vendas ou OS. Permissões comerciais não concedem leitura clínica. A escolha de receita na venda mantém os direitos clínicos e de alteração comercial já exigidos.
 - Ao retornar o foco ao navegador, os acessos clínicos são atualizados e as telas ocultam cópias/valores para os quais o acesso foi revogado. As chamadas diretas permanecem protegidas no servidor.
+
+
+## Permissões de fornecedores, painel e relatórios
+
+- Toda operação de fornecedor exige `organizations.view_supplier`; cadastro e edição exigem respectivamente `add_supplier` e `change_supplier`.
+- Inativação e reativação exigem respectivamente `organizations.archive_supplier` e `organizations.restore_supplier`. A edição não autoriza essas mudanças. Motivo, versão e histórico continuam obrigatórios; não há exclusão física por este fluxo.
+- A consulta do painel exige `sales.view_dashboard`. Cada bloco exige também seu direito de origem: vendas (`view_sale`), recebíveis (`view_receivable`), recebimentos (`view_receivable` + `view_financialentry`), caixa físico (`view_cashsession`) e estoque (`organizations.view_product` ou `organizations.view_stockmovement`).
+- Blocos sem permissão são retornados como null, séries protegidas do gráfico como null e detalhes/listas correspondentes vazios. Não são substituídos por zeros que poderiam ser confundidos com resultados reais.
+- Os atalhos do painel dependem das permissões de destino. Sem consulta do painel, a visão geral mantém a orientação para usar os módulos autorizados e os atalhos permitidos, sem consultar indicadores.
+- Relatórios exigem `sales.view_reports` mais os direitos de origem: vendas (`view_sale`), recebíveis (`view_receivable`), contas a pagar (`purchases.view_payableplan`) e movimentações unificadas (`sales.view_financialentry` + `purchases.view_payableplan`).
+- Exportação exige adicionalmente `sales.export_reports`. Exportar não concede consulta nem acesso ao módulo de origem; filtros, escopo de unidade, limite de linhas e proteção de células CSV são preservados.
+- As permissões de painel/relatórios ficam no modelo de vendas. Não concedem alteração de vendas, recebimento ou gerenciamento de caixa.
+- Direitos diretos e de grupos são consultados na conta ativa atual; revogação bloqueia a mesma sessão, incluindo exportações. As telas atualizam seus direitos ao recuperar o foco.
+- O vínculo ativo com a unidade permanece obrigatório. Admin de fornecedores continua somente leitura e exige consulta efetiva.
+- As migrações criam as novas permissões sem concedê-las automaticamente.
