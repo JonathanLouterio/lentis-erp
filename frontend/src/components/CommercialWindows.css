@@ -1,0 +1,28 @@
+.erp-layout.erp-layout .erp-window.erp-window-wide { width: min(1440px, calc(100vw - 48px)); }
+.erp-layout.erp-layout .erp-window-wide .erp-window-body { background: var(--erp-bg); }
+.erp-layout.erp-layout .erp-window-wide .erp-checkout-grid { grid-template-columns: minmax(0,1fr) 310px; gap: 20px; }
+.erp-layout.erp-layout .erp-window-wide .erp-checkout-summary { position: sticky; top: 0; max-height: calc(100dvh - 260px); overflow: auto; scrollbar-gutter: stable; }
+.erp-layout.erp-layout .erp-window-wide .erp-checkout-main { min-width: 0; }
+.erp-layout.erp-layout .erp-window-wide .erp-checkout-line-fields { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.erp-layout.erp-layout .erp-window-wide .erp-checkout-payment-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.erp-layout.erp-layout .erp-window-wide .erp-checkout-payment-fields > label:last-child { grid-column: 1 / -1; }
+.erp-layout.erp-layout .purchase-grid { grid-template-columns: minmax(0,1fr); }
+.erp-layout.erp-layout .purchase-detail { background: var(--erp-surface); padding: 20px; border: 1px solid var(--erp-border); border-radius: 12px; }
+.erp-layout.erp-layout .purchase-review { width: auto; max-height: none; overflow: visible; }
+.erp-layout.erp-layout .erp-commercial-review { max-width: 800px; margin: auto; }
+.erp-layout.erp-layout .erp-commercial-review > .erp-kicker { display: none; }
+.erp-layout.erp-layout .erp-content .purchase-success { color: #14532d; background: #e6f5ec; border-color: #64a982; }
+.erp-layout.erp-layout .erp-window-wide .erp-window-footer .erp-secondary-button { color: var(--erp-text); }
+@media(max-width:1050px) {
+  .erp-layout.erp-layout .erp-window-wide .erp-checkout-grid { grid-template-columns: minmax(0,1fr); }
+  .erp-layout.erp-layout .erp-window-wide .erp-checkout-summary { position: static; max-height: none; overflow: visible; }
+}
+@media(max-width:760px) {
+  .erp-layout.erp-layout .erp-window.erp-window-wide { width: calc(100vw - 16px); }
+  .erp-layout.erp-layout .erp-window-wide .erp-window-body { padding: 12px; }
+  .erp-layout.erp-layout .erp-window-wide :is(.erp-checkout-line-fields,.erp-checkout-payment-fields,.erp-checkout-payment-extra,.erp-quote-header-fields,.erp-quote-product-picker,.purchase-fields,.purchase-line-fields) { grid-template-columns: minmax(0,1fr); }
+  .erp-layout.erp-layout .erp-window-wide :is(.erp-card,.purchase-detail) { padding: 16px; }
+  .erp-layout.erp-layout .erp-window-wide .erp-window-footer { align-items: stretch; }
+  .erp-layout.erp-layout .erp-window-wide .erp-window-actions { width: 100%; gap: 8px; }
+  .erp-layout.erp-layout .erp-window-wide .erp-window-actions button { flex: 1; }
+}

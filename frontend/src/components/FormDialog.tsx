@@ -5,6 +5,9 @@ import './WorkspaceVisual.css'
 type Props = {
   title: string
   subtitle?: string
+  sectionLabel?: string
+  wide?: boolean
+  notice?: string
   children: ReactNode
   actions?: ReactNode
   busy?: boolean
@@ -13,7 +16,7 @@ type Props = {
 }
 
 /** Native modal: the rest of the workspace is inert while this window is open. */
-export default function FormDialog({ title, subtitle, children, actions, busy = false, dirty = false, onClose }: Props) {
+export default function FormDialog({ title, subtitle, sectionLabel = 'CADASTROS', wide = false, notice = '', children, actions, busy = false, dirty = false, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const [confirmClose, setConfirmClose] = useState(false)
@@ -27,6 +30,9 @@ export default function FormDialog({ title, subtitle, children, actions, busy = 
     }
   }, [])
   useEffect(() => {
+    if (notice) ref.current?.querySelector('.erp-window-body')?.scrollTo({ top: 0 })
+  }, [notice])
+  useEffect(() => {
     if (!dirty && !busy) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
@@ -37,7 +43,7 @@ export default function FormDialog({ title, subtitle, children, actions, busy = 
     if (dirty) setConfirmClose(true)
     else onClose()
   }
-  return <dialog ref={ref} className="erp-window" aria-labelledby={titleId}
+  return <dialog ref={ref} className={`erp-window${wide ? ' erp-window-wide' : ''}`} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); requestClose() }}
     onKeyDown={event => {
       if (event.key !== 'Tab') return
@@ -49,7 +55,7 @@ export default function FormDialog({ title, subtitle, children, actions, busy = 
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }}>
     <header className="erp-window-heading">
-      <div><span className="erp-window-kicker">LENTIS · CADASTROS</span><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
+      <div><span className="erp-window-kicker">LENTIS · {sectionLabel}</span><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
       <button type="button" className="erp-window-close" aria-label="Fechar janela" disabled={busy} onClick={requestClose}>×</button>
     </header>
     <div className="erp-window-body" aria-busy={busy}>{children}</div>
