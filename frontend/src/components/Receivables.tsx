@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { ApiError, getPaymentOptions, getReceivables, receiveInstallment } from '../api'
 import type { AccessibleStore, PaymentOptions, Receivable, ReceivablesPage } from '../api'
 import { decimal, decimalText, displayDate, failure, money, dateTime } from './saleMoney'
-import CheckoutModal from './CheckoutModal'
+import FormDialog from './FormDialog'
+import './FinanceWindows.css'
 import './Sales.css'
 
 type Props = { store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
@@ -28,6 +29,7 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
   const [amount, setAmount] = useState('')
   const [accountId, setAccountId] = useState('')
   const [methodId, setMethodId] = useState('')
+  const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState<PendingReceipt | null>(null)
   const rights=useFinanceAccess(store.id,reload)
   const access=rights.access?.receipts
@@ -38,7 +40,7 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
   const valid = !cashClosed && value !== null && value > 0n && !!selected && value <= (decimal(selected.remaining_amount) ?? 0n) && !!accountId && !!methodId
 
   useEffect(() => { onSavingChange(busy); return () => onSavingChange(false) }, [busy, onSavingChange])
-  useEffect(() => { onDirtyChange(!!selected || !!pending); return () => onDirtyChange(false) }, [selected, pending, onDirtyChange])
+  useEffect(() => { onDirtyChange(dirty || !!pending); return () => onDirtyChange(false) }, [dirty, pending, onDirtyChange])
   useEffect(() => {
     if (!selected && !pending) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = "" }
@@ -51,7 +53,7 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
   useEffect(() => {
     let ignore = false
     if (!access?.view) {setData({count:0,results:[],next:null,previous:null});setSelected(null);setHistory(null);setLoading(false);return}
-    setLoading(true); setError('')
+    setLoading(true)
     void Promise.all([getReceivables(store.id,page,state,debtor), getPaymentOptions(store.id)])
       .then(([rows,nextOptions]) => { if (!ignore) { setData(rows); setOptions(nextOptions) } })
       .catch((err: unknown) => { if (!ignore) setError(failure(err)) }).finally(() => { if (!ignore) setLoading(false) })
@@ -59,7 +61,7 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
   }, [store.id,page,state,debtor,reload,access?.view,access?.receive,access?.balances])
 
   function open(row: Receivable) {
-    setSelected(row); setAmount(row.remaining_amount); setAccountId(String((immediateMethods[0]?.kind === 'cash' ? options.accounts.find(account => account.cash_box || account.code === 'cash') : options.accounts.find(account => account.code === 'bank'))?.id || options.accounts[0]?.id || '')); setMethodId(String(immediateMethods[0]?.id || '')); setError('')
+    setDirty(false); setSuccess(''); setSelected(row); setAmount(row.remaining_amount); setAccountId(String((immediateMethods[0]?.kind === 'cash' ? options.accounts.find(account => account.cash_box || account.code === 'cash') : options.accounts.find(account => account.code === 'bank'))?.id || options.accounts[0]?.id || '')); setMethodId(String(immediateMethods[0]?.id || '')); setError('')
   }
   async function persist(attempt: PendingReceipt) {
     if (busy || rights.loading || !access?.receive) return
@@ -67,7 +69,7 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
     try { sessionStorage.setItem(storageKey,JSON.stringify(attempt)) } catch { /* O envio também fica em memória. */ }
     try {
       await receiveInstallment(store.id,attempt.receivableId,attempt.payload)
-      setSelected(null); setPending(null); setHistory(null); setReload((number) => number+1); setSuccess('Recebimento registrado. O saldo da parcela e da conta foram atualizados.')
+      setDirty(false); setSelected(null); setPending(null); setHistory(null); setReload((number) => number+1); setSuccess('Recebimento registrado. O saldo da parcela e da conta foram atualizados.')
       try { sessionStorage.removeItem(storageKey) } catch { /* Sem armazenamento disponível. */ }
     } catch (err) {
       setError(failure(err))
@@ -79,14 +81,22 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
   return <section className="erp-sales-page erp-receivables-page">
     <div className="erp-page-heading"><span className="erp-kicker">FINANCEIRO</span><h1>Recebimentos</h1><p>Parcelas do cliente e repasses de cartão da unidade {store.name}.</p></div>
     {error && <p className="erp-alert" role="alert">{error}</p>}{success && <p className="erp-sales-success" role="status">{success}</p>}
-    {pending && <div className="erp-card" role="alert"><h2>Conferir o último recebimento</h2><p>Repita o mesmo envio para recuperar o resultado e evitar um lançamento duplicado.</p><button className="erp-action-button" disabled={busy || rights.loading} onClick={() => void persist(pending)}>Repetir recebimento com segurança</button></div>}
+
     {access.balances && options.can_view_balances && <div className="erp-receiving-accounts">{options.accounts.map((account) => <div className="erp-card" key={account.id}><span className="erp-card-label">{account.name}</span><h2>{money.format(Number(account.balance))}</h2><p className="erp-sales-hint">Saldo dos recebimentos registrados no Lentis.</p></div>)}</div>}
     <div className="erp-card"><div className="erp-sales-toolbar"><label>Situação<select aria-label="Situação" value={state} disabled={busy || !!pending} onChange={(event) => {setState(event.target.value);setPage(1)}}><option value="pending">A receber</option><option value="paid">Recebidas</option><option value="cancelled">Canceladas</option><option value="all">Todas</option></select></label><label>Responsável<select aria-label="Responsável" value={debtor} disabled={busy || !!pending} onChange={(event) => {setDebtor(event.target.value);setPage(1)}}><option value="">Todos</option><option value="customer">Cliente</option><option value="operator">Operadora de cartão</option></select></label><span>{data.count} parcelas</span><button className="erp-secondary-button" disabled={busy || loading} onClick={() => setReload((number)=>number+1)}>Atualizar</button></div>
       {loading ? <p role="status">Carregando recebimentos…</p> : !data.results.length ? <p>Nenhuma parcela nesta situação.</p> : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Venda / parcela</th><th>Responsável</th><th>Vencimento</th><th>Valor</th><th>Recebido</th><th>Saldo</th><th>Situação</th><th>Ação</th></tr></thead><tbody>{data.results.map((row)=><tr key={row.id}><td>#{row.sale_id} · {row.number}/{row.installment_count}<small className="erp-sales-item-name">{row.method_name}</small></td><td>{row.debtor==='operator'?'Operadora de cartão':row.customer_name||'Venda balcão'}</td><td>{displayDate(row.due_date)}</td><td>{money.format(Number(row.amount))}</td><td>{money.format(Number(row.paid_amount))}</td><td>{money.format(Number(row.remaining_amount))}</td><td><span className={`erp-sale-badge is-${row.status==='cancelled'?'cancelled':row.status==='paid'?'completed':'draft'}`}>{states[row.status]}</span></td><td>{access.receive && row.can_receive && <button className="erp-table-button" disabled={busy || !!pending} aria-label={`Receber parcela ${row.id}`} onClick={()=>open(row)}>Receber</button>}<button className="erp-table-button" disabled={busy || rights.loading} onClick={()=>setHistory(row)}>Histórico</button></td></tr>)}</tbody></table></div>}
       <div className="erp-sales-pagination"><button className="erp-secondary-button" disabled={busy || loading || !data.previous} onClick={()=>setPage((number)=>number-1)}>Anterior</button><span>Página {page}</span><button className="erp-secondary-button" disabled={busy || loading || !data.next} onClick={()=>setPage((number)=>number+1)}>Próxima</button></div>
     </div>
     {!options.can_receive && <p className="erp-sales-hint">Para registrar um recebimento, solicite a permissão específica de receber parcelas.</p>}
-    {history && <div className="erp-card"><div className="erp-sales-toolbar"><h2>Histórico da parcela {history.number} · Venda #{history.sale_id}</h2><button className="erp-secondary-button" onClick={()=>setHistory(null)}>Fechar histórico</button></div>{!history.entries.length?<p>Nenhum recebimento registrado.</p>:<ol className="erp-sales-history">{history.entries.map((entry)=><li key={entry.id}><strong>{entry.reversal_of?'Estorno':'Recebimento'} · {money.format(Number(entry.amount))}</strong><span>{entry.account_name} · {entry.method_name} · {dateTime.format(new Date(entry.created_at))} · {entry.creator_username}</span><p>{entry.reason}</p></li>)}</ol>}</div>}
-    {access.receive && options.can_receive && selected && <CheckoutModal titleId="receipt-title" busy={busy} onClose={()=>setSelected(null)}><form className="erp-card erp-checkout-modal" onSubmit={(event)=>{event.preventDefault();if(valid && value!==null)void persist({receivableId:selected.id,payload:{request_id:crypto.randomUUID(),account_id:Number(accountId),method_id:Number(methodId),amount:decimalText(value)}})}}><span className="erp-kicker">CONFIRMAR RECEBIMENTO</span><h2 id="receipt-title">Parcela {selected.number} · Venda #{selected.sale_id}</h2><p>Saldo: {money.format(Number(selected.remaining_amount))}</p><label>Valor recebido (R$)<input aria-label="Valor recebido (R$)" autoFocus inputMode="decimal" value={amount} disabled={busy || rights.loading} onChange={(event)=>setAmount(event.target.value)} /></label><label>Conta de recebimento<select aria-label="Conta de recebimento" value={accountId} disabled={busy || rights.loading} onChange={(event)=>setAccountId(event.target.value)}><option value="">Selecione</option>{options.accounts.map((account)=><option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Forma de recebimento<select aria-label="Forma de recebimento" value={methodId} disabled={busy || rights.loading} onChange={(event)=>{setMethodId(event.target.value);const method=immediateMethods.find(method=>String(method.id)===event.target.value);const preferred=method?.kind==='cash'?options.accounts.find(account=>account.cash_box||account.code==='cash'):options.accounts.find(account=>account.code==='bank');if(preferred)setAccountId(String(preferred.id))}}><option value="">Selecione</option>{immediateMethods.map((method)=><option key={method.id} value={method.id}>{method.name}</option>)}</select></label><>{cashClosed && <p className="erp-alert" role="alert">Abra o caixa desta conta em Comercial → Caixa antes de confirmar o dinheiro recebido.</p>}</><p className="erp-sales-hint">Confirme somente o valor efetivamente recebido. É possível receber uma parte da parcela.</p><div className="erp-sales-actions"><button className="erp-secondary-button" type="button" disabled={busy || rights.loading} onClick={()=>setSelected(null)}>Voltar</button><button className="erp-action-button" type="submit" disabled={busy || rights.loading || !valid}>{busy?'Registrando…':'Confirmar recebimento'}</button></div></form></CheckoutModal>}
+    {history && <FormDialog title={`Histórico da parcela ${history.number} · Venda #${history.sale_id}`} sectionLabel="FINANCEIRO · RECEBIMENTOS" subtitle={store.name} onClose={()=>setHistory(null)}><div className="erp-finance-history">{!history.entries.length?<p>Nenhum recebimento registrado.</p>:<ol className="erp-sales-history">{history.entries.map((entry)=><li key={entry.id}><strong>{entry.reversal_of?'Estorno':'Recebimento'} · {money.format(Number(entry.amount))}</strong><span>{entry.account_name} · {entry.method_name} · {dateTime.format(new Date(entry.created_at))} · {entry.creator_username}</span><p>{entry.reason}</p></li>)}</ol>}</div></FormDialog>}
+    {(pending || selected && access.receive && options.can_receive) && <FormDialog
+      title={pending ? 'Conferir o último recebimento' : `Receber parcela ${selected?.number} · Venda #${selected?.sale_id}`}
+      sectionLabel="FINANCEIRO · RECEBIMENTOS" subtitle={store.name} busy={busy || !!pending} dirty={dirty} notice={error}
+      onClose={()=>{setSelected(null);setDirty(false);setError('')}}
+      actions={!pending && selected && <button className="erp-action-button" type="submit" form="lentis-receipt-form" disabled={busy || rights.loading || !valid}>{busy?'Registrando…':'Confirmar recebimento'}</button>}>
+      {error && <p className="erp-alert" role="alert">{error}</p>}
+      {pending && <div className="erp-card" role="alert"><p>Repita o mesmo envio para recuperar o resultado e evitar um lançamento duplicado.</p><button className="erp-action-button" disabled={busy || rights.loading || !access.receive} onClick={() => void persist(pending)}>Repetir recebimento com segurança</button></div>}
+      {!pending && selected && <form id="lentis-receipt-form" className="erp-finance-form" onSubmit={(event)=>{event.preventDefault();if(valid && value!==null)void persist({receivableId:selected.id,payload:{request_id:crypto.randomUUID(),account_id:Number(accountId),method_id:Number(methodId),amount:decimalText(value)}})}}><p>Saldo: {money.format(Number(selected.remaining_amount))}</p><label>Valor recebido (R$)<input aria-label="Valor recebido (R$)" autoFocus inputMode="decimal" value={amount} disabled={busy || rights.loading} onChange={(event)=>{setAmount(event.target.value);setDirty(true)}} /></label><label>Conta de recebimento<select aria-label="Conta de recebimento" value={accountId} disabled={busy || rights.loading} onChange={(event)=>{setAccountId(event.target.value);setDirty(true)}}><option value="">Selecione</option>{options.accounts.map((account)=><option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Forma de recebimento<select aria-label="Forma de recebimento" value={methodId} disabled={busy || rights.loading} onChange={(event)=>{setDirty(true);setMethodId(event.target.value);const method=immediateMethods.find(method=>String(method.id)===event.target.value);const preferred=method?.kind==='cash'?options.accounts.find(account=>account.cash_box||account.code==='cash'):options.accounts.find(account=>account.code==='bank');if(preferred)setAccountId(String(preferred.id))}}><option value="">Selecione</option>{immediateMethods.map((method)=><option key={method.id} value={method.id}>{method.name}</option>)}</select></label><>{cashClosed && <p className="erp-alert" role="alert">Abra o caixa desta conta em Comercial → Caixa antes de confirmar o dinheiro recebido.</p>}</><p className="erp-sales-hint">Confirme somente o valor efetivamente recebido. É possível receber uma parte da parcela.</p></form>}
+    </FormDialog>}
   </section>
 }

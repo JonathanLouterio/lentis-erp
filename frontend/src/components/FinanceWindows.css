@@ -1,0 +1,20 @@
+.erp-layout.erp-layout .erp-finance-form { display: grid; gap: 18px; min-width: 0; }
+.erp-layout.erp-layout .erp-finance-form > p { margin: 0; line-height: 1.6; }
+.erp-layout.erp-layout .erp-finance-form label { display: grid; gap: 8px; min-width: 0; font-size: .9rem; font-weight: 600; }
+.erp-layout.erp-layout .erp-finance-form :is(input,select,textarea) { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: var(--erp-text); background: var(--erp-surface); border: 1px solid var(--erp-border); border-radius: 8px; padding: 11px 12px; }
+.erp-layout.erp-layout .erp-finance-form textarea { min-height: 95px; resize: vertical; }
+.erp-layout.erp-layout .erp-finance-form .payable-check { display: flex; align-items: flex-start; font-weight: 400; }
+.erp-layout.erp-layout .erp-finance-form .payable-check input { width: 18px; height: 18px; padding: 0; flex: 0 0 auto; }
+.erp-layout.erp-layout .erp-finance-history { min-width: 0; overflow-wrap: anywhere; }
+.erp-layout.erp-layout .payable-grid { grid-template-columns: minmax(0,1fr); }
+.erp-layout.erp-layout .payable-list { max-height: none; }
+.erp-layout.erp-layout .payable-payment-form { border: 0 !important; }
+.erp-layout.erp-layout .erp-window-wide { width: min(1440px, calc(100vw - 48px)); }
+.erp-layout.erp-layout .erp-window .erp-customer-table-wrap { max-width: 100%; overflow-x: auto; }
+.erp-layout.erp-layout .erp-window :is(.erp-cash-detail-heading,.payable-heading) { overflow-wrap: anywhere; }
+@media(max-width:760px) {
+ .erp-layout.erp-layout .erp-window.erp-window-wide { width: calc(100vw - 16px); }
+ .erp-layout.erp-layout .erp-window .erp-window-actions { flex-wrap: wrap; }
+ .erp-layout.erp-layout .erp-window .erp-window-actions button { flex: 1; }
+ .erp-layout.erp-layout .erp-window :is(.payable-fields,.payable-summary,.erp-cash-summary) { grid-template-columns: minmax(0,1fr); }
+}
