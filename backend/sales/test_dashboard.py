@@ -41,12 +41,16 @@ class DashboardTests(TestCase):
         self.assertEqual(response.data['today'], '2026-10-13')
 
     def test_sales_receipts_and_customer_credit_are_separate(self):
-        self.sale(kind='store_credit', confirmed=False, count=3)
+        body = self.data(kind='store_credit', amount='420', confirmed=False, count=3)
+        body['payments'].insert(0, self.data(amount='280')['payments'][0])
+        with patch('django.utils.timezone.now', return_value=NOW):
+            response = self.client.post(self.url, body, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
         data = self.dashboard().data
         self.assertEqual(data['sales']['total'], '700.00')
         self.assertEqual(data['sales']['ticket'], '700.00')
-        self.assertEqual(data['receipts']['net'], '0.00')
-        self.assertEqual(data['receivables']['customer']['amount'], '700.00')
+        self.assertEqual(data['receipts']['net'], '280.00')
+        self.assertEqual(data['receivables']['customer']['amount'], '420.00')
         self.assertEqual(data['receivables']['customer']['count'], 3)
 
     def test_previous_equal_period_and_chart_zero_days(self):
@@ -102,14 +106,15 @@ class DashboardTests(TestCase):
 
     def test_overdue_and_today_use_current_state_even_for_old_filter(self):
         with patch('django.utils.timezone.now', return_value=NOW):
-            body = self.data(kind='store_credit', count=2, confirmed=False)
+            body = self.data(kind='store_credit', amount='420', count=2, confirmed=False)
+            body['payments'].append(self.data(amount='280')['payments'][0])
             body['payments'][0]['first_due_date'] = '2026-09-13'
             response = self.client.post(self.url, body, format='json')
         self.assertEqual(response.status_code, 200, response.data)
         data = self.dashboard(preset='custom', start='2026-01-01', end='2026-01-10').data
         self.assertEqual(data['sales']['count'], 0)
-        self.assertEqual(data['receivables']['overdue']['amount'], '350.00')
-        self.assertEqual(data['receivables']['due_today']['amount'], '350.00')
+        self.assertEqual(data['receivables']['overdue']['amount'], '210.00')
+        self.assertEqual(data['receivables']['due_today']['amount'], '210.00')
 
     def test_stock_is_current_and_only_active_products(self):
         self.product.stock_quantity = Decimal('-1'); self.product.save()

@@ -232,7 +232,7 @@ export async function createCustomer(
   return request<Customer>(`/api/me/customers/?store_id=${storeId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
-    body: JSON.stringify(customer),
+    body: JSON.stringify({ ...customer, ...('birth_date' in customer ? { birth_date: customer.birth_date || null } : {}) }),
   })
 }
 
@@ -245,7 +245,7 @@ export async function updateCustomer(
   return request<Customer>(`/api/me/customers/${customerId}/?store_id=${storeId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
-    body: JSON.stringify(customer),
+    body: JSON.stringify({ ...customer, ...('birth_date' in customer ? { birth_date: customer.birth_date || null } : {}) }),
   })
 }
 
@@ -344,6 +344,7 @@ export type SaleEvent = {
 }
 
 export type Sale = {
+  base_total: string; financing_rate: string; financing_amount: string
   prescription: Omit<SalePrescriptionRecord, 'snapshot'> | null
   can_view_prescription: boolean
   id: number
@@ -455,6 +456,7 @@ export type Receivable = {
   can_receive: boolean; entries: FinancialEntry[]
 }
 export type SalePayment = {
+  principal_amount: string; financing_amount: string
   id: number; method: number; account: number; method_name: string; account_name: string; kind: PaymentKind
   amount: string; installment_count: number; first_due_date: string; interval_unit: 'months' | 'days'; interval_count: number; confirmed: boolean; installments: Receivable[]
 }
@@ -463,6 +465,7 @@ export type CheckoutPayment = {
   first_due_date: string; confirmed: boolean; interval_unit?: 'months' | 'days'; interval_count?: number
 }
 export type CheckoutPayload = {
+  financing_rate?: string
   prescription_selection?: SalePrescriptionSelection
   request_id: string; sale_id: number | null; action: 'draft' | 'complete'; customer_id: number | null
   notes: string; discount_amount: string; items: SaleItemPayload[]; payments: CheckoutPayment[]
@@ -504,14 +507,15 @@ export function decideDiscountAuthorization(storeId: number, saleId: number, req
 
 
 export type PaymentPreview = {
+  base_total: string; financing_rate: string; financing_amount: string
   total: string
   payments: { method_name: string; account_name: string; kind: PaymentKind; amount: string; confirmed: boolean; installments: { number: number; due_date: string; amount: string }[] }[]
 }
-export async function getPaymentPreview(storeId: number, total: string, payments: CheckoutPayment[]): Promise<PaymentPreview> {
+export async function getPaymentPreview(storeId: number, total: string, payments: CheckoutPayment[], financing_rate = '0'): Promise<PaymentPreview> {
   const token = await getCsrfToken()
   return request(`/api/me/sales/payment-preview/?store_id=${storeId}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
-    body: JSON.stringify({ total, payments }),
+    body: JSON.stringify({ total, payments, financing_rate }),
   })
 }
 
@@ -692,11 +696,12 @@ export function getPayableOptions(storeId:number):Promise<PayableOptions>{return
 export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
 
 export type ReportKind='sales'|'movements'|'receivables'|'payables'
-export type ReportFilters={report:ReportKind;start:string;end:string;status:'all'|'pending'|'paid'|'overdue';debtor:'all'|'customer'|'operator';direction:'all'|'in'|'out';account_id?:number|null}
+export type ReportFilters={all_dates?:boolean;customer?:string;sale_id?:number|null;method?:string;risk?:string;aging?:string;warning_days?:number;report:ReportKind;start:string;end:string;status:'all'|'pending'|'paid'|'partial'|'overdue';debtor:'all'|'customer'|'operator';direction:'all'|'in'|'out';account_id?:number|null}
 export type ReportColumn={key:string;label:string;kind:'text'|'money'|'date'|'datetime'|'integer'}
-export type ReportData=CashPage<Record<string,string>> & {title:string;description:string;basis:string;columns:ReportColumn[];summary:{key:string;label:string;value:string;kind:'money'|'integer'}[];filters:ReportFilters;generated_at:string;today:string;timezone:string;store_id:number}
-export type ReportOptions={reports:{key:ReportKind;title:string;basis:string}[];accounts:{id:number;name:string;is_active:boolean}[];timezone:string;start:string;end:string;max_export_rows:number}
-function reportQuery(storeId:number,filters:ReportFilters,page=1){const query=new URLSearchParams({store_id:String(storeId),report:filters.report,start:filters.start,end:filters.end,page:String(page)});if(filters.report==='receivables'||filters.report==='payables')query.set('status',filters.status);if(filters.report==='receivables')query.set('debtor',filters.debtor);if(filters.report==='movements'){query.set('direction',filters.direction);if(filters.account_id)query.set('account_id',String(filters.account_id))}return query}
+export type ReportData=CashPage<Record<string,string>> & {aging?:{key:string;label:string;count:number;amount:string;tone:string}[];title:string;description:string;basis:string;columns:ReportColumn[];summary:{key:string;label:string;value:string;kind:'money'|'integer'}[];filters:ReportFilters;generated_at:string;today:string;timezone:string;store_id:number}
+export type ReportOptions={reports:{key:ReportKind;title:string;basis:string}[];accounts:{id:number;name:string;is_active:boolean}[];timezone:string;start:string;end:string;max_export_rows:number;max_print_rows:number}
+function reportQuery(storeId:number,filters:ReportFilters,page=1){const query=new URLSearchParams({store_id:String(storeId),report:filters.report,start:filters.start,end:filters.end,page:String(page)});if(filters.report==='receivables'||filters.report==='payables')query.set('status',filters.status);if(filters.report==='receivables'){if(filters.all_dates){query.delete('start');query.delete('end')}query.set('debtor',filters.debtor);query.set('all_dates',String(!!filters.all_dates));for(const key of ['customer','sale_id','method','risk','aging','warning_days'] as const){const value=filters[key];if(value!==null&&value!==undefined&&value!=='')query.set(key,String(value))}};if(filters.report==='movements'){query.set('direction',filters.direction);if(filters.account_id)query.set('account_id',String(filters.account_id))}return query}
+export function reportPrintUrl(storeId:number,filters:ReportFilters):string {const query=reportQuery(storeId,filters);query.set('export','print');return `/api/me/reports/?${query}`}
 export function getReportOptions(storeId:number):Promise<ReportOptions>{return request(`/api/me/reports/options/?store_id=${storeId}`)}
 export function getReport(storeId:number,filters:ReportFilters,page=1):Promise<ReportData>{return request(`/api/me/reports/?${reportQuery(storeId,filters,page)}`)}
 export async function exportReport(storeId:number,filters:ReportFilters):Promise<{blob:Blob;filename:string}>{

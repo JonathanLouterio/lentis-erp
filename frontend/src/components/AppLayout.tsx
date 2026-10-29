@@ -1,3 +1,4 @@
+import FormDialog from './FormDialog'
 import { useInsightAccess } from '../hooks/useInsightAccess'
 import { useSupplierAccess } from '../hooks/useSupplierAccess'
 import { useClinicalAccess } from '../hooks/useClinicalAccess'
@@ -31,6 +32,7 @@ import type { CatalogAccess } from '../api'
 import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
+import './WorkspaceVisual.css'
 
 type AppLayoutProps = {
   user: CurrentUser
@@ -99,6 +101,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [customersError, setCustomersError] = useState('')
   const [customerSearch, setCustomerSearch] = useState('')
   const [customerFormOpen, setCustomerFormOpen] = useState(false)
+  const [customerDirty, setCustomerDirty] = useState(false)
   const [savingCustomer, setSavingCustomer] = useState(false)
   const [customerFormError, setCustomerFormError] = useState('')
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
@@ -114,6 +117,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [productsError, setProductsError] = useState('')
   const [productSearch, setProductSearch] = useState('')
   const [productFormOpen, setProductFormOpen] = useState(false)
+  const [productDirty, setProductDirty] = useState(false)
   const [savingProduct, setSavingProduct] = useState(false)
   const [productFormError, setProductFormError] = useState('')
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -257,6 +261,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
   function closeCustomerForm() {
     setCustomerFormOpen(false)
+    setCustomerDirty(false)
     setCustomerFormError('')
     setEditingCustomer(null)
     setCustomerForm(emptyCustomer())
@@ -268,6 +273,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setCustomerForm(emptyCustomer())
     setCustomerFormError('')
     setCustomerFormOpen(true)
+    setCustomerDirty(false)
   }
 
   function openEditCustomer(customer: Customer) {
@@ -284,6 +290,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     })
     setCustomerFormError('')
     setCustomerFormOpen(true)
+    setCustomerDirty(false)
   }
 
   async function handleSaveCustomer(event: FormEvent<HTMLFormElement>) {
@@ -327,6 +334,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
   function closeProductForm() {
     setProductFormOpen(false)
+    setProductDirty(false)
     setProductFormError('')
     setEditingProduct(null)
     setProductForm(emptyProduct())
@@ -338,6 +346,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setProductForm(emptyProduct())
     setProductFormError('')
     setProductFormOpen(true)
+    setProductDirty(false)
   }
 
   function openEditProduct(product: Product) {
@@ -350,6 +359,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     })
     setProductFormError('')
     setProductFormOpen(true)
+    setProductDirty(false)
   }
 
   async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
@@ -578,11 +588,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 {access?.products.add && <button className="erp-action-button" type="button" disabled={workspaceBusy || catalogLoading} onClick={openNewProduct}>Novo produto</button>}
               </div>
               {productFormOpen && (editingProduct ? access?.products.change : access?.products.add) && (
-                <form className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveProduct(event)}>
-                  <div className="erp-form-heading">
-                    <div><span className="erp-card-label">{editingProduct ? 'EDIÇÃO' : 'NOVO CADASTRO'}</span><h2>{editingProduct ? 'Editar produto' : 'Adicionar produto'}</h2></div>
-                    <button type="button" className="erp-secondary-button" onClick={closeProductForm}>Cancelar</button>
-                  </div>
+                <FormDialog title={editingProduct ? 'Editar produto' : 'Novo produto'} subtitle={selectedStore.name} busy={savingProduct} dirty={productDirty} onClose={closeProductForm} actions={<button className="erp-action-button" type="submit" form="lentis-product-form" disabled={savingProduct}>{savingProduct ? 'Salvando…' : editingProduct ? 'Salvar alterações' : 'Salvar produto'}</button>}>
+                <form id="lentis-product-form" onChangeCapture={() => setProductDirty(true)} className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveProduct(event)}>
+                  <fieldset className="erp-window-fields" disabled={savingProduct}>
                   <div className="erp-form-grid">
                     <label>Código interno<input required value={productForm.internal_code} onChange={(event) => setProductForm({ ...productForm, internal_code: event.target.value })} /></label>
                     <label>Código de barras<input value={productForm.barcode} onChange={(event) => setProductForm({ ...productForm, barcode: event.target.value })} /></label>
@@ -595,8 +603,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                     <label>Estoque mínimo<input type="number" min="0" step="0.001" value={productForm.minimum_stock} onChange={(event) => setProductForm({ ...productForm, minimum_stock: event.target.value })} /></label>
                   </div>
                   {productFormError && <p className="erp-alert" role="alert">{productFormError}</p>}
-                  <button className="erp-action-button" type="submit" disabled={savingProduct}>{savingProduct ? 'Salvando…' : editingProduct ? 'Salvar alterações' : 'Salvar produto'}</button>
+                  
+                  </fieldset>
                 </form>
+                </FormDialog>
               )}
               {access?.products.view ? <div className="erp-card erp-customer-list-card">
                 <div className="erp-list-toolbar">
@@ -631,11 +641,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                   disabled={workspaceBusy || catalogLoading} onClick={openNewCustomer}>Novo cliente</button>}
               </div>
               {customerFormOpen && (editingCustomer ? access?.customers.change : access?.customers.add) && (
-                <form className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveCustomer(event)}>
-                  <div className="erp-form-heading">
-                    <div><span className="erp-card-label">{editingCustomer ? 'EDIÇÃO' : 'NOVO CADASTRO'}</span><h2>{editingCustomer ? 'Editar cliente' : 'Adicionar cliente'}</h2></div>
-                    <button type="button" className="erp-secondary-button" onClick={closeCustomerForm}>Cancelar</button>
-                  </div>
+                <FormDialog title={editingCustomer ? 'Editar cliente' : 'Novo cliente'} subtitle={selectedStore.name} busy={savingCustomer} dirty={customerDirty} onClose={closeCustomerForm} actions={<button className="erp-action-button" type="submit" form="lentis-customer-form" disabled={savingCustomer}>{savingCustomer ? 'Salvando…' : editingCustomer ? 'Salvar alterações' : 'Salvar cliente'}</button>}>
+                <form id="lentis-customer-form" onChangeCapture={() => setCustomerDirty(true)} className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveCustomer(event)}>
+                  <fieldset className="erp-window-fields" disabled={savingCustomer}>
                   <div className="erp-form-grid">
                     <label>Tipo de pessoa<select value={customerForm.person_type} onChange={(event) => setCustomerForm({ ...customerForm, person_type: event.target.value as CustomerPayload['person_type'], cpf: '', cnpj: '' })}><option value="individual">Pessoa Física</option><option value="company">Pessoa Jurídica</option></select></label>
                     <label>{customerForm.person_type === 'company' ? 'Razão social' : 'Nome completo'}<input required value={customerForm.name} onChange={(event) => setCustomerForm({ ...customerForm, name: event.target.value })} /></label>
@@ -655,8 +663,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                     <label className="erp-field-wide">Observações<textarea value={customerForm.notes} onChange={(event) => setCustomerForm({ ...customerForm, notes: event.target.value })} /></label>
                   </div>
                   {customerFormError && <p className="erp-alert" role="alert">{customerFormError}</p>}
-                  <button className="erp-action-button" type="submit" disabled={savingCustomer}>{savingCustomer ? 'Salvando…' : editingCustomer ? 'Salvar alterações' : 'Salvar cliente'}</button>
+                  
+                  </fieldset>
                 </form>
+                </FormDialog>
               )}
               {access?.customers.view ? <div className="erp-card erp-customer-list-card">
                 <div className="erp-list-toolbar">

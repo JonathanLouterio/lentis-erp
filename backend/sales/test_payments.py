@@ -54,8 +54,8 @@ class PaymentCheckoutTests(TestCase):
         return response
 
     def split_sale(self):
-        data = self.data(amount='150')
-        data['payments'].append(self.data(kind='store_credit', amount='550', count=3, confirmed=False)['payments'][0])
+        data = self.data(amount='300')
+        data['payments'].append(self.data(kind='store_credit', amount='400', count=3, confirmed=False)['payments'][0])
         return self.send(data)
 
     def receive(self, receivable, amount='50', *, request_id=None, expected=200, user=None, **overrides):
@@ -70,11 +70,11 @@ class PaymentCheckoutTests(TestCase):
         response = self.split_sale()
         self.assertEqual(response.data['total'], '700.00')
         installments = list(Receivable.objects.filter(payment__kind='store_credit').order_by('number'))
-        self.assertEqual([item.amount for item in installments], [Decimal('183.34'), Decimal('183.33'), Decimal('183.33')])
+        self.assertEqual([item.amount for item in installments], [Decimal('133.34'), Decimal('133.33'), Decimal('133.33')])
         self.assertEqual([item.due_date for item in installments], [date(2027,1,31), date(2027,2,28), date(2027,3,31)])
-        self.assertEqual(sum((item.amount for item in installments)), Decimal('550'))
+        self.assertEqual(sum((item.amount for item in installments)), Decimal('400'))
         self.assertEqual(FinancialEntry.objects.count(), 1)
-        self.assertEqual(self.account.balance, Decimal('150'))
+        self.assertEqual(self.account.balance, Decimal('300'))
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, Decimal('9'))
 
@@ -216,12 +216,12 @@ class PaymentCheckoutTests(TestCase):
         receivable = Receivable.objects.filter(payment__kind='store_credit').first()
         request_id = str(uuid4())
         response = self.receive(receivable, request_id=request_id)
-        self.assertEqual((response.data['paid_amount'], response.data['remaining_amount'], response.data['status']), ('50.00','133.34','partial'))
+        self.assertEqual((response.data['paid_amount'], response.data['remaining_amount'], response.data['status']), ('50.00','83.34','partial'))
         self.receive(receivable, request_id=request_id)
         self.assertEqual(FinancialEntry.objects.count(), 2)
-        self.receive(receivable, amount='133.34')
+        self.receive(receivable, amount='83.34')
         self.assertEqual(Receivable.objects.get(pk=receivable.pk).status, 'paid')
-        self.assertEqual(self.account.balance, Decimal('333.34'))
+        self.assertEqual(self.account.balance, Decimal('433.34'))
 
     def test_receipt_cannot_exceed_balance_or_reuse_key_with_new_amount(self):
         self.split_sale(); receivable = Receivable.objects.filter(payment__kind='store_credit').first()

@@ -34,7 +34,7 @@ def discount_snapshot(sale, user):
     role, limit, configured = current_policy(user, sale.store)
     items = sorted(sale.items.all(),key=lambda item:item.product_id)
     reference = sum(((item.quantity * max(item.reference_price if item.reference_price is not None else item.unit_price, item.unit_price)).quantize(Decimal('0.01'),rounding=ROUND_HALF_UP) for item in items), ZERO)
-    discount = reference - sale.total
+    discount = reference - sale.base_total
     data = {'store':sale.store_id,'user':user.pk,'role':role,'limit':str(limit.quantize(Decimal('0.01'))),
         'customer':sale.customer_id,'discount':str(sale.discount_amount.quantize(Decimal('0.01'))),
         'items':[[item.product_id,str(item.quantity.quantize(Decimal('0.001'))),str(item.unit_price.quantize(Decimal('0.01'))),

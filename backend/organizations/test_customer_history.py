@@ -47,14 +47,17 @@ class CustomerHistoryTests(TestCase):
         self.assertEqual(self.client.delete(self.url_history()).status_code,405)
 
     def test_summary_separates_customer_debt_from_card_operator(self):
-        self.checkout(kind='store_credit',count=2,confirmed=False)
+        body=self.data(kind='store_credit',amount='420',count=2,confirmed=False)
+        body['payments'].insert(0,self.data(amount='280')['payments'][0])
+        response=self.client.post(self.url,body,format='json')
+        self.assertEqual(response.status_code,200,response.data)
         self.checkout(kind='credit',count=2,confirmed=False)
         self.checkout(kind='pix',confirmed=True)
         result=self.get()['summary']
         self.assertEqual(result['completed_sales'],3)
-        self.assertEqual(result['customer_pending'],'700.00')
+        self.assertEqual(result['customer_pending'],'420.00')
         self.assertEqual(result['operator_pending'],'700.00')
-        self.assertEqual(self.get('installments')['count'],5)
+        self.assertEqual(self.get('installments')['count'],6)
         self.assertEqual({r['debtor'] for r in self.get('installments')['results']},{'customer','operator'})
 
     def test_partial_receipt_is_counted_once(self):

@@ -47,6 +47,7 @@ class PrescriptionSelectionSerializer(serializers.Serializer):
 
 
 class CheckoutSerializer(SaleCreateSerializer):
+    financing_rate = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=Decimal('0'), max_value=Decimal('100'), default=Decimal('0'))
     prescription_selection = PrescriptionSelectionSerializer(required=False)
     sale_id = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=9223372036854775807)
     action = serializers.ChoiceField(choices=['draft', 'complete'])
@@ -123,18 +124,34 @@ class ReceivableSerializer(serializers.ModelSerializer):
 
 
 class SalePaymentSerializer(serializers.ModelSerializer):
+    principal_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     account_name = serializers.CharField(source='account.name', read_only=True)
     installments = ReceivableSerializer(many=True, read_only=True)
     class Meta:
         model = SalePayment
-        fields = ['id', 'method', 'account', 'method_name', 'account_name', 'kind', 'amount', 'installment_count', 'first_due_date', 'interval_unit', 'interval_count', 'confirmed', 'installments']
+        fields = ['id', 'method', 'account', 'method_name', 'account_name', 'kind', 'amount', 'principal_amount', 'financing_amount', 'installment_count', 'first_due_date', 'interval_unit', 'interval_count', 'confirmed', 'installments']
 
 
 class PaymentPreviewSerializer(serializers.Serializer):
+    financing_rate = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=Decimal('0'), max_value=Decimal('100'), default=Decimal('0'))
     total = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal('0'))
     payments = PaymentWriteSerializer(many=True, max_length=20)
 
     def validate(self, values):
         if sum((payment['amount'] for payment in values['payments']), Decimal('0')) != values['total']:
             raise serializers.ValidationError({'payments': 'Distribua exatamente o total da venda entre as formas de pagamento.'})
+        from django.core.exceptions import ValidationError as ModelValidationError
+        from .financing import financing_fees, validate_down_payment
+        try:
+            fees = financing_fees(values['financing_rate'], [(p['method_id'].kind, p['amount']) for p in values['payments']])
+            validate_down_payment(values['total'], [(p['method_id'].kind, p['amount'], p['installment_count'], p['confirmed']) for p in values['payments']])
+        except ModelValidationError as error:
+            raise serializers.ValidationError(error.message_dict)
+        values['base_total'] = values['total']
+        values['financing_amount'] = sum(fees, Decimal('0'))
+        values['total'] += values['financing_amount']
+        for payment, fee in zip(values['payments'], fees):
+            payment['principal_amount'] = payment['amount']
+            payment['financing_amount'] = fee
+            payment['amount'] += fee
         return values

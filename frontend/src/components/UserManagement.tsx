@@ -1,3 +1,4 @@
+import FormDialog from './FormDialog'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
@@ -92,7 +93,7 @@ export default function UserManagement({ onSavingChange, onDirtyChange }: Props)
     setBusy(true); setError(''); setSuccess('')
     try {
       const saved = await saveManagedUser(record?.id ?? null, { ...form, ...(record ? {} : { password }) })
-      populate(saved); setSuccess('Usuário salvo.'); setRetry(value => value + 1)
+      populate(saved); setEditing(false); setSuccess('Usuário salvo.'); setRetry(value => value + 1)
     } catch (err) {
       setError(message(err) + (!record && err instanceof ApiError && err.status === 0 ? ' Confira a lista pelo login antes de tentar criar novamente.' : ''))
     } finally { setBusy(false); setPassword('') }
@@ -133,10 +134,11 @@ export default function UserManagement({ onSavingChange, onDirtyChange }: Props)
         {listing?.count === 0 && <p>Nenhum usuário encontrado.</p>}
         <div className="um-pagination"><button disabled={locked || page === 1} onClick={() => { if (mayLeave()) { closeEditor(); setPage(p => p - 1) } }}>Anterior</button><span>Página {page}</span><button disabled={locked || !listing?.has_next} onClick={() => { if (mayLeave()) { closeEditor(); setPage(p => p + 1) } }}>Próxima</button></div>
       </>}
-    </aside><div className="um-card um-editor">
-      {!editing ? <div className="um-empty"><h2>Selecione um usuário</h2><p>Abra uma conta para revisar os acessos ou cadastre uma nova pessoa.</p></div> : <>
+    </aside>{editing&&<FormDialog title={record?`Conta de ${record.username}`:'Novo usuário'} subtitle="Dados, vínculos e permissões" busy={busy} dirty={dirty||!!resetPassword} onClose={closeEditor} actions={!protectedUser && <button type="submit" form="lentis-user-form" className="erp-action-button" disabled={locked || (!!record && !dirty)}>{busy ? 'Aguarde…' : 'Salvar usuário'}</button>}>
+      <div className="um-editor">
+        {error&&<p className="um-error" role="alert">{error}</p>}{success&&<p className="um-success" role="status">{success}</p>}
         <header><h2>{record ? `Conta de ${record.username}` : 'Novo usuário'}</h2><p>{protectedUser ? 'Administrador do sistema: conta protegida e com acesso administrativo completo. Alterações desta conta ficam no Django Admin.' : 'Preencha os dados e selecione os acessos necessários.'}</p></header>
-        <form onSubmit={event => void submit(event)} autoComplete="off" aria-busy={busy}>
+        <form id="lentis-user-form" onSubmit={event => void submit(event)} autoComplete="off" aria-busy={busy}>
           <fieldset disabled={locked || protectedUser}><legend>Dados da conta</legend><div className="um-fields">
             <label>Usuário<input required maxLength={150} autoComplete="off" value={form.username} onChange={e => change({ username: e.target.value })} /></label>
             <label>E-mail<input type="email" maxLength={254} value={form.email} onChange={e => change({ email: e.target.value })} /></label>
@@ -160,7 +162,7 @@ export default function UserManagement({ onSavingChange, onDirtyChange }: Props)
               return <label className="um-check" key={p.id} data-permission-key={p.key}><input type="checkbox" checked={form.permission_ids.includes(p.id)} onChange={e => change({ permission_ids: e.target.checked ? [...form.permission_ids, p.id] : form.permission_ids.filter(id => id !== p.id) })} /><span>{p.name}{inherited && <small>Também herdada de grupo (continua efetiva)</small>}</span></label>
             })}</details>)}{!filteredPermissions.length && <p>Nenhuma permissão encontrada.</p>}</div>
           </fieldset>
-          <div className="um-actions">{!protectedUser && <button className="erp-action-button" disabled={locked || (!!record && !dirty)}>{busy ? 'Aguarde…' : 'Salvar usuário'}</button>}<button type="button" disabled={locked} onClick={() => { if (mayLeave()) closeEditor() }}>Fechar cadastro</button></div>
+          <div className="um-actions"></div>
         </form>
         {record && <section className="um-security"><h3>Segurança e histórico</h3>
           <div className="um-actions">{!protectedUser && <button disabled={locked || dirty} onClick={() => { setShowReset(v => !v); setResetPassword('') }}>Redefinir senha</button>}<button disabled={locked} onClick={() => void loadHistory()}>Carregar histórico</button></div>
@@ -168,7 +170,7 @@ export default function UserManagement({ onSavingChange, onDirtyChange }: Props)
           {showReset && <form className="um-reset" onSubmit={event => void reset(event)}><label>Nova senha<input type="password" autoComplete="new-password" required minLength={8} maxLength={256} value={resetPassword} disabled={locked || dirty} onChange={e => setResetPassword(e.target.value)} /></label><button disabled={locked || dirty}>Confirmar redefinição</button></form>}
           {history && <><p>Últimos 50 registros desta funcionalidade.</p><ol className="um-history">{history.map(e => <li key={e.id}><strong>{actions[e.action] ?? e.action}</strong><span>{new Date(e.created_at).toLocaleString('pt-BR')} · {e.actor}</span><small>{Object.keys(e.changes).map(name => fields[name] ?? name).join(', ') || (e.action === 'password_reset' ? 'Credenciais não são registradas no histórico' : 'Nenhum campo alterado')}</small></li>)}</ol>{history.length === 0 && <p>Ainda não há registros desta funcionalidade.</p>}</>}
         </section>}
-      </>}
-    </div></div>
+      </div></FormDialog>}
+    </div>
   </section>
 }

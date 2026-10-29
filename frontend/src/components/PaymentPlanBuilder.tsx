@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { financedKinds, financingFee, minimumEntry } from './saleFinancing'
 import type { SalePaymentOptions } from '../api'
 import { brl, decimal, decimalText, paymentSchedule, today } from './saleMoney'
 
@@ -6,12 +7,12 @@ export type PaymentPlanRow = {
   key: string; methodId: string; accountId: string; amount: string; auto: boolean
   count: number; due: string; confirmed: boolean; intervalUnit: 'months' | 'days'; intervalCount: number
 }
-type Props = { options: SalePaymentOptions; total: bigint; blocked: boolean; onApply: (payments: PaymentPlanRow[]) => void }
+type Props = { options: SalePaymentOptions; total: bigint; rate: bigint; blocked: boolean; onApply: (payments: PaymentPlanRow[]) => void }
 
-export default function PaymentPlanBuilder({ options, total, blocked, onApply }: Props) {
+export default function PaymentPlanBuilder({ options, total, rate, blocked, onApply }: Props) {
   const immediate = options.methods.filter(method => ['cash', 'pix', 'transfer'].includes(method.kind))
   const deferred = options.methods.filter(method => ['credit', 'store_credit', 'boleto'].includes(method.kind))
-  const [entry, setEntry] = useState('0')
+  const [entry, setEntry] = useState(decimalText(minimumEntry(total)))
   const [entryMethod, setEntryMethod] = useState(String(immediate.find(method => method.kind === 'pix')?.id ?? immediate[0]?.id ?? ''))
   const [entryAccount, setEntryAccount] = useState(String(options.accounts.find(account => account.code === 'bank')?.id ?? options.accounts[0]?.id ?? ''))
   const [confirmed, setConfirmed] = useState(false)
@@ -25,7 +26,8 @@ export default function PaymentPlanBuilder({ options, total, blocked, onApply }:
   const remaining = total - (amount ?? 0n)
   const method = deferred.find(candidate => String(candidate.id) === methodId)
   const maximum = method?.installment_limit ?? 12
-  const schedule = paymentSchedule(remaining, count, due, unit, interval)
+  const fee = financingFee(remaining, rate, method?.kind ?? '')
+  const schedule = paymentSchedule(remaining + fee, count, due, unit, interval)
   const valid = amount !== null && amount >= 0n && remaining > 0n && count <= maximum && schedule.length === count && !!method && options.accounts.some(account => String(account.id) === accountId) && (amount === 0n || (immediate.some(method => String(method.id) === entryMethod) && options.accounts.some(account => String(account.id) === entryAccount)))
 
   function apply() {
@@ -38,7 +40,7 @@ export default function PaymentPlanBuilder({ options, total, blocked, onApply }:
 
   return <div className="erp-payment-builder">
     <h3>Montar entrada e saldo parcelado</h3>
-    <p className="erp-sales-hint">A entrada pode ser zero. Aplique o plano para substituir os pagamentos atuais ou feche a montagem para mantê-los.</p>
+    <p className="erp-sales-hint">Boleto e crediário parcelados exigem entrada recebida de pelo menos 40% dos produtos após descontos. Aplique o plano para substituir os pagamentos atuais ou feche a montagem para mantê-los.</p>
     <div className="erp-payment-builder-fields">
       <label>Entrada (R$)<input aria-label="Valor da entrada" inputMode="decimal" value={entry} disabled={blocked} onChange={event => setEntry(event.target.value)} /></label>
       <label>Forma da entrada<select aria-label="Forma da entrada" value={entryMethod} disabled={blocked || amount === 0n || !options.can_receive} onChange={event => { setEntryMethod(event.target.value); const method = immediate.find(method => String(method.id) === event.target.value); const preferred = method?.kind === 'cash' ? options.accounts.find(account => account.cash_box || account.code === 'cash') : options.accounts.find(account => account.code === 'bank'); if (preferred) setEntryAccount(String(preferred.id)) }}><option value="">Selecione</option>{immediate.map(method => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
@@ -48,12 +50,14 @@ export default function PaymentPlanBuilder({ options, total, blocked, onApply }:
     <div className="erp-payment-builder-fields">
       <label>Forma do saldo<select aria-label="Forma do saldo" value={methodId} disabled={blocked} onChange={event => { setMethodId(event.target.value); setCount(1) }}><option value="">Selecione</option>{deferred.map(method => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label>
       <label>Conta do saldo<select aria-label="Conta do saldo" value={accountId} disabled={blocked} onChange={event => setAccountId(event.target.value)}><option value="">Selecione</option>{options.accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
-      <label>Parcelas do saldo<select aria-label="Parcelas do saldo" value={count} disabled={blocked} onChange={event => setCount(Number(event.target.value))}>{Array.from({ length: maximum }, (_, index) => <option key={index} value={index + 1}>{index + 1}x sem juros</option>)}</select></label>
+      <label>Parcelas do saldo<select aria-label="Parcelas do saldo" value={count} disabled={blocked} onChange={event => setCount(Number(event.target.value))}>{Array.from({ length: maximum }, (_, index) => <option key={index} value={index + 1}>{index + 1}x</option>)}</select></label>
       <label>Primeiro vencimento<input aria-label="Primeiro vencimento do saldo" type="date" value={due} disabled={blocked} onChange={event => setDue(event.target.value)} /></label>
       <label>Intervalo<select aria-label="Unidade do intervalo do saldo" value={unit} disabled={blocked || count === 1} onChange={event => { setUnit(event.target.value as 'months' | 'days'); setInterval(event.target.value === 'days' ? 30 : 1) }}><option value="months">Meses</option><option value="days">Dias</option></select></label>
       <label>{unit === 'months' ? 'A cada quantos meses' : 'A cada quantos dias'}<input aria-label="Intervalo do saldo" type="number" min={1} max={unit === 'months' ? 12 : 365} value={interval} disabled={blocked || count === 1} onChange={event => setInterval(Number(event.target.value))} /></label>
     </div>
-    <p><strong>Saldo a parcelar: {brl(remaining)}</strong></p>
+    <p><strong>Saldo a parcelar: {brl(remaining + fee)}</strong></p>
+    <p>Saldo sem acréscimo: {brl(remaining)} · Acréscimo: {brl(fee)}</p>
+    {method && financedKinds.includes(method.kind) && <p className="erp-sales-hint">Entrada mínima: {brl(minimumEntry(total))}. {!confirmed ? 'Confirme o recebimento antes de concluir a venda. Você pode aplicar este plano e salvar um rascunho.' : ''}</p>}
     {!valid && <p className="erp-sales-hint">Informe entrada menor que o total, forma, conta e vencimentos válidos. Respeite o limite de {maximum} parcela(s) e o mínimo de um centavo por parcela.</p>}
     <button className="erp-action-button" disabled={blocked || !valid} onClick={apply}>Aplicar entrada e parcelas</button>
   </div>

@@ -11,6 +11,7 @@ from .models import CheckoutRequest, FinancialAccount, FinancialEntry, PaymentMe
 from .finance_permissions import require_finance
 from .services import _locked_sale
 from .payment_schedule import schedule, validate_terms
+from .financing import financing_fees, validate_down_payment
 
 
 IMMEDIATE_KINDS = {'cash', 'pix', 'transfer'}
@@ -32,6 +33,10 @@ def validate_payments(sale):
         if payment.kind in CUSTOMER_CREDIT_KINDS and (not sale.customer_id or not sale.customer.is_active):
             raise ValidationError({'customer_id': 'Identifique um cliente ativo para boleto ou crediário.'})
         validate_terms(payment.method, payment.amount, payment.installment_count, payment.first_due_date, payment.interval_unit, payment.interval_count, payment.confirmed)
+    fees = financing_fees(sale.financing_rate, [(p.kind, p.principal_amount) for p in payments])
+    if fees != [p.financing_amount for p in payments] or sum(fees, Decimal('0')) != sale.financing_amount:
+        raise ValidationError({'payments': 'O acréscimo do plano mudou. Revise e salve os pagamentos antes de concluir.'})
+    validate_down_payment(sale.base_total, [(p.kind, p.principal_amount, p.installment_count, p.confirmed) for p in payments])
     return payments
 
 
@@ -100,6 +105,7 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
         payments = values.pop('payments')
         customer = values.pop('customer_id', None)
         discount = values.pop('discount_amount')
+        rate = values.pop('financing_rate', Decimal('0'))
         prescription_selection = values.pop('prescription_selection', None)
         from .prescription_services import apply_prescription
         if sale_id:
@@ -109,6 +115,8 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
             if sale.status != Sale.Status.DRAFT:
                 raise ValidationError('Reabra a venda para consultar a conclusão. Vendas finalizadas não podem ser substituídas.')
             sale.discount_amount = Decimal('0')
+            sale.financing_rate = Decimal('0')
+            sale.financing_amount = Decimal('0')
             sale.customer = customer
             sale.notes = values['notes']
             changed = apply_prescription(sale, user, prescription_selection)
@@ -126,9 +134,15 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
             SaleItem.objects.create(sale=sale, product=item.pop('product_id'), **item)
         sale.discount_amount = discount
         sale.save()
-        for payment in payments:
+        fees = financing_fees(rate, [(p['method_id'].kind, p['amount']) for p in payments])
+        for payment, fee in zip(payments, fees):
             payment = dict(payment)
+            payment['amount'] += fee
+            payment['financing_amount'] = fee
             SalePayment.objects.create(sale=sale, method=payment.pop('method_id'), account=payment.pop('account_id'), **payment)
+        sale.financing_rate = rate
+        sale.financing_amount = sum(fees, Decimal('0'))
+        sale.save()
         if action == 'complete':
             sale = complete_sale(user=user, sale_id=sale.pk)
         CheckoutRequest.objects.create(request_id=request_id, sale=sale, created_by=user, payload_digest=payload_digest)

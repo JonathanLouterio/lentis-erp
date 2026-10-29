@@ -403,3 +403,41 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Direitos diretos e de grupos são consultados na conta ativa atual; revogação bloqueia a mesma sessão, incluindo exportações. As telas atualizam seus direitos ao recuperar o foco.
 - O vínculo ativo com a unidade permanece obrigatório. Admin de fornecedores continua somente leitura e exige consulta efetiva.
 - As migrações criam as novas permissões sem concedê-las automaticamente.
+
+
+## Entrada mínima e acréscimo em boleto/crediário — 28/10/2026
+
+- Base da entrada: subtotal dos produtos menos descontos dos itens e da venda, antes do acréscimo.
+- Quando houver boleto ou crediário e mais de uma parcela/linha no plano, a conclusão exige entrada recebida de pelo menos 40% dessa base. Entrada mais uma parcela de saldo também é parcelamento; dividir boletos em linhas separadas não evita a regra.
+- Uma única cobrança integral em boleto ou crediário não é parcelamento e não exige entrada. Cartão parcelado permanece fora dessa regra.
+- Entradas são valores confirmados em dinheiro, Pix ou transferência. A soma de várias entradas conta. A permissão de recebimento e as regras de caixa continuam obrigatórias. Valores apenas previstos não contam.
+- O mínimo é arredondado para cima no centavo. Rascunhos podem ser salvos sem alcançar ou confirmar a entrada, mas a conclusão revalida o plano no servidor.
+- Acréscimo opcional, percentual único de 0 a 100%, com duas casas decimais, informado por venda. Quem pode criar/editar a venda pode informar a taxa. Não há taxa padrão por loja, juros mensais, capitalização ou exceção administrativa nesta versão.
+- A taxa incide somente no principal alocado em boleto/crediário, já descontada a parte alocada nas demais formas. Não incide sobre entrada, cartões, Pix, dinheiro ou transferência. Aplica-se também à cobrança única nessas duas modalidades quando uma taxa for informada.
+- Cada linha de boleto/crediário tem acréscimo arredondado comercialmente ao centavo; o acréscimo da venda é a soma dessas linhas. O saldo com acréscimo é dividido em parcelas conservando todos os centavos.
+- Total final = produtos após descontos + acréscimo. Exemplo: base R$ 1.000, entrada R$ 400, saldo R$ 600, taxa 5%, acréscimo R$ 30, saldo parcelado R$ 630, total R$ 1.030.
+- O acréscimo não compensa desconto nem dispensa autorização de desconto. Painel, relatórios de vendas, parcelas e histórico utilizam o total final; a tela de venda discrimina os valores.
+- Prévia e conclusão usam os mesmos cálculos. O servidor ignora totais/acréscimos enviados como campos calculados pelo cliente. Finalização de rascunho, repetição da requisição e cancelamento preservam consistência e histórico.
+- Vendas anteriores recebem taxa/acréscimo zero na migração. Não são recalculadas nem têm parcelas alteradas. Rascunhos anteriores precisam atender à entrada mínima ao serem concluídos.
+- O relatório gerencial de contas a receber com faixas e cores continua pendente; não faz parte desta entrega.
+
+
+## Relatório gerencial de contas a receber — 28/10/2026
+
+- Acesso em Gestão > Relatórios > Contas a receber. Consulta exige sales.view_reports + sales.view_receivable e vínculo ativo com a unidade; exportação CSV e impressão/PDF exigem também sales.export_reports.
+- Relatório de leitura: nenhuma baixa, recebimento, cobrança externa ou alteração financeira é executada.
+- Carteira completa (todos os vencimentos) ou período de vencimento de até 366 dias. O modo completo inclui dívidas acima de um ano e não aplica limite de datas.
+- O saldo é atual, considerando recebimentos líquidos e estornos até a consulta; o período filtra vencimentos, não a data do recebimento. Não representa um saldo histórico na data final nem o dinheiro recebido durante aquele período.
+- Somente parcelas de vendas que permanecem finalizadas. Rascunhos e cancelamentos não entram. Contas/formas/clientes inativos não apagam parcelas históricas.
+- Filtros por nome do cliente registrado na parcela, número de venda, tipo de pagamento, responsável (cliente/operadora), situação financeira, prazo/cor e faixa de atraso. Condições combinadas usam interseção.
+- Verde: saldo em aberto com vencimento além da janela de alerta. Amarelo: saldo em aberto com vencimento de hoje até o limite da janela, inclusive. Janela padrão de 7 dias, ajustável de 1 a 90 dias por consulta, sem alterar preferências globais.
+- Vermelho: saldo em aberto vencido de 1 a 90 dias. Preto: saldo em aberto vencido há mais de 90 dias. Quitadas são cinza independentemente do vencimento original.
+- Datas e dias de atraso calculados no fuso America/Sao_Paulo. Vencimento hoje não é atraso. Dia 90 permanece vermelho e dia 91 passa a preto.
+- Recebimentos parciais reduzem o saldo destacado, sem retirar a classificação de atraso do valor ainda devido. Quitação retira a parcela dos indicadores de atraso. Estorno recompõe o saldo.
+- Faixas: 1–30, 31–60, 61–90 e acima de 90 dias. Totais e contagens consideram todos os resultados dos filtros, não somente a página exibida.
+- Total vencido já inclui acima de 90 dias; esses indicadores não devem ser somados. Saldo aberto = dentro do prazo + a vencer + total vencido.
+- Valor original das parcelas já inclui eventual acréscimo comercial registrado na venda. O relatório não recalcula nem acrescenta juros.
+- Cor acompanha texto e dias em atraso, com contraste nos temas claro/escuro. CSV registra situação, prazo e dias em texto; CSV não armazena formatação de cores.
+- CSV contém todas as páginas dos filtros, limite de 20.000 registros, com proteção contra fórmulas em textos. Impressão/PDF contém todas as páginas até 2.000 parcelas; acima disso a consulta deve ser refinada, sem gerar documento parcial.
+- Impressão abre documento HTML protegido na sessão. Ctrl+P permite imprimir ou salvar PDF no navegador. Os filtros, unidade, data de referência, totais e legenda são incluídos. Campos de cliente são escapados; não há execução de scripts nesse documento.
+- Revogação de permissões é conferida no backend em cada consulta/exportação e na interface ao recuperar foco. Respostas usam no-store, private.

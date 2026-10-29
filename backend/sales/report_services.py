@@ -11,7 +11,7 @@ from .models import FinancialAccount, FinancialEntry, Receivable
 from .dashboard_views import BUSINESS_TZ, MONEY, ZERO, bounds, money, sales_for
 
 REPORTS = {
-    'sales': {'title': 'Vendas finalizadas', 'permissions': ('sales.view_sale',), 'basis': 'Data de finalização', 'description': 'Vendas que continuam finalizadas, pelo dia de finalização em São Paulo. Rascunhos e vendas canceladas são excluídos. Os valores já incluem os descontos registrados.'},
+    'sales': {'title': 'Vendas finalizadas', 'permissions': ('sales.view_sale',), 'basis': 'Data de finalização', 'description': 'Vendas que continuam finalizadas, pelo dia de finalização em São Paulo. Rascunhos e vendas canceladas são excluídos. Os valores incluem os descontos e os acréscimos registrados.'},
     'movements': {'title': 'Movimentações registradas', 'permissions': ('sales.view_financialentry', 'purchases.view_payableplan'), 'basis': 'Data de registro', 'description': 'Recebimentos, pagamentos a fornecedores e seus estornos pela data de registro em São Paulo. A data informada do pagamento aparece em outra coluna. Não inclui abertura, suprimento ou retirada manual de caixa, nem representa lucro ou extrato bancário.'},
     'receivables': {'title': 'Contas a receber', 'permissions': ('sales.view_receivable',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas com vencimento no período e situação atual, incluindo recebimentos posteriores ao período. Não é um saldo histórico na data final. Vendas canceladas são excluídas. O responsável distingue cliente e operadora de cartão.'},
     'payables': {'title': 'Contas a pagar', 'permissions': ('purchases.view_payableplan',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas de compras com vencimento no período e situação atual, incluindo pagamentos posteriores ao período. Não é um saldo histórico na data final. Somente compras com plano de contas a pagar gerado aparecem.'},
@@ -22,13 +22,20 @@ class ReportInput(serializers.Serializer):
     report = serializers.ChoiceField(choices=list(REPORTS), default='sales')
     start = serializers.DateField(required=False)
     end = serializers.DateField(required=False)
-    status = serializers.ChoiceField(choices=['all', 'pending', 'paid', 'overdue'], default='pending')
+    status = serializers.ChoiceField(choices=['all', 'pending', 'paid', 'partial', 'overdue'], default='pending')
     debtor = serializers.ChoiceField(choices=['all', 'customer', 'operator'], default='all')
     direction = serializers.ChoiceField(choices=['all', 'in', 'out'], default='all')
     account_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
     page = serializers.IntegerField(min_value=1, required=False)
     page_size = serializers.IntegerField(min_value=1, max_value=100, required=False)
-    export = serializers.ChoiceField(choices=['csv'], required=False)
+    export = serializers.ChoiceField(choices=['csv', 'print'], required=False)
+    all_dates = serializers.BooleanField(default=False)
+    customer = serializers.CharField(max_length=120, allow_blank=True, default='')
+    sale_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807, required=False)
+    method = serializers.ChoiceField(choices=['all','cash','pix','transfer','credit','debit','boleto','store_credit'], default='all')
+    risk = serializers.ChoiceField(choices=['all','within','soon','overdue','critical','paid'], default='all')
+    aging = serializers.ChoiceField(choices=['all','1_30','31_60','61_90','over_90'], default='all')
+    warning_days = serializers.IntegerField(min_value=1, max_value=90, default=7)
 
 
 def available_reports(user):
@@ -42,13 +49,17 @@ def parse_filters(request, store, now):
     spec = REPORTS[values['report']]
     if not report_allowed(request.user,spec['permissions']):
         raise PermissionDenied('Seu usuário não tem as permissões de consulta exigidas por este relatório.')
-    if values.get('export')=='csv' and not request.user.has_perm('sales.export_reports'):
+    if values.get('export') in ('csv','print') and not request.user.has_perm('sales.export_reports'):
         raise PermissionDenied('Seu usuário não tem permissão de exportar relatórios.')
+    if values['report'] != 'receivables' and (values.get('all_dates') or values.get('export')=='print' or values['status']=='partial'):
+        raise ValidationError('Todos os vencimentos, recebimentos parciais e impressão estão disponíveis no relatório de contas a receber.')
     today = timezone.localtime(now, BUSINESS_TZ).date()
     if ('start' in values) != ('end' in values):
         raise ValidationError('Informe as datas inicial e final juntas.')
     start = values.get('start', today.replace(day=1))
     end = values.get('end', today)
+    if values.get('all_dates'):
+        start, end = today.replace(day=1), today
     if start > end or (end-start).days > 365:
         raise ValidationError('Escolha um período de até 366 dias, com início anterior ou igual ao fim.')
     try:
@@ -89,6 +100,9 @@ def installment_rows(queryset, values, today, incoming):
 def prepare_report(store, values, now, today, lower, upper):
     """Retorna QuerySet paginável e resumo dos mesmos filtros, sem gravar dados."""
     kind=values['report']
+    if kind=='receivables':
+        from .receivable_report import prepare_receivables
+        return prepare_receivables(store,values,today)
     columns=[col('unit', 'Unidade')]
     if kind=='sales':
         query=sales_for(store).filter(completed_at__gte=lower, completed_at__lt=upper, completed_at__lte=now).select_related('customer','created_by').order_by('-completed_at','-pk')
@@ -141,7 +155,7 @@ def movement_rows(store,values,now,lower,upper):
     return query,summary
 
 
-def serialize_row(obj,kind,store,today):
+def serialize_row(obj,kind,store,today,warning_days=7):
     row={'unit':f'{store.code} — {store.name}'}
     if kind=='sales':
         row.update(id=f'#{obj.pk}',date=obj.completed_at.isoformat(),party=obj.customer.name if obj.customer_id else 'Venda balcão',author=obj.created_by.username,amount=money(obj.dashboard_total))
@@ -150,7 +164,10 @@ def serialize_row(obj,kind,store,today):
     else:
         remaining=obj.report_remaining;paid=obj.report_paid
         row.update(id=f'#{obj.pk}',number=str(obj.number),due_date=obj.due_date.isoformat(),amount=money(obj.amount),paid=money(paid),remaining=money(remaining),status='Quitada' if remaining==0 else 'Vencida' if obj.due_date<today else 'Paga parcialmente' if paid>0 else 'Em aberto')
-        if kind=='receivables':row.update(document=f'#{obj.payment.sale_id}',party=obj.customer_name or 'Venda balcão',debtor=obj.get_debtor_display())
+        if kind=='receivables':
+            row.update(document=f'#{obj.payment.sale_id}',party=obj.customer_name or 'Venda balcão',debtor=obj.get_debtor_display())
+            from .receivable_report import decorate_row
+            decorate_row(row,obj,today,warning_days)
         else:
             purchase=obj.plan.purchase
             row.update(document=f'#{purchase.pk}',party=purchase.supplier_snapshot.get('name') or purchase.supplier.name)

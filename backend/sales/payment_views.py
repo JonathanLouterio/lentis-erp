@@ -126,6 +126,7 @@ class PaymentPreviewView(SalesBaseView):
                 result.append({
                     'method_name': method.name, 'account_name': account.name,
                     'kind': method.kind, 'amount': str(payment['amount']),
+                    'principal_amount': str(payment['principal_amount']), 'financing_amount': str(payment['financing_amount']),
                     'confirmed': payment['confirmed'],
                     'installments': [
                         {'number': number, 'due_date': due.isoformat(), 'amount': f'{amount:.2f}'}
@@ -135,4 +136,4 @@ class PaymentPreviewView(SalesBaseView):
                         ), 1)
                     ],
                 })
-        return Response({'total': str(values['total']), 'payments': result})
+        return Response({'total': str(values['total']), 'base_total': str(values['base_total']), 'financing_amount': str(values['financing_amount']), 'financing_rate': str(values['financing_rate']), 'payments': result})

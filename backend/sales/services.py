@@ -46,7 +46,7 @@ def finalize_sale(*, user, sale_id):
         if sale.events.exists():
             raise ValidationError("O histórico não corresponde a uma venda em rascunho.")
         sale.full_clean()
-        if sale.payments.exists():
+        if sale.payments.exists() or sale.financing_rate or sale.financing_amount:
             from .payment_services import validate_payments
             validate_payments(sale)
         items = list(sale.items.select_for_update(of=("self",)).order_by("product_id"))

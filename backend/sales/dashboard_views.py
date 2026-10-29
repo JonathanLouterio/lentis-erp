@@ -52,7 +52,7 @@ def sales_for(store):
     line = Round(ExpressionWrapper(F('quantity') * F('unit_price'), output_field=DecimalField(max_digits=28, decimal_places=5)), 2) - F('discount_amount')
     totals = SaleItem.objects.filter(sale_id=OuterRef('pk')).values('sale_id').annotate(value=Sum(line, output_field=MONEY)).values('value')
     return Sale.objects.filter(store=store, status='completed').annotate(
-        dashboard_total=ExpressionWrapper(Coalesce(Subquery(totals, output_field=MONEY), Value(ZERO), output_field=MONEY) - F('discount_amount'), output_field=MONEY),
+        dashboard_total=ExpressionWrapper(Coalesce(Subquery(totals, output_field=MONEY), Value(ZERO), output_field=MONEY) - F('discount_amount') + F('financing_amount'), output_field=MONEY),
     )
 
 

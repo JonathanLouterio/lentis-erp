@@ -28,6 +28,7 @@ class SaleEventSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
+    base_total = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
     prescription = serializers.SerializerMethodField()
     can_view_prescription = serializers.SerializerMethodField()
     store_name = serializers.CharField(source="store.name", read_only=True)
@@ -53,7 +54,7 @@ class SaleSerializer(serializers.ModelSerializer):
         fields = [
             "id", "store", "store_name", "customer", "customer_name", "created_by", "creator_username",
             "status", "status_label", "notes", "created_at", "updated_at", "completed_at", "cancelled_at",
-            "cancellation_reason", "items", "events", "subtotal", "discount_total", "total",
+            "cancellation_reason", "items", "events", "subtotal", "discount_total", "total", "base_total", "financing_rate", "financing_amount",
             "prescription", "can_view_prescription", "can_edit", "can_finalize", "can_cancel", "discount_amount", "payments", "financial_status", "stock_warnings", "discount_control", "discount_requests",
         ]
         read_only_fields = fields

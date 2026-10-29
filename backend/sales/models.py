@@ -2,7 +2,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models, transaction
 
 
@@ -34,6 +34,8 @@ class Sale(models.Model):
     )
     prescription_record = models.ForeignKey("sales.SalePrescription", on_delete=models.PROTECT, null=True, blank=True, related_name="current_sales", editable=False)
     discount_amount = models.DecimalField("Desconto da venda (R$)", max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(ZERO)])
+    financing_rate = models.DecimalField("Acréscimo sobre saldo (%)", max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("100"))])
+    financing_amount = models.DecimalField("Acréscimo registrado (R$)", max_digits=28, decimal_places=2, default=0, editable=False, validators=[MinValueValidator(ZERO)])
     notes = models.TextField("Observações", blank=True)
     created_at = models.DateTimeField("Criada em", auto_now_add=True)
     updated_at = models.DateTimeField("Atualizada em", auto_now=True)
@@ -47,6 +49,7 @@ class Sale(models.Model):
         verbose_name_plural = "Vendas"
         ordering = ["-created_at", "-pk"]
         constraints = [
+            models.CheckConstraint(condition=models.Q(financing_rate__gte=0, financing_rate__lte=100, financing_amount__gte=0), name="sale_financing_values_valid"),
             models.CheckConstraint(condition=models.Q(discount_amount__gte=0), name="sale_discount_nonnegative"),
             models.CheckConstraint(
                 condition=(
@@ -65,7 +68,7 @@ class Sale(models.Model):
             record = self.prescription_record
             if record.sale_id != self.pk or record.customer_id != self.customer_id or record.action != 'attached':
                 raise ValidationError('A receita vinculada deve ser desta venda e do cliente selecionado. Remova o vínculo antes de trocar o cliente.')
-        if self.discount_amount < 0 or (self.pk and self.total < 0):
+        if self.discount_amount < 0 or (self.pk and self.base_total < 0):
             raise ValidationError({"discount_amount": "O desconto não pode ultrapassar o valor dos itens."})
         if self.customer_id and self.store_id and self.customer.store_id != self.store_id:
             raise ValidationError({"customer": "O cliente deve pertencer à unidade da venda."})
@@ -82,7 +85,7 @@ class Sale(models.Model):
             for item in self.items.all():
                 subtotal += item.subtotal
                 discount += item.discount_amount
-        return {"subtotal": subtotal, "discount_total": discount, "total": subtotal - discount}
+        return {"subtotal": subtotal, "discount_total": discount, "total": subtotal - discount + self.financing_amount}
 
     @property
     def subtotal(self):
@@ -91,6 +94,10 @@ class Sale(models.Model):
     @property
     def discount_total(self):
         return self.calculate_totals()["discount_total"]
+
+    @property
+    def base_total(self):
+        return self.calculate_totals()["total"] - self.financing_amount
 
     @property
     def total(self):

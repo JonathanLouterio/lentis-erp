@@ -21,9 +21,9 @@ class PaymentTermsTests(TestCase):
         return self.client.post(f'/api/me/sales/payment-preview/?store_id={self.store.pk}', {'total': total, 'payments': payments}, format='json')
 
     def mixed(self):
-        body = self.data(kind='store_credit', amount='550', count=3, confirmed=False)
+        body = self.data(kind='store_credit', amount='400', count=3, confirmed=False)
         body['payments'][0].update(first_due_date='2028-01-31', interval_unit='months', interval_count=1)
-        entry = self.data(amount='150')['payments'][0]
+        entry = self.data(amount='300')['payments'][0]
         body['payments'].insert(0, entry)
         return body
 
@@ -38,15 +38,15 @@ class PaymentTermsTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         for planned, recorded in zip(preview.data['payments'], response.data['payments']):
             self.assertEqual([(item['due_date'], item['amount']) for item in planned['installments']], [(item['due_date'], item['amount']) for item in recorded['installments']])
-        self.assertEqual([item['amount'] for item in preview.data['payments'][1]['installments']], ['183.34', '183.33', '183.33'])
+        self.assertEqual([item['amount'] for item in preview.data['payments'][1]['installments']], ['133.34', '133.33', '133.33'])
         self.assertEqual([item['due_date'] for item in preview.data['payments'][1]['installments']], ['2028-01-31', '2028-02-29', '2028-03-31'])
         self.account.refresh_from_db()
-        self.assertEqual(self.account.balance, Decimal('150'))
+        self.assertEqual(self.account.balance, Decimal('300'))
         self.assertEqual(FinancialEntry.objects.count(), 1)
-        self.assertEqual(sum((item.remaining_amount for item in Receivable.objects.all()), Decimal('0')), Decimal('550'))
+        self.assertEqual(sum((item.remaining_amount for item in Receivable.objects.all()), Decimal('0')), Decimal('400'))
 
     def test_day_interval_persists_in_draft_and_completion(self):
-        body = self.data(action='draft', kind='store_credit', count=3, confirmed=False)
+        body = self.data(action='draft', kind='credit', count=3, confirmed=False)
         body['payments'][0].update(first_due_date='2028-02-20', interval_unit='days', interval_count=15)
         response = self.client.post(self.url, body, format='json')
         self.assertEqual(response.status_code, 200, response.data)
@@ -75,10 +75,10 @@ class PaymentTermsTests(TestCase):
         self.assertEqual(FinancialEntry.objects.count(), 0)
 
     def test_limit_rechecked_for_saved_draft_and_completed_history_stays(self):
-        body = self.data(action='draft', kind='store_credit', count=3, confirmed=False)
+        body = self.data(action='draft', kind='credit', count=3, confirmed=False)
         response = self.client.post(self.url, body, format='json')
         self.assertEqual(response.status_code, 200, response.data)
-        method = self.methods['store_credit']; method.max_installments = 2; method.save()
+        method = self.methods['credit']; method.max_installments = 2; method.save()
         with self.assertRaises(ValidationError): complete_sale(user=self.user, sale_id=response.data['id'])
         self.assertEqual(Receivable.objects.count(), 0)
         method.max_installments = 3; method.save()

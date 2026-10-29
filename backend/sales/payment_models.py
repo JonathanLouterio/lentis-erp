@@ -100,12 +100,17 @@ class ImmutableRecord(models.Model):
 
 
 class SalePayment(models.Model):
+    @property
+    def principal_amount(self):
+        return self.amount - self.financing_amount
+
     sale = models.ForeignKey('sales.Sale', on_delete=models.CASCADE, related_name='payments', verbose_name='Venda')
     method = models.ForeignKey(PaymentMethod, on_delete=models.PROTECT, verbose_name='Forma de pagamento')
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, verbose_name='Conta de recebimento')
     method_name = models.CharField('Forma registrada', max_length=100, editable=False)
     kind = models.CharField('Tipo registrado', max_length=20, choices=PaymentMethod.Kind.choices, editable=False)
     amount = models.DecimalField('Valor', max_digits=18, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    financing_amount = models.DecimalField('Acréscimo registrado', max_digits=18, decimal_places=2, default=0, editable=False, validators=[MinValueValidator(Decimal('0'))])
     installment_count = models.PositiveSmallIntegerField('Parcelas', default=1, validators=[MinValueValidator(1), MaxValueValidator(12)])
     first_due_date = models.DateField('Primeiro vencimento')
     interval_unit = models.CharField('Unidade do intervalo', max_length=6, choices=[('months', 'Meses'), ('days', 'Dias')], default='months')
@@ -116,7 +121,8 @@ class SalePayment(models.Model):
         ordering = ['pk']
         verbose_name = 'Pagamento da venda'
         verbose_name_plural = 'Pagamentos da venda'
-        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0, installment_count__gte=1, installment_count__lte=12), name='sale_payment_values_valid'),
+        constraints = [models.CheckConstraint(condition=models.Q(financing_amount__gte=0, financing_amount__lt=models.F('amount')), name='sale_payment_financing_valid'),
+            models.CheckConstraint(condition=models.Q(amount__gt=0, installment_count__gte=1, installment_count__lte=12), name='sale_payment_values_valid'),
             models.CheckConstraint(condition=models.Q(interval_unit='days', interval_count__gte=1, interval_count__lte=365) | models.Q(interval_unit='months', interval_count__gte=1, interval_count__lte=12), name='sale_payment_interval_valid'),
         ]
 
