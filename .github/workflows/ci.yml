@@ -58,7 +58,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Instalar dependencias
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements-production.txt
       - name: Conferir dependencias instaladas
         run: python -m pip check
       - name: Conferir configuracao Django
@@ -92,3 +92,47 @@ jobs:
         run: npm ci
       - name: Conferir TypeScript e gerar build
         run: npm run build
+
+
+  cloud-image:
+    name: Homologacao - imagem Docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DJANGO_SECRET_KEY: ci-only-0123456789-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ
+      DJANGO_ALLOWED_HOSTS: 127.0.0.1
+      POSTGRES_DB: lentis_image_ci
+      POSTGRES_USER: lentis_image_ci
+      POSTGRES_PASSWORD: image_ci_only
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: lentis_image_ci
+          POSTGRES_USER: lentis_image_ci
+          POSTGRES_PASSWORD: image_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lentis_image_ci -d lentis_image_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Construir imagem de homologacao
+        run: docker build --tag lentis-ci .
+      - name: Conferir imagem com banco descartavel
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--network host -e DJANGO_SECRET_KEY -e DJANGO_ALLOWED_HOSTS -e POSTGRES_DB -e POSTGRES_USER -e POSTGRES_PASSWORD -e POSTGRES_HOST -e POSTGRES_PORT)
+          docker run --rm "${args[@]}" lentis-ci python /app/backend/manage.py check --deploy --fail-level ERROR
+          docker run --rm "${args[@]}" lentis-ci python /app/backend/manage.py migrate --noinput
+          docker run --detach --name lentis-ci-web "${args[@]}" -e PORT=18000 lentis-ci
+          trap 'docker logs lentis-ci-web; docker rm -f lentis-ci-web' EXIT
+          python deploy/smoke.py

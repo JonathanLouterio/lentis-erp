@@ -1,0 +1,17 @@
+**/.env
+**/.env.*
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/*.sqlite3
+**/*.dump
+**/*.rar
+**/*.zip
+**/Product-model.*
+**/staticfiles
+.git
+backups
+media
+docs/historico-chatgpt-lentis.md

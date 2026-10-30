@@ -8,7 +8,7 @@ import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useFinanceAccess } from '../hooks/useFinanceAccess'
 import { getSaleAccess } from '../api'
 import type { SaleAccess } from '../api'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
 import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ThemePreference } from '../api'
@@ -33,6 +33,7 @@ import type { DashboardAction } from './Dashboard'
 import './AppLayout.css'
 import './Customers.css'
 import './WorkspaceVisual.css'
+import './MobileWorkspace.css'
 
 type AppLayoutProps = {
   user: CurrentUser
@@ -74,17 +75,28 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     void getUserManagementOptions().then(() => { if (!ignore) setCanManageUsers(true) }).catch(() => { if (!ignore) setCanManageUsers(false) })
     return () => { ignore = true }
   }, [])
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches)
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 900px)').matches)
+  const [desktopCollapsed, setCollapsed] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuDialog = useRef<HTMLDialogElement>(null)
+  const collapsed = mobile ? false : desktopCollapsed
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 760px)')
-    const onChange = () => { if (media.matches) setCollapsed(true) }
+    const media = window.matchMedia('(max-width: 900px)')
+    const onChange = () => { setMobile(media.matches); setMenuOpen(false) }
     media.addEventListener('change', onChange)
     return () => media.removeEventListener('change', onChange)
   }, [])
+  useEffect(() => {
+    const dialog = menuDialog.current
+    if (!dialog) return
+    if (menuOpen && mobile) { if (!dialog.open) dialog.showModal() }
+    else if (dialog.open) dialog.close()
+    return () => { if (dialog.open) dialog.close() }
+  }, [menuOpen, mobile])
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
   useEffect(() => {
-    if (window.matchMedia('(max-width: 760px)').matches) setCollapsed(true)
+    setMenuOpen(false)
   }, [page])
   const [payablePurchaseId, setPayablePurchaseId] = useState<number | undefined>(undefined)
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null)
@@ -418,6 +430,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function openStock(productId = '') {
+    setMenuOpen(false)
     setStockProductId(productId)
     setOpenGroup('Operação')
     setPage('Estoque')
@@ -428,7 +441,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function changePage(nextPage: string) {
-    if (nextPage === page || !leaveSaleAllowed()) return
+    if (nextPage === page) { setMenuOpen(false); return }
+    if (!leaveSaleAllowed()) return
+    setMenuOpen(false)
     if (nextPage === 'Contas a pagar') setPayablePurchaseId(undefined)
     if (nextPage === 'Vendas') { setSalesStartNew(false); setDashboardSaleId(undefined) }
     if (nextPage === 'Ordens de serviço') setOrderSaleId(undefined)
@@ -456,13 +471,13 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     setSelectedStoreId(storeId)
   }
 
-  return (
-    <div className={`erp-layout${collapsed ? ' is-collapsed' : ''}`}>
-      <aside className="erp-sidebar" aria-label="Menu principal">
+  const sidebar = (
+      <aside id="erp-navigation-panel" className="erp-sidebar" aria-label="Menu principal">
         <div className="erp-brand">
           <span>{collapsed ? 'L' : 'LENTIS'}</span>
           {!collapsed && <small>ERP</small>}
         </div>
+        {mobile && <button type="button" className="erp-mobile-menu-close" onClick={() => setMenuOpen(false)} aria-label="Fechar menu">Fechar menu ×</button>}
         <nav className="erp-navigation" aria-label="Módulos">
           <button type="button" disabled={workspaceBusy}
             className={`erp-nav-button${page === 'Visão geral' ? ' is-active' : ''}`}
@@ -513,12 +528,32 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           </button>
         </div>
       </aside>
+  )
+
+  return (
+    <div className={`erp-layout${collapsed ? ' is-collapsed' : ''}${mobile ? ' is-mobile' : ''}`}>
+      {mobile ? <dialog ref={menuDialog} className="erp-mobile-menu" aria-label="Menu principal"
+        onCancel={event => { event.preventDefault(); setMenuOpen(false) }}
+        onClose={() => setMenuOpen(false)}
+        onKeyDown={event => {
+          if (event.key !== 'Tab') return
+          const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+            .filter(button => button.getClientRects().length > 0)
+          const first = buttons[0], last = buttons[buttons.length - 1]
+          if (!first) { event.preventDefault(); return }
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+        }}
+        onClick={event => { if (event.target === event.currentTarget) setMenuOpen(false) }}>
+        {sidebar}
+      </dialog> : sidebar}
 
       <div className="erp-workspace">
         <header className="erp-topbar">
           <div className="erp-topbar-heading">
-            <button type="button" className="erp-icon-button" onClick={() => setCollapsed((value) => !value)}
-              aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'} aria-expanded={!collapsed}>
+            <button type="button" className="erp-icon-button" onClick={() => mobile ? setMenuOpen(true) : setCollapsed(value => !value)}
+              aria-label={mobile ? 'Abrir menu' : collapsed ? 'Expandir menu' : 'Recolher menu'}
+              aria-controls="erp-navigation-panel" aria-expanded={mobile ? menuOpen : !collapsed}>
               <MenuIcon name="menu" />
             </button>
             <span>{page}</span>
@@ -603,7 +638,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                     <label>Estoque mínimo<input type="number" min="0" step="0.001" value={productForm.minimum_stock} onChange={(event) => setProductForm({ ...productForm, minimum_stock: event.target.value })} /></label>
                   </div>
                   {productFormError && <p className="erp-alert" role="alert">{productFormError}</p>}
-                  
+
                   </fieldset>
                 </form>
                 </FormDialog>
@@ -663,7 +698,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                     <label className="erp-field-wide">Observações<textarea value={customerForm.notes} onChange={(event) => setCustomerForm({ ...customerForm, notes: event.target.value })} /></label>
                   </div>
                   {customerFormError && <p className="erp-alert" role="alert">{customerFormError}</p>}
-                  
+
                   </fieldset>
                 </form>
                 </FormDialog>
@@ -693,3 +728,4 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     </div>
   )
 }
+

@@ -1,0 +1,4 @@
+Dockerfile text eol=lf
+deploy/*.sh text eol=lf
+.github/workflows/*.yml text eol=lf
+render.yaml text eol=lf
