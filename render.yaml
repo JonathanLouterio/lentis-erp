@@ -1,48 +1,31 @@
 # yaml-language-server: $schema=https://render.com/schema/render.yaml.json
-# PROPOSAL: paid resources. Review the Dashboard estimate before applying.
+# Homologacao: Render Free + banco externo Neon.
 services:
   - type: web
     name: lentis-homolog
     runtime: docker
-    plan: 0.5c-512mb
+    plan: free
     region: virginia
     branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     healthCheckPath: /healthz/
-    preDeployCommand: python /app/backend/manage.py migrate --noinput
+    preDeployCommand: ""
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings_production
       - key: DJANGO_SECRET_KEY
-        generateValue: true
+        sync: false
       - key: POSTGRES_HOST
-        fromDatabase:
-          name: lentis-homolog-db
-          property: host
+        sync: false
       - key: POSTGRES_PORT
-        fromDatabase:
-          name: lentis-homolog-db
-          property: port
+        value: "5432"
       - key: POSTGRES_DB
-        fromDatabase:
-          name: lentis-homolog-db
-          property: database
+        sync: false
       - key: POSTGRES_USER
-        fromDatabase:
-          name: lentis-homolog-db
-          property: user
+        sync: false
       - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: lentis-homolog-db
-          property: password
-databases:
-  - name: lentis-homolog-db
-    databaseName: lentis_homolog
-    user: lentis_homolog
-    plan: 0.1c-256mb
-    diskSizeGB: 1
-    postgresMajorVersion: "17"
-    region: virginia
-    ipAllowList: []
+        sync: false
+      - key: PGSSLMODE
+        value: require
