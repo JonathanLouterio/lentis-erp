@@ -1,5 +1,7 @@
 import uuid
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone as datetime_timezone
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission, Group
 from django.core.exceptions import PermissionDenied
@@ -12,6 +14,13 @@ from .models import Quote, QuoteItem, QuoteEvent, QuoteOperation, Sale, Financia
 from .quote_services import operate_quote
 
 
+BUSINESS_TZ = ZoneInfo('America/Sao_Paulo')
+
+
+def business_today():
+    return timezone.localdate(timezone=BUSINESS_TZ)
+
+
 class QuotePermissionTests(TestCase):
     def setUp(self):
         self.user=get_user_model().objects.create_user(username='quote-rights',password='test-only-password')
@@ -22,7 +31,7 @@ class QuotePermissionTests(TestCase):
         self.customer=Customer.objects.create(store=self.store,name='Cliente proposta')
         self.product=Product.objects.create(store=self.store,internal_code='QP1',name='Armação',cost_price=40,sale_price=100,stock_quantity=0)
         self.other_product=Product.objects.create(store=self.other,internal_code='QP2',name='Produto filial')
-        self.quote=Quote.objects.create(store=self.store,customer=self.customer,created_by=self.user,valid_until=timezone.localdate()+timedelta(days=30))
+        self.quote=Quote.objects.create(store=self.store,customer=self.customer,created_by=self.user,valid_until=business_today()+timedelta(days=30))
         QuoteItem.objects.create(quote=self.quote,product=self.product,quantity=1,unit_price=100)
         self.client=APIClient();self.client.force_authenticate(self.user)
 
@@ -34,7 +43,7 @@ class QuotePermissionTests(TestCase):
     def write(self,body=None,quote=None):
         if quote is not None:return self.client.put(self.url(f'{quote.pk}/'),body or self.payload(),format='json')
         return self.client.post(self.url(),body or self.payload(),format='json')
-    def payload(self,**extra):return {'request_id':str(uuid.uuid4()),'customer_id':self.customer.pk,'valid_until':str(timezone.localdate()+timedelta(days=30)),'notes':'Proposta de teste','discount_amount':'0','items':[{'product_id':self.product.pk,'quantity':'1','unit_price':'100','discount_amount':'0'}],**extra}
+    def payload(self,**extra):return {'request_id':str(uuid.uuid4()),'customer_id':self.customer.pk,'valid_until':str(business_today()+timedelta(days=30)),'notes':'Proposta de teste','discount_amount':'0','items':[{'product_id':self.product.pk,'quantity':'1','unit_price':'100','discount_amount':'0'}],**extra}
     def action(self,name,quote=None,**extra):
         quote=quote or self.quote;quote.refresh_from_db()
         return self.client.post(self.url(f'{quote.pk}/{name}/'),{'request_id':str(uuid.uuid4()),'expected_version':quote.version,**extra},format='json')
@@ -175,17 +184,55 @@ class QuotePermissionTests(TestCase):
         self.assertTrue(r.data['actions']['print'])
         self.assertEqual(self.write(self.payload(expected_version=r.data['version']),self.quote).status_code,400)
 
-    def test_expired_quote_and_wrong_state_remain_blocked(self):
+    @patch('django.utils.timezone.now', return_value=datetime(2026, 11, 4, 1, 0, tzinfo=datetime_timezone.utc))
+    def test_expired_quote_and_wrong_state_remain_blocked(self, _clock):
         self.grant('view','send','accept','convert',sale_add=True)
         self.assertEqual(self.action('accept').status_code,400)
         self.assertEqual(self.action('convert').status_code,400)
-        self.quote.valid_until=timezone.localdate()-timedelta(days=1);self.quote.save()
+        self.quote.valid_until=business_today()-timedelta(days=1);self.quote.save()
         self.assertEqual(self.action('send').status_code,400)
         self.assertFalse(self.client.get(self.url(f'{self.quote.pk}/')).data['actions']['send'])
 
+    def test_expiry_changes_at_sao_paulo_midnight_regardless_of_active_timezone(self):
+        self.grant('view', 'send')
+        self.quote.valid_until = date(2026, 11, 3)
+        self.quote.save()
+        before_midnight = datetime(2026, 11, 4, 2, 59, 59, tzinfo=datetime_timezone.utc)
+        midnight = datetime(2026, 11, 4, 3, 0, tzinfo=datetime_timezone.utc)
+        for active_zone in ('UTC', 'America/Sao_Paulo', 'Asia/Tokyo'):
+            with self.subTest(active_zone=active_zone), timezone.override(active_zone):
+                with patch('django.utils.timezone.now', return_value=before_midnight):
+                    self.assertEqual(business_today(), date(2026, 11, 3))
+                    self.assertFalse(self.quote.is_expired)
+                    response = self.client.get(self.url(f'{self.quote.pk}/'))
+                    self.assertEqual(response.status_code, 200, response.data)
+                    self.assertTrue(response.data['actions']['send'])
+                with patch('django.utils.timezone.now', return_value=midnight):
+                    self.assertEqual(business_today(), date(2026, 11, 4))
+                    self.assertTrue(self.quote.is_expired)
+                    response = self.client.get(self.url(f'{self.quote.pk}/'))
+                    self.assertFalse(response.data['actions']['send'])
+                    self.assertEqual(self.action('send').status_code, 400)
+        self.assertFalse(QuoteEvent.objects.exists())
+        self.assertFalse(Sale.objects.exists())
+        self.no_effects()
+
+    @patch('django.utils.timezone.now', return_value=datetime(2026, 11, 4, 1, 0, tzinfo=datetime_timezone.utc))
+    def test_quote_valid_today_in_sao_paulo_can_be_sent_even_after_utc_midnight(self, _clock):
+        self.grant('view', 'send')
+        with timezone.override('UTC'):
+            self.quote.valid_until = business_today()
+            self.quote.save()
+            response = self.action('send')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.status, 'sent')
+        self.assertEqual(QuoteEvent.objects.count(), 1)
+        self.no_effects()
+
     def test_other_store_objects_cannot_be_read_printed_or_changed(self):
         self.grant('view','change','print','send','convert',sale_add=True)
-        other=Quote.objects.create(store=self.other,created_by=self.user,valid_until=timezone.localdate())
+        other=Quote.objects.create(store=self.other,created_by=self.user,valid_until=business_today())
         for suffix in [f'{other.pk}/',f'{other.pk}/print/']:
             self.assertEqual(self.client.get(self.url(suffix)).status_code,404)
         self.assertEqual(self.action('send',other).status_code,403)
