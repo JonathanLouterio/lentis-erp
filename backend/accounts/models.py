@@ -64,3 +64,5 @@ class StoreMembership(models.Model):
 
 
 from .user_management_models import UserAccessEvent  # noqa: E402,F401
+
+from .profile_models import UserProfile  # noqa: E402,F401

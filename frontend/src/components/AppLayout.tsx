@@ -29,12 +29,16 @@ import Reports from './Reports'
 import { getUserManagementOptions, getCatalogAccess } from '../api'
 import type { CatalogAccess } from '../api'
 import type { DashboardAction } from './Dashboard'
+import ProfileMenu from './ProfileMenu'
+import { getMyProfile } from '../api'
+import type { MyProfile as ProfileData } from '../api'
 import './AppLayout.css'
 import './Customers.css'
 import './WorkspaceVisual.css'
 import './MobileWorkspace.css'
 
 const AdminWorkspace = lazy(() => import('./AdminWorkspace'))
+const MyProfile = lazy(() => import('./MyProfile'))
 
 type AppLayoutProps = {
   user: CurrentUser
@@ -42,6 +46,7 @@ type AppLayoutProps = {
   error: string
   onLogout: () => Promise<void>
   onThemeSaved: (theme: ThemePreference) => void
+  onIdentitySaved: (profile: ProfileData) => void
 }
 
 const menuGroups = [
@@ -69,7 +74,7 @@ function MenuIcon({ name }: { name: string }) {
   )
 }
 
-export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }: AppLayoutProps) {
+export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, onIdentitySaved }: AppLayoutProps) {
   const [canManageUsers, setCanManageUsers] = useState(false)
   useEffect(() => {
     let ignore = false
@@ -96,6 +101,13 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }, [menuOpen, mobile])
   const [openGroup, setOpenGroup] = useState<string | null>('Cadastros')
   const [page, setPage] = useState('Visão geral')
+  const [profileTab, setProfileTab] = useState<'details' | 'preferences'>('details')
+  const [personalProfile, setPersonalProfile] = useState<ProfileData | null>(null)
+  useEffect(() => {
+    let ignore = false
+    void getMyProfile().then(result => { if (!ignore) setPersonalProfile(result) }).catch(() => { if (!ignore) setPersonalProfile(null) })
+    return () => { ignore = true }
+  }, [user.id])
   useEffect(() => {
     setMenuOpen(false)
   }, [page])
@@ -146,7 +158,6 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   const [productForm, setProductForm] = useState<ProductPayload>(emptyProduct)
 
   const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
-  const initials = displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 
   useEffect(() => {
     let ignore = false
@@ -438,7 +449,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras', 'Contas a pagar', 'Usuários e acessos'].includes(page) || !saleDirty || window.confirm('Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras', 'Contas a pagar', 'Usuários e acessos', 'Meu perfil'].includes(page) || !saleDirty || window.confirm(page === 'Meu perfil' ? 'Descartar as alterações não salvas do seu perfil?' : 'Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
@@ -515,18 +526,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
           ))}
         </nav>
         <div className="erp-profile">
-          <div className="erp-avatar" title={displayName}>{initials}</div>
-          {!collapsed && (
-            <div className="erp-profile-info">
-              <strong title={displayName}>{displayName}</strong>
-              <span title={user.username}>@{user.username}</span>
-              <span className="erp-profile-role">{selectedRole}</span>
-            </div>
-          )}
-          <button type="button" className="erp-icon-button" onClick={() => { if (leaveSaleAllowed()) void onLogout() }}
-            disabled={workspaceBusy} aria-label={busy ? 'Saindo da conta' : 'Sair da conta'} title="Sair da conta">
-            <MenuIcon name="sair" />
-          </button>
+          <ProfileMenu name={displayName} username={user.username} role={selectedRole} avatar={personalProfile?.avatar_url ?? null} collapsed={collapsed} disabled={workspaceBusy}
+            onOpen={tab => { if (!leaveSaleAllowed()) return; setProfileTab(tab); setMenuOpen(false); setPage('Meu perfil') }}
+            onLogout={() => { if (leaveSaleAllowed()) void onLogout() }} />
         </div>
       </aside>
   )
@@ -577,7 +579,9 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
 
         <main className="erp-content">
           {error && <p className="erp-alert" role="alert">{error}</p>}
-          {page === 'Usuários e acessos' && canManageUsers ? (
+          {page === 'Meu perfil' ? (
+            <Suspense fallback={<p role="status">Carregando perfil…</p>}><MyProfile userId={user.id} initialTab={profileTab} theme={user.theme} onThemeSaved={onThemeSaved} onLoaded={result => { setPersonalProfile(result); onIdentitySaved(result) }} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} /></Suspense>
+          ) : page === 'Usuários e acessos' && canManageUsers ? (
             <Suspense fallback={<p role="status">Carregando administração…</p>}><AdminWorkspace onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onConfigurationSaved={retryStores} /></Suspense>
           ) : loadingStores ? (
             <div className="erp-card" role="status">Carregando suas unidades…</div>

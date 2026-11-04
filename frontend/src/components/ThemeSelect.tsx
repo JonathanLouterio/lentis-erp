@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { updateTheme } from '../api'
 import type { ThemePreference } from '../api'
 
@@ -13,6 +13,8 @@ export default function ThemeSelect({
   disabled,
   onSaved,
 }: ThemeSelectProps) {
+  const controlId = useId()
+  const errorId = `${controlId}-error`
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -36,14 +38,14 @@ export default function ThemeSelect({
   return (
     <div className="erp-theme-control">
       <div className="erp-theme-field">
-        <label htmlFor="theme-preference">Tema</label>
+        <label htmlFor={controlId}>Tema</label>
 
         <select
-          id="theme-preference"
+          id={controlId}
           value={value}
           disabled={disabled || saving}
           onChange={(event) => void handleChange(event.target.value)}
-          aria-describedby={error ? 'theme-error' : undefined}
+          aria-describedby={error ? errorId : undefined}
           aria-busy={saving}
         >
           <option value="light">Claro</option>
@@ -55,7 +57,7 @@ export default function ThemeSelect({
       </div>
 
       {error && (
-        <p id="theme-error" className="erp-theme-error" role="alert">
+        <p id={errorId} className="erp-theme-error" role="alert">
           {error}
         </p>
       )}

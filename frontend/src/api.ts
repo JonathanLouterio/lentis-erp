@@ -877,3 +877,19 @@ export async function saveSystemStore(id: number | null, data: StoreSettingsInpu
 }
 
 export function getSystemCompany(id: number): Promise<CompanySettings> { return request(`/api/system/companies/${id}/`) }
+
+// Perfil privado do usuário autenticado.
+export type MyProfile = {
+  id: number; username: string; first_name: string; last_name: string; email: string
+  phone: string; whatsapp: string; job_title: string; bio: string; avatar_url: string | null; version: string
+}
+export type ProfilePayload = Pick<MyProfile, 'first_name' | 'last_name' | 'email' | 'phone' | 'whatsapp' | 'job_title' | 'bio' | 'version'> & {
+  photo?: File; remove_avatar?: boolean
+}
+export function getMyProfile(): Promise<MyProfile> { return request('/api/me/profile/') }
+export async function saveMyProfile(data: ProfilePayload): Promise<MyProfile> {
+  const token = await getCsrfToken()
+  const body = new FormData()
+  for (const [key, value] of Object.entries(data)) if (value !== undefined) body.append(key, value instanceof File ? value : String(value))
+  return request('/api/me/profile/', { method: 'PATCH', headers: { 'X-CSRFToken': token }, body })
+}

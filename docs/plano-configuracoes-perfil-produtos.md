@@ -1,15 +1,15 @@
 # Lentis — configurações, perfil e catálogo visual
 
 Decisões registradas com Jonathan em 30/10/2026.
-Este documento define o escopo das próximas implementações. As funcionalidades
-abaixo ainda não são implementadas pelo pacote de homologação/mobile.
+Este documento registra o plano e o status das implementações. Configurações do
+sistema e Meu perfil estão concluídos; fotos de produtos permanecem pendentes.
 
 ## Estrutura escolhida
 
 O sistema deverá atender várias óticas independentes. Cada empresa terá suas
-unidades, dados cadastrais, regras e redes sociais. O modelo atual limita o banco
-a uma empresa; será necessária uma migração que preserve a ótica e as unidades
-existentes e uma revisão de isolamento antes de cadastrar empresas independentes.
+unidades, dados cadastrais, regras e redes sociais. A migração organizations.0011
+removeu a limitação de empresa única, preservando a ótica e as unidades existentes.
+O isolamento operacional por unidade está coberto pelos testes de configurações.
 
 O administrador da plataforma será o único com acesso à configuração global.
 Ter perfil de gerente/vendedor, `is_staff` ou permissão operacional não concede
@@ -113,3 +113,18 @@ Critérios transversais: usuário comum recebe bloqueio ao acessar configuraçã
 global; uma ótica não consulta ou altera dados/mídias de outra sem autorização
 explícita; a migração preserva dados existentes; teclado, toque, temas claro/escuro
 e tratamento de alterações não salvas são verificados em cada entrega.
+
+
+## Status em 04/11/2026
+
+- Concluído e validado na homologação: configurações globais de óticas/unidades,
+  redes sociais, histórico e permissões (commit 840c12e).
+- Implementado nesta entrega: Meu perfil, contatos, apresentação, foto privada,
+  remoção/troca de foto, menu do usuário e preferências de tema existentes.
+- Avatar reduzido de 256x256, até 96 KiB, salvo no banco persistente. A escolha
+  evita depender do disco temporário do serviço e acompanha os backups existentes.
+- A galeria de produtos continua planejada para armazenamento de objetos; a
+  solução de avatar não será reutilizada automaticamente para fotos de catálogo.
+- Pendente: produtos com características e três fotos, escolha da principal e
+  miniaturas em produtos, vendas e compras; validação em aparelhos e evolução PWA.
+- Troca de senha será uma entrega separada com conferência da senha atual.

@@ -94,6 +94,9 @@ export default function App() {
         busy={busy}
         error={error}
         onLogout={handleLogout}
+        onIdentitySaved={profile => setUser(current => current?.id === profile.id ? {
+          ...current, username: profile.username, first_name: profile.first_name, last_name: profile.last_name,
+        } : current)}
         onThemeSaved={(theme) => handleThemeSaved(theme, user.id)}
       />
     )

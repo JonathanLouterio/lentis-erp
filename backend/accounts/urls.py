@@ -23,7 +23,11 @@ from .user_management_api import (
     ManagedUserHistoryView, UserManagementOptionsView,
 )
 
+from .profile_api import MyProfileView, MyAvatarView
+
 urlpatterns = [
+    path("me/profile/", MyProfileView.as_view(), name="my-profile"),
+    path("me/profile/avatar/", MyAvatarView.as_view(), name="my-avatar"),
     path("me/user-management/options/", UserManagementOptionsView.as_view(), name="user-management-options"),
     path("me/user-management/", ManagedUsersView.as_view(), name="managed-users"),
     path("me/user-management/<int:pk>/", ManagedUserView.as_view(), name="managed-user"),
