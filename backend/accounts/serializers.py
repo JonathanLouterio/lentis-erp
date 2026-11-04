@@ -7,12 +7,14 @@ from .models import StoreMembership
 
 
 class AccessibleStoreSerializer(serializers.ModelSerializer):
+    company_id = serializers.IntegerField(read_only=True)
+    company_name = serializers.CharField(source="company.name", read_only=True)
     role = serializers.CharField(source="access_role", read_only=True)
     role_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Store
-        fields = ("id", "code", "name", "role", "role_label")
+        fields = ("id", "code", "name", "company_id", "company_name", "role", "role_label")
         read_only_fields = fields
 
     def get_role_label(self, obj):

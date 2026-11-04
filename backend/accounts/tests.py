@@ -142,6 +142,8 @@ class MyStoresAPITests(TestCase):
                     "name": "Matriz",
                     "role": "seller",
                     "role_label": "Vendedor",
+                    "company_id": self.store.company_id,
+                    "company_name": self.store.company.name,
                 }
             ],
         )

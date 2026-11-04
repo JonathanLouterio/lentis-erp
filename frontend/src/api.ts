@@ -9,6 +9,8 @@ export type CurrentUser = {
 }
 
 export type AccessibleStore = {
+  company_id: number
+  company_name: string
   id: number
   code: string
   name: string
@@ -718,7 +720,7 @@ export async function exportReport(storeId:number,filters:ReportFilters):Promise
 export type ManagedMembership = { store_id: number; role: string; is_active: boolean }
 export type UserManagementOptions = {
   roles: { value: string; label: string }[]
-  stores: { id: number; code: string; name: string; is_active: boolean }[]
+  stores: { id: number; code: string; name: string; company_id: number; company_name: string; is_active: boolean }[]
   permissions: { id: number; key: string; name: string; app: string; model: string; section: string }[]
 }
 export type ManagedUserSummary = {
@@ -829,3 +831,49 @@ export type InsightAccess={store_id:number;dashboard:boolean;sections:DashboardD
 export function getInsightAccess(storeId:number):Promise<InsightAccess>{return request(`/api/me/insight-access/?store_id=${storeId}`)}
 export type SupplierAccess={store_id:number;actions:{view:boolean;create:boolean;update:boolean;archive:boolean;restore:boolean}}
 export function getSupplierAccess(storeId:number):Promise<SupplierAccess>{return request(`/api/me/suppliers/access/?store_id=${storeId}`)}
+
+
+// Configurações globais: somente o administrador do sistema.
+export type SystemContact = {
+  name: string; email: string; phone: string; address: string; city: string; state: string; is_active: boolean
+}
+export type CompanySettings = SystemContact & {
+  id: number; version: number; updated_at: string; legal_name: string
+  website: string; instagram: string; facebook: string; tiktok: string; whatsapp: string
+}
+export type StoreSettings = SystemContact & {
+  id: number; version: number; updated_at: string; company_id: number; company_name: string
+  company_active: boolean; code: string; allow_negative_stock: boolean
+}
+export type ConfigurationPage<T> = { count: number; has_next: boolean; results: T[] }
+export type ConfigurationEvent = {
+  id: number; action: string; actor: string; store_name: string | null; created_at: string
+  changes: Record<string, { before: unknown; after: unknown }>
+}
+export type CompanySettingsInput = Omit<CompanySettings, 'id' | 'version' | 'updated_at'> & { request_id: string; version?: number }
+export type StoreSettingsInput = Omit<StoreSettings, 'id' | 'version' | 'updated_at' | 'company_name' | 'company_active'> & { request_id: string; version?: number }
+export function getSystemCompanies(q = '', page = 1): Promise<ConfigurationPage<CompanySettings>> {
+  return request(`/api/system/companies/?${new URLSearchParams({ q, page: String(page) })}`)
+}
+export function getSystemStores(companyId: number, page = 1): Promise<ConfigurationPage<StoreSettings>> {
+  return request(`/api/system/stores/?company_id=${companyId}&page=${page}`)
+}
+export function getConfigurationHistory(companyId: number, page = 1): Promise<ConfigurationPage<ConfigurationEvent>> {
+  return request(`/api/system/history/?company_id=${companyId}&page=${page}`)
+}
+export async function saveSystemCompany(id: number | null, data: CompanySettingsInput): Promise<CompanySettings> {
+  const token = await getCsrfToken()
+  return request(`/api/system/companies/${id === null ? '' : `${id}/`}`, {
+    method: id === null ? 'POST' : 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(data),
+  })
+}
+export async function saveSystemStore(id: number | null, data: StoreSettingsInput): Promise<StoreSettings> {
+  const token = await getCsrfToken()
+  return request(`/api/system/stores/${id === null ? '' : `${id}/`}`, {
+    method: id === null ? 'POST' : 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify(data),
+  })
+}
+
+export function getSystemCompany(id: number): Promise<CompanySettings> { return request(`/api/system/companies/${id}/`) }

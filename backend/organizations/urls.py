@@ -20,7 +20,15 @@ from .supplier_api import SuppliersView, SupplierDetailView
 
 app_name = "organizations"
 
+from .configuration_api import (CompaniesView, CompanyDetailView, ConfigurationStoresView,
+                                ConfigurationStoreDetailView, ConfigurationHistoryView)
+
 urlpatterns = [
+    path("system/companies/", CompaniesView.as_view()),
+    path("system/companies/<int:pk>/", CompanyDetailView.as_view()),
+    path("system/stores/", ConfigurationStoresView.as_view()),
+    path("system/stores/<int:pk>/", ConfigurationStoreDetailView.as_view()),
+    path("system/history/", ConfigurationHistoryView.as_view()),
     path("me/suppliers/access/", SupplierAccessView.as_view()),
     path("me/clinical-access/", ClinicalAccessView.as_view()),
     path("me/prescriptions/customers/", PrescriptionCustomersView.as_view()),

@@ -7,7 +7,7 @@ def get_accessible_stores(user):
     if not user.is_authenticated or not user.is_active:
         return Store.objects.none()
 
-    stores = Store.objects.filter(
+    stores = Store.objects.select_related("company").filter(
         is_active=True,
         company__is_active=True,
     )

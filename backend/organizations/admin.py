@@ -5,28 +5,55 @@ from .models import Company, Customer, Product, StockMovement, Store
 from accounts.selectors import get_accessible_stores
 
 
-@admin.register(Company)
-class CompanyAdmin(admin.ModelAdmin):
-    list_display = ("name", "is_active")
-    readonly_fields = ("created_at", "updated_at")
+class ConfigurationReadOnlyAdmin(admin.ModelAdmin):
+    """Alterações passam pela área auditada de Configurações no frontend."""
+    def has_view_permission(self, request, obj=None):
+        from .access_permissions import fresh_actor
+        actor = fresh_actor(request)
+        return bool(actor and actor.is_superuser)
+
+    def has_module_permission(self, request):
+        return self.has_view_permission(request)
 
     def has_add_permission(self, request):
-        return super().has_add_permission(request) and not Company.objects.exists()
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs if self.has_view_permission(request) else qs.none()
+
+    def get_readonly_fields(self, request, obj=None):
+        return tuple(field.name for field in self.model._meta.fields)
+
+
+@admin.register(Company)
+class CompanyAdmin(ConfigurationReadOnlyAdmin):
+    list_display = ("name", "is_active")
+    search_fields = ("name", "legal_name")
 
 
 @admin.register(Store)
-class StoreAdmin(admin.ModelAdmin):
+class StoreAdmin(ConfigurationReadOnlyAdmin):
     list_display = ("code", "name", "company", "is_active", "allow_negative_stock")
-    list_filter = ("is_active",)
-    search_fields = ("code", "name")
+    list_filter = ("is_active", "company")
+    search_fields = ("code", "name", "company__name")
     list_select_related = ("company",)
-    readonly_fields = ("created_at", "updated_at")
 
-    def has_delete_permission(self, request, obj=None):
-        return False
+
+from .configuration_models import ConfigurationEvent
+
+
+@admin.register(ConfigurationEvent)
+class ConfigurationEventAdmin(ConfigurationReadOnlyAdmin):
+    list_display = ("created_at", "company", "store", "actor", "action")
+    list_select_related = ("company", "store", "actor")
+    list_filter = ("action",)
 
 
 class SystemCatalogAdminMixin:

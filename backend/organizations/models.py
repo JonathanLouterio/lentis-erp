@@ -52,25 +52,23 @@ class Company(models.Model):
     is_active = models.BooleanField("Ativa", default=True)
     created_at = models.DateTimeField("Criada em", auto_now_add=True)
     updated_at = models.DateTimeField("Atualizada em", auto_now=True)
-    singleton = models.BooleanField(default=True, unique=True, editable=False)
+    legal_name = models.CharField("Razão social", max_length=200, blank=True)
+    email = models.EmailField("E-mail", blank=True)
+    phone = models.CharField("Telefone", max_length=30, blank=True)
+    address = models.CharField("Endereço", max_length=250, blank=True)
+    city = models.CharField("Cidade", max_length=100, blank=True)
+    state = models.CharField("UF", max_length=2, blank=True)
+    website = models.URLField("Site", max_length=300, blank=True)
+    instagram = models.URLField("Instagram", max_length=300, blank=True)
+    facebook = models.URLField("Facebook", max_length=300, blank=True)
+    tiktok = models.URLField("TikTok", max_length=300, blank=True)
+    whatsapp = models.CharField("WhatsApp", max_length=20, blank=True)
+    configuration_version = models.PositiveIntegerField(default=1, editable=False)
 
     class Meta:
-        verbose_name = "Empresa"
-        verbose_name_plural = "Empresas"
-        ordering = ["name"]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(singleton=True),
-                name="company_singleton_true",
-            ),
-        ]
-
-    def clean(self):
-        super().clean()
-        if Company.objects.exclude(pk=self.pk).exists():
-            raise ValidationError(
-                "Já existe uma empresa cadastrada. Edite a empresa existente."
-            )
+        verbose_name = "Ótica / empresa"
+        verbose_name_plural = "Óticas / empresas"
+        ordering = ["name", "pk"]
 
     def __str__(self):
         return self.name
@@ -91,6 +89,21 @@ class Store(models.Model):
     is_active = models.BooleanField("Ativa", default=True)
     created_at = models.DateTimeField("Criada em", auto_now_add=True)
     updated_at = models.DateTimeField("Atualizada em", auto_now=True)
+
+    address = models.CharField("Endereço", max_length=250, blank=True)
+    city = models.CharField("Cidade", max_length=100, blank=True)
+    state = models.CharField("UF", max_length=2, blank=True)
+    configuration_version = models.PositiveIntegerField(default=1, editable=False)
+
+    def clean(self):
+        super().clean()
+        if self.pk and Store.objects.filter(pk=self.pk).exclude(company_id=self.company_id).exists():
+            raise ValidationError({"company": "A empresa de uma unidade existente não pode ser alterada."})
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            self.clean()
+        return super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Loja"
@@ -359,3 +372,6 @@ class StockMovement(models.Model):
 from .prescription_models import Prescription, PrescriptionRevision, PrescriptionOperation
 
 from .supplier_models import Supplier, SupplierEvent, SupplierOperation  # noqa: E402,F401
+
+
+from .configuration_models import ConfigurationEvent  # noqa: E402,F401

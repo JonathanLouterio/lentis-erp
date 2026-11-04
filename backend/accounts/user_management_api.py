@@ -208,6 +208,7 @@ class UserManagementOptionsView(AdminView):
         return Response({
             "roles": [{"value": value, "label": label} for value, label in StoreMembership.Role.choices],
             "stores": [{"id": s.pk, "code": s.code, "name": s.name,
+                        "company_id": s.company_id, "company_name": s.company.name,
                         "is_active": s.is_active and s.company.is_active}
                        for s in Store.objects.select_related("company").order_by("code")],
             "permissions": [permission_output(p) for p in catalog()],

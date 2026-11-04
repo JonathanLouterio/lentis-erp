@@ -8,7 +8,7 @@ import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useFinanceAccess } from '../hooks/useFinanceAccess'
 import { getSaleAccess } from '../api'
 import type { SaleAccess } from '../api'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
 import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ThemePreference } from '../api'
@@ -26,7 +26,6 @@ import Suppliers from './Suppliers'
 import Purchases from './Purchases'
 import Payables from './Payables'
 import Reports from './Reports'
-import UserManagement from './UserManagement'
 import { getUserManagementOptions, getCatalogAccess } from '../api'
 import type { CatalogAccess } from '../api'
 import type { DashboardAction } from './Dashboard'
@@ -34,6 +33,8 @@ import './AppLayout.css'
 import './Customers.css'
 import './WorkspaceVisual.css'
 import './MobileWorkspace.css'
+
+const AdminWorkspace = lazy(() => import('./AdminWorkspace'))
 
 type AppLayoutProps = {
   user: CurrentUser
@@ -568,7 +569,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
                 : storesError ? <option value="">Indisponível</option>
                 : stores.length === 0 ? <option value="">Sem unidades</option>
                 : stores.map((store) => (
-                  <option key={store.id} value={String(store.id)}>{store.code} — {store.name}</option>
+                  <option key={store.id} value={String(store.id)}>{store.company_name} · {store.code} — {store.name}</option>
                 ))}
             </select>
           </div>
@@ -577,7 +578,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
         <main className="erp-content">
           {error && <p className="erp-alert" role="alert">{error}</p>}
           {page === 'Usuários e acessos' && canManageUsers ? (
-            <UserManagement onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Suspense fallback={<p role="status">Carregando administração…</p>}><AdminWorkspace onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onConfigurationSaved={retryStores} /></Suspense>
           ) : loadingStores ? (
             <div className="erp-card" role="status">Carregando suas unidades…</div>
           ) : storesError ? (
@@ -728,4 +729,3 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved }:
     </div>
   )
 }
-
