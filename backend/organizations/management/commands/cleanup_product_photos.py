@@ -22,7 +22,11 @@ class Command(BaseCommand):
                 continue
             try:
                 with transaction.atomic():
-                    asset = ProductPhotoAsset.objects.select_for_update().filter(pk=pk, photo__isnull=True).first()
+                    asset = (
+                        ProductPhotoAsset.objects.select_for_update()
+                        .filter(pk=pk, created_at__lt=cutoff)
+                        .first()
+                    )
                     if asset and purge_asset(asset):
                         count += 1
             except Exception as exc:
