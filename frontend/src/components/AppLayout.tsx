@@ -1,4 +1,7 @@
 import FormDialog from './FormDialog'
+import ProductPhotoEditor from './ProductPhotoEditor'
+import ProductThumbnail from './ProductThumbnail'
+import type { ProductGalleryChange } from '../api'
 import { useInsightAccess } from '../hooks/useInsightAccess'
 import { useSupplierAccess } from '../hooks/useSupplierAccess'
 import { useClinicalAccess } from '../hooks/useClinicalAccess'
@@ -143,6 +146,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   const [productSearch, setProductSearch] = useState('')
   const [productFormOpen, setProductFormOpen] = useState(false)
   const [productDirty, setProductDirty] = useState(false)
+  const [productTab, setProductTab] = useState<'data' | 'photos'>('data')
+  const [productGallery, setProductGallery] = useState<ProductGalleryChange>({ revision: 0, remove: [], primary: null, files: {} })
   const [savingProduct, setSavingProduct] = useState(false)
   const [productFormError, setProductFormError] = useState('')
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -154,6 +159,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   const emptyProduct = (): ProductPayload => ({
     internal_code: '', barcode: '', name: '', brand: '', category: '',
     cost_price: '0', sale_price: '0', minimum_stock: '0',
+    model_reference: '', color: '', material: '', frame_shape: '', description: '',
+    lens_width_mm: null, bridge_mm: null, temple_mm: null,
   })
   const [productForm, setProductForm] = useState<ProductPayload>(emptyProduct)
 
@@ -255,7 +262,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   const filteredProducts = products.filter((product) => {
     const query = productSearch.trim().toLowerCase()
     if (!query) return true
-    return [product.internal_code, product.barcode, product.name, product.brand, product.category]
+    return [product.internal_code, product.barcode, product.name, product.brand, product.category, product.model_reference, product.color]
       .some((value) => value.toLowerCase().includes(query))
   })
 
@@ -365,6 +372,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   }
 
   function openNewProduct() {
+    setProductTab('data')
+    setProductGallery({ revision: 0, remove: [], primary: null, files: {} })
     if (!access?.products.add || catalogLoading) return
     setEditingProduct(null)
     setProductForm(emptyProduct())
@@ -374,12 +383,16 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   }
 
   function openEditProduct(product: Product) {
+    setProductTab('data')
+    setProductGallery({ revision: product.photos_revision, remove: [], primary: product.primary_photo_slot, files: {} })
     if (!access?.products.change || catalogLoading) return
     setEditingProduct(product)
     setProductForm({
       internal_code: product.internal_code, barcode: product.barcode || '', name: product.name,
       brand: product.brand || '', category: product.category || '', cost_price: product.cost_price,
       sale_price: product.sale_price, minimum_stock: product.minimum_stock,
+      model_reference: product.model_reference, color: product.color, material: product.material, frame_shape: product.frame_shape,
+      lens_width_mm: product.lens_width_mm, bridge_mm: product.bridge_mm, temple_mm: product.temple_mm, description: product.description,
     })
     setProductFormError('')
     setProductFormOpen(true)
@@ -389,13 +402,19 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedStore || savingProduct) return
+    if (!event.currentTarget.checkValidity()) {
+      const form = event.currentTarget
+      setProductTab('data')
+      requestAnimationFrame(() => form.reportValidity())
+      return
+    }
     if (!(editingProduct ? access?.products.change : access?.products.add)) { setProductFormError('Seu usuário não tem permissão para salvar este cadastro.'); return }
     setSavingProduct(true)
     setProductFormError('')
     try {
       const saved = editingProduct
-        ? await updateProduct(selectedStore.id, editingProduct.id, productForm)
-        : await createProduct(selectedStore.id, productForm)
+        ? await updateProduct(selectedStore.id, editingProduct.id, productForm, productGallery)
+        : await createProduct(selectedStore.id, productForm, productGallery)
       setProducts((current) => editingProduct
         ? current.map((item) => item.id === saved.id ? saved : item)
         : [saved, ...current])
@@ -628,9 +647,14 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
                 {access?.products.add && <button className="erp-action-button" type="button" disabled={workspaceBusy || catalogLoading} onClick={openNewProduct}>Novo produto</button>}
               </div>
               {productFormOpen && (editingProduct ? access?.products.change : access?.products.add) && (
-                <FormDialog title={editingProduct ? 'Editar produto' : 'Novo produto'} subtitle={selectedStore.name} busy={savingProduct} dirty={productDirty} onClose={closeProductForm} actions={<button className="erp-action-button" type="submit" form="lentis-product-form" disabled={savingProduct}>{savingProduct ? 'Salvando…' : editingProduct ? 'Salvar alterações' : 'Salvar produto'}</button>}>
-                <form id="lentis-product-form" onChangeCapture={() => setProductDirty(true)} className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveProduct(event)}>
+                <FormDialog wide title={editingProduct ? 'Editar produto' : 'Novo produto'} subtitle={selectedStore.name} busy={savingProduct} dirty={productDirty} onClose={closeProductForm} actions={<button className="erp-action-button" type="submit" form="lentis-product-form" disabled={savingProduct}>{savingProduct ? 'Salvando…' : editingProduct ? 'Salvar alterações' : 'Salvar produto'}</button>}>
+                <form noValidate id="lentis-product-form" onChangeCapture={() => setProductDirty(true)} className="erp-card erp-customer-form" onSubmit={(event) => void handleSaveProduct(event)}>
                   <fieldset className="erp-window-fields" disabled={savingProduct}>
+                  <div className="product-editor-tabs" aria-label="Seções do produto">
+                    <button type="button" aria-pressed={productTab === 'data'} onClick={() => setProductTab('data')}>Dados e características</button>
+                    <button type="button" aria-pressed={productTab === 'photos'} onClick={() => setProductTab('photos')}>Fotos · até 3</button>
+                  </div>
+                  <div hidden={productTab !== 'data'}>
                   <div className="erp-form-grid">
                     <label>Código interno<input required value={productForm.internal_code} onChange={(event) => setProductForm({ ...productForm, internal_code: event.target.value })} /></label>
                     <label>Código de barras<input value={productForm.barcode} onChange={(event) => setProductForm({ ...productForm, barcode: event.target.value })} /></label>
@@ -642,6 +666,15 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
                     <label>Estoque atual<input readOnly value={editingProduct?.stock_quantity ?? '0.000'} /><small>Saldo atualizado pelas movimentações de estoque.</small></label>
                     <label>Estoque mínimo<input type="number" min="0" step="0.001" value={productForm.minimum_stock} onChange={(event) => setProductForm({ ...productForm, minimum_stock: event.target.value })} /></label>
                   </div>
+                  <section className="product-characteristics"><h3>Características</h3><p>Preencha o que se aplica ao produto. Medidas de armação são opcionais e em milímetros.</p>
+                    <div className="erp-form-grid">
+                      {([['model_reference', 'Modelo / referência', 100], ['color', 'Cor', 80], ['material', 'Material', 80], ['frame_shape', 'Formato', 80]] as const).map(([field, label, max]) => <label key={field}>{label}<input maxLength={max} value={productForm[field]} onChange={e => setProductForm({ ...productForm, [field]: e.target.value })} /></label>)}
+                      {([['lens_width_mm', 'Largura da lente'], ['bridge_mm', 'Ponte'], ['temple_mm', 'Haste']] as const).map(([field, label]) => <label key={field}>{label} (mm)<input type="number" min="0.1" max="9999.9" step="0.1" placeholder="Opcional" value={productForm[field] ?? ''} onChange={e => setProductForm({ ...productForm, [field]: e.target.value || null })} /></label>)}
+                      <label className="erp-field-wide">Detalhes do produto<textarea maxLength={2000} rows={3} value={productForm.description} onChange={e => setProductForm({ ...productForm, description: e.target.value })} /></label>
+                    </div>
+                  </section>
+                  </div>
+                  {productTab === 'photos' && <ProductPhotoEditor photos={editingProduct?.photos ?? []} value={productGallery} disabled={savingProduct} onChange={next => { setProductGallery(next); setProductDirty(true) }} />}
                   {productFormError && <p className="erp-alert" role="alert">{productFormError}</p>}
 
                   </fieldset>
@@ -656,7 +689,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
                 {loadingProducts ? <p role="status">Carregando produtos…</p>
                   : productsError ? <p className="erp-alert" role="alert">{productsError}</p>
                   : filteredProducts.length === 0 ? <p>Nenhum produto encontrado nesta unidade.</p>
-                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td>{product.name}</td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions">{access?.products.change && <button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button>}{(access?.stock.view || access?.stock.add) && <button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openStock(String(product.id))}>Estoque</button>}{access?.products.delete && <button type="button" disabled={workspaceBusy} className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button>}</td></tr>)}</tbody></table></div>}
+                  : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Código</th><th>Produto</th><th>Categoria</th><th>Venda</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td>{product.internal_code}</td><td><div className="product-name-with-photo"><ProductThumbnail url={product.thumbnail_url} name={product.name} /><span><strong>{product.name}</strong><small>{[product.brand, product.model_reference, product.color].filter(Boolean).join(' · ')}</small></span></div></td><td>{product.category || '—'}</td><td>R$ {Number(product.sale_price).toFixed(2)}</td><td>{product.stock_quantity}</td><td className="erp-customer-actions">{access?.products.change && <button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openEditProduct(product)}>Editar</button>}{(access?.stock.view || access?.stock.add) && <button type="button" disabled={workspaceBusy} className="erp-table-button" onClick={() => openStock(String(product.id))}>Estoque</button>}{access?.products.delete && <button type="button" disabled={workspaceBusy} className="erp-table-button is-danger" onClick={() => void handleDeleteProduct(product)}>Inativar</button>}</td></tr>)}</tbody></table></div>}
               </div> : <div className="erp-card"><p>Você não tem permissão para consultar a lista de produtos. O cadastro de novos registros depende da permissão de cadastrar.</p></div>}
             </section>
           ) : page === 'Histórico do cliente' && historyCustomerId ? (

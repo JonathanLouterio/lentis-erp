@@ -23,7 +23,10 @@ app_name = "organizations"
 from .configuration_api import (CompaniesView, CompanyDetailView, ConfigurationStoresView,
                                 ConfigurationStoreDetailView, ConfigurationHistoryView)
 
+from .product_photo_api import ProductPhotoView
+
 urlpatterns = [
+    path("me/products/<int:product_id>/photos/<int:slot>/<str:variant>/", ProductPhotoView.as_view(), name="product-photo"),
     path("system/companies/", CompaniesView.as_view()),
     path("system/companies/<int:pk>/", CompanyDetailView.as_view()),
     path("system/stores/", ConfigurationStoresView.as_view()),

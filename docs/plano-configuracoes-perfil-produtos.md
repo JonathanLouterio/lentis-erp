@@ -2,7 +2,8 @@
 
 Decisões registradas com Jonathan em 30/10/2026.
 Este documento registra o plano e o status das implementações. Configurações do
-sistema e Meu perfil estão concluídos; fotos de produtos permanecem pendentes.
+sistema e Meu perfil estão concluídos; catálogo visual implementado nesta entrega,
+pendente de configuração do R2 e homologação pelo usuário.
 
 ## Estrutura escolhida
 
@@ -125,6 +126,10 @@ e tratamento de alterações não salvas são verificados em cada entrega.
   evita depender do disco temporário do serviço e acompanha os backups existentes.
 - A galeria de produtos continua planejada para armazenamento de objetos; a
   solução de avatar não será reutilizada automaticamente para fotos de catálogo.
-- Pendente: produtos com características e três fotos, escolha da principal e
-  miniaturas em produtos, vendas e compras; validação em aparelhos e evolução PWA.
+- Implementado em feat/produtos-fotos: características opcionais, três posições de
+  foto, principal e miniaturas nas listas, seleções e itens de venda/compra.
+- Cloudflare R2 escolhido pelo usuário para fotos de catálogo: bucket privado
+  exclusivo do Lentis, acesso por backend autenticado e isolamento por unidade.
+  Configuração externa e teste real de conexão ainda dependem do ambiente do usuário.
+- Pendente: homologar catálogo visual, validar em aparelhos reais e evoluir PWA.
 - Troca de senha será uma entrega separada com conferência da senha atual.

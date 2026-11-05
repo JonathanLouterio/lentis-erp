@@ -32,8 +32,11 @@ class SaleOptionsView(SalesBaseView):
         # Nenhum custo, saldo bancário, endereço, contato ou observação do cadastro.
         accounts = FinancialAccount.objects.filter(store=store, is_active=True)
         products = list(Product.objects.filter(store=store, is_active=True).values(
-            'id', 'internal_code', 'name', 'barcode', 'sale_price', 'stock_quantity'))
+            'id', 'internal_code', 'name', 'barcode', 'sale_price', 'stock_quantity', 'primary_photo_slot', 'photos_revision'))
         for product in products:
+            from organizations.product_photo_services import photo_url
+            slot, revision = product.pop('primary_photo_slot'), product.pop('photos_revision')
+            product['thumbnail_url'] = photo_url(product['id'], store.pk, slot, version=revision) if slot else None
             for field in ('sale_price', 'stock_quantity'):
                 product[field] = str(product[field])
         return Response({

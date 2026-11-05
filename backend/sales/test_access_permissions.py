@@ -128,7 +128,7 @@ class SaleAccessTests(TestCase):
         self.grant('add')
         r=self.client.get(self.url('options/'));self.assertEqual(r.status_code,200)
         self.assertEqual(set(r.data['customers'][0]),{'id','name'})
-        self.assertEqual(set(r.data['products'][0]),{'id','internal_code','name','barcode','sale_price','stock_quantity'})
+        self.assertEqual(set(r.data['products'][0]),{'id','internal_code','name','barcode','sale_price','stock_quantity','thumbnail_url'})
         self.assertEqual(len(r.data['products']),1)
         self.assertNotIn('balance',r.data['payment_options']['accounts'][0])
         self.assertIn('no-store',r['Cache-Control'])

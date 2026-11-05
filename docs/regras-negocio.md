@@ -368,7 +368,7 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Confirmar a entrada de itens já salvos não exige permissão de edição. A edição de rascunho não autoriza recebimento nem cancelamento.
 - Atualizar o custo cadastrado dos produtos na entrada exige adicionalmente `purchases.update_purchase_cost`. Sem essa concessão, a entrada pode ocorrer preservando o custo atual. O preço de venda permanece preservado.
 - Compras recebidas ou canceladas continuam imutáveis. Cancelar rascunho exige motivo e não movimenta estoque ou contas. A confirmação de recebimento preserva a conferência obrigatória e os bloqueios de versão.
-- A seleção de fornecedores e produtos para a compra exige abertura ou edição, além da consulta. Retorna somente fornecedor (id, nome e documento) e produto (id, código, nome e custo), ativos e da unidade autorizada.
+- A seleção de fornecedores e produtos para a compra exige abertura ou edição, além da consulta. Retorna somente fornecedor (id, nome e documento) e produto (id, código, nome, custo e miniatura autenticada), ativos e da unidade autorizada.
 - A consulta de títulos (`purchases.view_payableplan`) é pré-requisito para geração, pagamento e estorno. A geração exige também `add_payableplan` e `view_purchase`; pagamento exige `pay_payable`; estorno exige `reverse_payable`.
 - Consultar títulos não libera listas de contas e métodos para pagamento. Essas opções exigem o direito de pagar; saldos continuam dependentes de `sales.view_financialaccount`.
 - Pagamento ou estorno em dinheiro mantém a exigência de `sales.move_cash`, de sessão de caixa compatível e das regras de proprietário/gerenciamento. Pagamento bancário não exige movimentação manual de caixa.
@@ -458,3 +458,16 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Trocar a foto substitui a versão anterior do avatar no banco; remover limpa os bytes e a referência ao salvar. Sem foto, o menu e o perfil mostram as iniciais. O menu atualiza nome/foto após salvar, e os dados permanecem após recarregar ou reiniciar o serviço.
 - A migração accounts.0005 cria apenas a tabela adicional, preservando contas, temas, vínculos, credenciais e permissões. Perfis existentes começam com dados extras vazios e sem avatar; a linha é criada no primeiro salvamento. A resposta atual de /api/me/ permanece compatível.
 - Troca de senha, histórico pessoal de edições, foto de outros usuários, logotipo da ótica e fotos de produtos permanecem fora desta entrega. Produtos com até três fotos usarão seu próprio fluxo, escopo de permissões e estratégia de armazenamento de objetos.
+
+
+## Catálogo visual de produtos — 04/11/2026
+
+- Modelo/referência, cor, material, formato, detalhes e medidas são opcionais. Medidas em mm aceitam uma casa decimal e devem ser positivas quando preenchidas. Nenhuma categoria exige medidas de armação.
+- Cada produto possui até três posições de foto, com escolha da principal. Criação/edição exige o direito correspondente de produto; inativação mantém as fotos e o histórico comercial.
+- Aceitam-se somente JPEG/PNG/WebP estáticos, até 5 MiB e 16 MP por arquivo. O servidor verifica e regrava o conteúdo, retira metadados e gera imagem e miniatura preservando proporção. Original não é publicado.
+- O padrão é R2 privado, exclusivo do Lentis; armazenamento local requer seleção explícita e só funciona com DEBUG=True. As credenciais ficam no ambiente. Os arquivos não dependem do disco temporário do Render.
+- Leituras de mídia exigem conta ativa, unidade/empresa acessível e permissão de consultar/editar produtos ou atuação autorizada em vendas/compras. O endpoint de mídia valida novamente a unidade do produto e do ativo; resposta privada sem cache. A concessão operacional não libera o cadastro completo.
+- Opções reduzidas de venda/compra incluem somente a miniatura adicional. Custos não entram nas opções de venda. Os itens usam a foto atual do catálogo como ilustração; snapshots e totais dos documentos permanecem inalterados.
+- Gravação de dados e vínculos da galeria é transacional, com bloqueio de produto e revisão da galeria. Envio desatualizado não sobrescreve a galeria. Arquivo inválido ou falha de armazenamento não aplica uma edição parcial.
+- Chaves novas são rastreadas antes do upload. Sobras podem ser recolhidas pelo comando cleanup_product_photos, que ignora vínculos ativos e objetos com menos de 24h. Sem --apply o comando não remove arquivos.
+- Backup de PostgreSQL contém metadados/vínculos; cópia dos objetos R2 é uma rotina separada necessária para recuperar fotos junto a dumps históricos.
