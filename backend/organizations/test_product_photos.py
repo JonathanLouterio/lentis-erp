@@ -9,6 +9,7 @@ from threading import Barrier
 from unittest import skipUnless
 from unittest.mock import Mock, patch
 
+from botocore.exceptions import ClientError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ImproperlyConfigured
@@ -256,14 +257,37 @@ class ProductPhotosTests(TestCase):
         self.assertIsNone(response.data['lens_width_mm'])
 
     def test_storage_failure_rolls_back_text_and_cleans_both_objects(self):
-        storage=Mock(kind='r2');storage.put.side_effect=[None,OSError('Secret that must not leak')]
-        with patch('organizations.product_photo_services.PhotoStorage',return_value=storage),patch('organizations.product_photo_services.try_purge') as purge:
+        storage = Mock(kind='r2')
+        error = ClientError({'Error': {'Code': 'AccessDenied', 'Message': 'Secret that must not leak'}}, 'PutObject')
+        storage.put.side_effect = [None, error]
+        with (
+            patch('organizations.product_photo_services.PhotoStorage', return_value=storage),
+            patch('organizations.product_photo_services.try_purge') as purge,
+            self.assertLogs('organizations.product_photo_storage', level='WARNING') as logs,
+        ):
             response=self.save(files={'photo_1':picture()},name='Não salvar')
         self.assertEqual(response.status_code,503,response.data)
         self.assertNotIn('Secret',str(response.data))
+        self.assertIn('operacao=envio', logs.output[0])
+        self.assertIn('codigo=AccessDenied', logs.output[0])
+        self.assertNotIn('Secret', logs.output[0])
         self.product.refresh_from_db();self.assertEqual(self.product.name,'Armação inicial')
         purge.assert_called_once()
         self.assertFalse(ProductPhoto.objects.exists())
+
+    def test_storage_read_failure_logs_only_diagnostic_fields(self):
+        self.upload()
+        error = ClientError({'Error': {'Code': 'AccessDenied', 'Message': 'Secret in SDK response'}}, 'GetObject')
+        with (
+            patch('organizations.product_photo_storage.PhotoStorage.get', side_effect=error),
+            self.assertLogs('organizations.product_photo_storage', level='WARNING') as logs,
+        ):
+            response = self.client.get(self.photo())
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('operacao=leitura', logs.output[0])
+        self.assertIn('codigo=AccessDenied', logs.output[0])
+        self.assertNotIn('Secret', logs.output[0])
+        self.assertNotIn('Secret', str(response.data))
 
     def test_database_failure_cleans_new_objects_and_preserves_existing_photo(self):
         self.upload();before=self.client.get(self.photo()).content

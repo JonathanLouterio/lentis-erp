@@ -7,7 +7,7 @@ from .access_permissions import fresh_actor, FreshActiveUser
 from .views import SelectedStoreMixin
 from .models import Product
 from .product_photo_models import ProductPhoto
-from .product_photo_storage import PhotoStorage, PhotoStorageUnavailable
+from .product_photo_storage import PhotoStorage, PhotoStorageUnavailable, log_photo_storage_error
 
 
 class ProductPhotoView(SelectedStoreMixin, APIView):
@@ -40,5 +40,6 @@ class ProductPhotoView(SelectedStoreMixin, APIView):
         try:
             content = PhotoStorage(photo.asset.storage).get(photo.asset.key(variant), variant)
         except Exception as exc:
+            log_photo_storage_error('leitura', exc)
             raise PhotoStorageUnavailable() from exc
         return HttpResponse(content, content_type='image/jpeg', headers={'Content-Disposition': 'inline; filename="produto.jpg"'})

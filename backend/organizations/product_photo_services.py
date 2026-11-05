@@ -7,7 +7,7 @@ from rest_framework.exceptions import APIException, PermissionDenied, NotFound, 
 from accounts.selectors import get_accessible_stores
 from .models import Product
 from .product_photo_models import ProductPhoto, ProductPhotoAsset
-from .product_photo_storage import PhotoStorage, PhotoStorageUnavailable
+from .product_photo_storage import PhotoStorage, PhotoStorageUnavailable, log_photo_storage_error
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +59,9 @@ def purge_asset(asset):
 def try_purge(asset):
     try:
         purge_asset(asset)
-    except Exception:
+    except Exception as exc:
         # Não registra URLs, credenciais, corpo da requisição ou exceções do SDK.
+        log_photo_storage_error('limpeza', exc)
         logger.warning('Limpeza de foto pendente; execute cleanup_product_photos. asset=%s', asset.pk)
 
 
@@ -69,15 +70,19 @@ def save_catalog_product(*, instance, values, gallery, uploads, actor, clean):
     store = values.get('store') if instance is None else instance.store
     try:
         if uploads:
+            stage = 'configuracao'
             try:
                 storage = PhotoStorage()
                 for slot, images in uploads.items():
+                    stage = 'registro'
                     asset = ProductPhotoAsset.objects.create(store=store,
                         company_id_snapshot=store.company_id, storage=storage.kind)
                     staged[slot] = asset
+                    stage = 'envio'
                     for variant, content in images.items():
                         storage.put(asset.key(variant), content)
             except Exception as exc:
+                log_photo_storage_error(stage, exc)
                 raise PhotoStorageUnavailable() from exc
 
         with transaction.atomic():
