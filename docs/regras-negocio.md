@@ -471,3 +471,9 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Gravação de dados e vínculos da galeria é transacional, com bloqueio de produto e revisão da galeria. Envio desatualizado não sobrescreve a galeria. Arquivo inválido ou falha de armazenamento não aplica uma edição parcial.
 - Chaves novas são rastreadas antes do upload. Sobras podem ser recolhidas pelo comando cleanup_product_photos, que ignora vínculos ativos e objetos com menos de 24h. Sem --apply o comando não remove arquivos.
 - Backup de PostgreSQL contém metadados/vínculos; cópia dos objetos R2 é uma rotina separada necessária para recuperar fotos junto a dumps históricos.
+
+### Leitura de códigos no cadastro de produtos
+
+- Na criação e edição, **Ler com câmera** preenche o campo de código de barras ou QR Code. A leitura mantém zeros à esquerda e só é gravada ao salvar o produto. Na câmera, UPC-A é apresentado no equivalente EAN-13, com um zero inicial; o campo pode ser ajustado antes de salvar. O código interno continua sendo um campo separado.
+- O QR Code deve conter o identificador do produto em uma única linha, com até 30 caracteres. A leitura trata o conteúdo como texto e não abre links. A regra existente de código único por unidade continua valendo.
+- A câmera precisa de permissão no navegador e de HTTPS (ou localhost). As imagens da câmera são processadas no aparelho. Também é possível digitar o código ou usar um leitor que funciona como teclado, com o campo em foco.

@@ -1,4 +1,5 @@
 import FormDialog from './FormDialog'
+import ProductCodeField from './ProductCodeField'
 import ProductPhotoEditor from './ProductPhotoEditor'
 import ProductThumbnail from './ProductThumbnail'
 import type { ProductGalleryChange } from '../api'
@@ -657,7 +658,10 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
                   <div hidden={productTab !== 'data'}>
                   <div className="erp-form-grid">
                     <label>Código interno<input required value={productForm.internal_code} onChange={(event) => setProductForm({ ...productForm, internal_code: event.target.value })} /></label>
-                    <label>Código de barras<input value={productForm.barcode} onChange={(event) => setProductForm({ ...productForm, barcode: event.target.value })} /></label>
+                    {productTab === 'data' && <ProductCodeField value={productForm.barcode} disabled={savingProduct} onChange={barcode => {
+                      setProductForm(current => ({ ...current, barcode }))
+                      setProductDirty(true)
+                    }} />}
                     <label className="erp-field-wide">Descrição<input required value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></label>
                     <label>Marca<input value={productForm.brand} onChange={(event) => setProductForm({ ...productForm, brand: event.target.value })} /></label>
                     <label>Categoria<input value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} /></label>
