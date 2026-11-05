@@ -1,4 +1,5 @@
 """R2 via S3, sem URL pública; disco local é permitido somente em desenvolvimento."""
+import logging
 import os
 import re
 from pathlib import Path
@@ -6,6 +7,18 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework.exceptions import APIException
 from .product_images import MAX_IMAGE, MAX_THUMB
+
+logger = logging.getLogger(__name__)
+
+
+def log_photo_storage_error(operation, exc):
+    # Nunca inclua a mensagem, o traceback, a chave do objeto ou a URL do SDK.
+    response = getattr(exc, 'response', None)
+    details = response.get('Error') if isinstance(response, dict) else None
+    code = details.get('Code') if isinstance(details, dict) else None
+    safe_code = code if isinstance(code, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', code) else '-'
+    logger.warning('Falha no armazenamento de foto: operacao=%s tipo=%s codigo=%s',
+                   operation, type(exc).__name__, safe_code)
 
 
 class PhotoStorageUnavailable(APIException):
