@@ -231,6 +231,16 @@ class Product(models.Model):
     name = models.CharField("Descrição", max_length=180)
     brand = models.CharField("Marca", max_length=100, blank=True)
     category = models.CharField("Categoria", max_length=100, blank=True)
+    model_reference = models.CharField("Modelo / referência", max_length=100, blank=True)
+    color = models.CharField("Cor", max_length=80, blank=True)
+    material = models.CharField("Material", max_length=80, blank=True)
+    frame_shape = models.CharField("Formato", max_length=80, blank=True)
+    lens_width_mm = models.DecimalField("Largura da lente (mm)", max_digits=5, decimal_places=1, null=True, blank=True)
+    bridge_mm = models.DecimalField("Ponte (mm)", max_digits=5, decimal_places=1, null=True, blank=True)
+    temple_mm = models.DecimalField("Haste (mm)", max_digits=5, decimal_places=1, null=True, blank=True)
+    description = models.TextField("Detalhes do produto", max_length=2000, blank=True)
+    photos_revision = models.PositiveIntegerField(default=0, editable=False)
+    primary_photo_slot = models.PositiveSmallIntegerField(null=True, blank=True, editable=False)
     cost_price = models.DecimalField(
         "Preço de custo",
         max_digits=12,
@@ -279,6 +289,16 @@ class Product(models.Model):
                 & models.Q(minimum_stock__gte=0),
                 name="product_numeric_values_non_negative",
             ),
+            models.CheckConstraint(
+                condition=(models.Q(primary_photo_slot__isnull=True) | models.Q(primary_photo_slot__range=(1, 3))),
+                name="product_primary_photo_slot_valid",
+            ),
+            models.CheckConstraint(
+                condition=(models.Q(lens_width_mm__isnull=True) | models.Q(lens_width_mm__gt=0))
+                & (models.Q(bridge_mm__isnull=True) | models.Q(bridge_mm__gt=0))
+                & (models.Q(temple_mm__isnull=True) | models.Q(temple_mm__gt=0)),
+                name="product_measurements_positive",
+            ),
         ]
 
     def clean(self):
@@ -291,6 +311,10 @@ class Product(models.Model):
             raise ValidationError({"internal_code": "Informe o código interno."})
         if not self.name:
             raise ValidationError({"name": "Informe a descrição do produto."})
+
+        for field in ("lens_width_mm", "bridge_mm", "temple_mm"):
+            if getattr(self, field) is not None and getattr(self, field) <= 0:
+                raise ValidationError({field: "A medida deve ser maior que zero ou ficar em branco."})
 
         for field in (
             "cost_price",
@@ -375,3 +399,5 @@ from .supplier_models import Supplier, SupplierEvent, SupplierOperation  # noqa:
 
 
 from .configuration_models import ConfigurationEvent  # noqa: E402,F401
+
+from .product_photo_models import ProductPhoto, ProductPhotoAsset  # noqa: E402,F401

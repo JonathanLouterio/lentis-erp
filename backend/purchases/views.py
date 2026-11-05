@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from sales.views import SalesBaseView, SalesPagination, model_errors
 from .models import Purchase
+from organizations.product_photo_services import product_thumbnail
 from .access_permissions import PurchaseActionPermission, purchase_capabilities, payable_capabilities, available_purchase_actions
 from .services import operate_purchase
 
@@ -45,7 +46,7 @@ def output(purchase,user,detail=False):
         'can_edit':available_purchase_actions(purchase,user)['update'],'can_receive':available_purchase_actions(purchase,user)['receive']}
     if detail:
         result['supplier_snapshot']=purchase.supplier_snapshot
-        result['items']=[{'id':i.pk,'product_id':i.product_id,'product_code':i.product_code,'product_name':i.product_name,'quantity':str(i.quantity),'unit_cost':str(i.unit_cost),'total':f'{i.total:.2f}','movement_id':getattr(getattr(i,'stock_link',None),'movement_id',None)} for i in purchase.items.all()]
+        result['items']=[{'id':i.pk,'product_id':i.product_id,'product_code':i.product_code,'product_name':i.product_name,'thumbnail_url':product_thumbnail(i.product),'quantity':str(i.quantity),'unit_cost':str(i.unit_cost),'total':f'{i.total:.2f}','movement_id':getattr(getattr(i,'stock_link',None),'movement_id',None)} for i in purchase.items.all()]
         result['events']=[{'action':e.action,'action_label':e.get_action_display(),'reason':e.reason,'version':e.version,'creator_username':e.created_by.username,'created_at':e.created_at} for e in purchase.events.select_related('created_by')]
     return result
 
@@ -62,7 +63,7 @@ class PurchasesView(SalesBaseView):
         return store
 
     def queryset(self,store):
-        return Purchase.objects.filter(store=store).select_related('supplier').prefetch_related('items__stock_link')
+        return Purchase.objects.filter(store=store).select_related('supplier').prefetch_related('items__stock_link', 'items__product')
 
     def get(self,request):
         qs=self.queryset(self.check_access());state=request.query_params.get('status','all')
@@ -104,5 +105,5 @@ class PurchaseOptionsView(PurchasesView):
         pagination=SalesPagination()
         suppliers=pagination.paginate_queryset(Supplier.objects.filter(store=store,is_active=True).order_by('name','pk'),request,view=self)
         response=pagination.get_paginated_response([{'id':s.pk,'name':s.name,'document':s.document} for s in suppliers])
-        response.data['products']=[{'id':p.pk,'internal_code':p.internal_code,'name':p.name,'cost_price':str(p.cost_price)} for p in Product.objects.filter(store=store,is_active=True).order_by('internal_code','pk')]
+        response.data['products']=[{'id':p.pk,'internal_code':p.internal_code,'name':p.name,'cost_price':str(p.cost_price),'thumbnail_url':product_thumbnail(p)} for p in Product.objects.filter(store=store,is_active=True).order_by('internal_code','pk')]
         return response

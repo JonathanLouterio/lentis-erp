@@ -67,7 +67,7 @@ class PurchasePermissionTests(TestCase):
         response=self.client.get(f'/api/me/purchases/options/?store_id={self.store.pk}')
         self.assertEqual(response.status_code,200,response.data)
         self.assertEqual(response.data['results'],[{'id':self.supplier.pk,'name':self.supplier.name,'document':self.supplier.document}])
-        self.assertEqual(set(response.data['products'][0]),{'id','internal_code','name','cost_price'})
+        self.assertEqual(set(response.data['products'][0]),{'id','internal_code','name','cost_price','thumbnail_url'})
         self.assertTrue(all(row['id'] in (self.product.pk,self.product2.pk) for row in response.data['products']))
         self.assertEqual(self.client.post(self.path(),self.data(),format='json').status_code,200)
 

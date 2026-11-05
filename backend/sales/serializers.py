@@ -10,10 +10,15 @@ from .models import Sale, SaleEvent, SaleItem
 class SaleItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
     total = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
+    thumbnail_url = serializers.SerializerMethodField()
+
+    def get_thumbnail_url(self, instance):
+        from organizations.product_photo_services import product_thumbnail
+        return product_thumbnail(instance.product)
 
     class Meta:
         model = SaleItem
-        fields = ["id", "product", "product_code", "product_name", "quantity", "unit_price", "reference_price", "discount_amount", "subtotal", "total"]
+        fields = ["id", "product", "product_code", "product_name", "quantity", "unit_price", "reference_price", "discount_amount", "subtotal", "total", "thumbnail_url"]
         read_only_fields = fields
 
 

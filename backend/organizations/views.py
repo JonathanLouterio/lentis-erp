@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from accounts.selectors import get_accessible_stores
 
 from .models import Customer, Product, StockMovement
+from .product_photo_inputs import ProductWriteMixin
 from .serializers import (
     CustomerSerializer, ProductSerializer,
     StockMovementCreateSerializer, StockMovementSerializer,
@@ -72,26 +73,26 @@ class MyCustomerDetailView(CatalogWriteGuardMixin, SelectedStoreMixin, RetrieveU
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class MyProductsView(CatalogWriteGuardMixin, SelectedStoreMixin, ListCreateAPIView):
+class MyProductsView(ProductWriteMixin, CatalogWriteGuardMixin, SelectedStoreMixin, ListCreateAPIView):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated, CatalogActionPermission]
     catalog_model = "product"
 
     def get_queryset(self):
-        return Product.objects.filter(store=self._selected_store(), is_active=True).select_related("store")
+        return Product.objects.filter(store=self._selected_store(), is_active=True).select_related("store").prefetch_related("photos")
 
     def perform_create(self, serializer):
         serializer.save(store=self._selected_store())
 
 
-class MyProductDetailView(CatalogWriteGuardMixin, SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
+class MyProductDetailView(ProductWriteMixin, CatalogWriteGuardMixin, SelectedStoreMixin, RetrieveUpdateDestroyAPIView):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated, CatalogActionPermission]
     catalog_model = "product"
     lookup_url_kwarg = "product_id"
 
     def get_queryset(self):
-        return Product.objects.filter(store=self._selected_store(), is_active=True).select_related("store")
+        return Product.objects.filter(store=self._selected_store(), is_active=True).select_related("store").prefetch_related("photos")
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()

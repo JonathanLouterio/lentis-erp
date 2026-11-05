@@ -66,6 +66,26 @@ class CustomerSerializer(ModelCleanMixin, serializers.ModelSerializer):
 
 class ProductSerializer(ModelCleanMixin, serializers.ModelSerializer):
     store_name = serializers.CharField(source="store.name", read_only=True)
+    gallery = serializers.JSONField(write_only=True, required=False)
+    photos = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+
+    def get_photos(self, instance):
+        from .product_photo_services import photo_output
+        return photo_output(instance)
+
+    def get_thumbnail_url(self, instance):
+        from .product_photo_services import product_thumbnail
+        return product_thumbnail(instance)
+
+    def validate_gallery(self, value):
+        from .product_photo_services import GalleryInput
+        payload = GalleryInput(data=value)
+        payload.is_valid(raise_exception=True)
+        if self.instance and payload.validated_data['revision'] != self.instance.photos_revision:
+            from .product_photo_services import GalleryConflict
+            raise GalleryConflict()
+        return payload.validated_data
 
     class Meta:
         model = Product
@@ -73,9 +93,13 @@ class ProductSerializer(ModelCleanMixin, serializers.ModelSerializer):
             "id", "store", "store_name", "internal_code", "barcode", "name",
             "brand", "category", "cost_price", "sale_price", "stock_quantity",
             "minimum_stock", "is_active", "created_at", "updated_at",
+            "model_reference", "color", "material", "frame_shape", "lens_width_mm",
+            "bridge_mm", "temple_mm", "description", "photos_revision", "primary_photo_slot",
+            "photos", "thumbnail_url", "gallery",
         )
         read_only_fields = (
             "id", "store", "store_name", "stock_quantity", "created_at", "updated_at",
+            "photos_revision", "primary_photo_slot", "photos", "thumbnail_url",
         )
         extra_kwargs = {
             "barcode": {"required": False, "allow_blank": True, "default": ""},
@@ -108,21 +132,48 @@ class ProductSerializer(ModelCleanMixin, serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"stock_quantity": "Use uma movimentação para alterar o estoque."}
                 )
+        gallery = attrs.pop('gallery', None)
+        request = self.context.get('request')
+        files = request.FILES if request else {}
+        self.photo_uploads = {}
+        if files:
+            if gallery is None:
+                raise serializers.ValidationError({'gallery': 'Informe a revisão e as posições das fotos.'})
+            from .product_images import normalize_product_photo
+            for name, upload in files.items():
+                slot = int(name[-1])
+                if slot in gallery['remove']:
+                    raise serializers.ValidationError({'gallery': 'Não remova e substitua a mesma posição no mesmo envio.'})
+                self.photo_uploads[slot] = normalize_product_photo(upload)
         if self.instance is None:
+            if gallery is not None:
+                attrs['gallery'] = gallery
             return attrs
         instance = self.instance
         for field, value in attrs.items():
             setattr(instance, field, value)
         self.clean_instance(instance)
+        if gallery is not None:
+            attrs['gallery'] = gallery
         return attrs
 
     def create(self, validated_data):
+        if 'gallery' in validated_data:
+            from .product_photo_services import save_catalog_product
+            gallery = validated_data.pop('gallery')
+            return save_catalog_product(instance=None, values=validated_data, gallery=gallery,
+                uploads=self.photo_uploads, actor=self.context['request'].user, clean=self.clean_instance)
         instance = Product(**validated_data)
         self.clean_instance(instance)
         instance.save()
         return instance
 
     def update(self, instance, validated_data):
+        if 'gallery' in validated_data:
+            from .product_photo_services import save_catalog_product
+            gallery = validated_data.pop('gallery')
+            return save_catalog_product(instance=instance, values=validated_data, gallery=gallery,
+                uploads=self.photo_uploads, actor=self.context['request'].user, clean=self.clean_instance)
         # Recarrega o saldo após obter o lock: uma edição de descrição/preço
         # não pode sobrescrever uma entrada ou saída concorrente.
         with transaction.atomic():

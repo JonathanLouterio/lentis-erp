@@ -70,10 +70,21 @@ export type CustomerPayload = {
 
 export type NewCustomer = CustomerPayload
 
-export type Product = {
+export type ProductPhoto = { slot: number; primary: boolean; url: string; thumbnail_url: string }
+export type ProductGalleryChange = { revision: number; remove: number[]; primary: number | null; files: Record<number, File> }
+export type ProductCharacteristics = {
+  model_reference: string; color: string; material: string; frame_shape: string;
+  lens_width_mm: string | null; bridge_mm: string | null; temple_mm: string | null; description: string
+}
+
+export type Product = ProductCharacteristics & {
   id: number
   store: number
   store_name: string
+  photos: ProductPhoto[]
+  photos_revision: number
+  primary_photo_slot: number | null
+  thumbnail_url: string | null
   internal_code: string
   barcode: string
   name: string
@@ -88,7 +99,7 @@ export type Product = {
   updated_at: string
 }
 
-export type ProductPayload = {
+export type ProductPayload = ProductCharacteristics & {
   internal_code: string
   barcode: string
   name: string
@@ -263,12 +274,20 @@ export function getMyProducts(storeId: number): Promise<Product[]> {
   return request<Product[]>(`/api/me/products/?store_id=${storeId}`)
 }
 
-export async function createProduct(storeId: number, product: ProductPayload): Promise<Product> {
+function productBody(product: Partial<ProductPayload>, gallery?: ProductGalleryChange): string | FormData {
+  if (!gallery) return JSON.stringify(product)
+  const form = new FormData()
+  form.set('data', JSON.stringify({ ...product, gallery: { revision: gallery.revision, remove: gallery.remove, primary: gallery.primary } }))
+  Object.entries(gallery.files).forEach(([slot, file]) => form.set(`photo_${slot}`, file))
+  return form
+}
+
+export async function createProduct(storeId: number, product: ProductPayload, gallery?: ProductGalleryChange): Promise<Product> {
   const token = await getCsrfToken()
   return request<Product>(`/api/me/products/?store_id=${storeId}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
-    body: JSON.stringify(product),
+    headers: { ...(!gallery ? { 'Content-Type': 'application/json' } : {}), 'X-CSRFToken': token },
+    body: productBody(product, gallery),
   })
 }
 
@@ -276,12 +295,13 @@ export async function updateProduct(
   storeId: number,
   productId: number,
   product: Partial<ProductPayload>,
+  gallery?: ProductGalleryChange,
 ): Promise<Product> {
   const token = await getCsrfToken()
   return request<Product>(`/api/me/products/${productId}/?store_id=${storeId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
-    body: JSON.stringify(product),
+    headers: { ...(!gallery ? { 'Content-Type': 'application/json' } : {}), 'X-CSRFToken': token },
+    body: productBody(product, gallery),
   })
 }
 
@@ -323,6 +343,7 @@ export async function updateTheme(
 export type SaleStatus = 'draft' | 'completed' | 'cancelled'
 
 export type SaleItem = {
+  thumbnail_url: string | null
   reference_price: string | null
   id: number
   product: number
@@ -673,7 +694,7 @@ export type Purchase = {
   id:number;store:number;supplier_id:number;supplier_name:string;reference:string;document_date:string|null;notes:string
   status:'draft'|'received'|'cancelled';status_label:string;version:number;total:string;updates_cost:boolean
   created_at:string;received_at:string|null;can_edit:boolean;can_receive:boolean;actions:PurchaseActions;supplier_snapshot?:Record<string,string>
-  items?: (PurchaseItemPayload & {id:number;product_code:string;product_name:string;total:string;movement_id:number|null})[]
+  items?: (PurchaseItemPayload & {id:number;product_code:string;product_name:string;thumbnail_url:string|null;total:string;movement_id:number|null})[]
   events?: {version:number;action:string;action_label:string;reason:string;creator_username:string;created_at:string}[]
 }
 export type PurchaseAttempt = {id:number|null;payload:{request_id:string;action:'create'|'update'|'receive'|'cancel';expected_version?:number;supplier_id?:number;reference?:string;document_date?:string|null;notes?:string;items?:PurchaseItemPayload[];confirmed?:boolean;update_cost?:boolean;reason?:string}}
@@ -793,7 +814,7 @@ export function getStockOptions(storeId: number): Promise<StockOptions> {
 
 export type SaleAccess = { store_id: number; view: boolean; add: boolean; change: boolean; finalize: boolean; cancel: boolean }
 export type SaleCustomerChoice = Pick<Customer, 'id' | 'name'>
-export type SaleProductChoice = Pick<Product, 'id' | 'internal_code' | 'name' | 'barcode' | 'sale_price' | 'stock_quantity'>
+export type SaleProductChoice = Pick<Product, 'id' | 'internal_code' | 'name' | 'barcode' | 'sale_price' | 'stock_quantity' | 'thumbnail_url'>
 export type SalePaymentOptions = Omit<PaymentOptions, 'accounts'> & { accounts: Omit<FinancialAccount, 'balance'>[] }
 export type SaleOptions = { customers: SaleCustomerChoice[]; products: SaleProductChoice[]; payment_options: SalePaymentOptions }
 export function getSaleAccess(storeId: number): Promise<SaleAccess> { return request(`/api/me/sales/access/?store_id=${storeId}`) }
@@ -818,7 +839,7 @@ export function getOrderSales(storeId:number,page:number):Promise<{results:{id:n
 
 export type PurchaseActions={view:boolean;create:boolean;update:boolean;receive:boolean;cancel:boolean;update_cost:boolean}
 export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{view:boolean;generate:boolean;pay:boolean;reverse:boolean}}
-export type PurchaseOptions={results:{id:number;name:string;document:string}[];next:string|null;products:{id:number;internal_code:string;name:string;cost_price:string}[]}
+export type PurchaseOptions={results:{id:number;name:string;document:string}[];next:string|null;products:{id:number;internal_code:string;name:string;cost_price:string;thumbnail_url:string|null}[]}
 export function getPurchaseAccess(storeId:number):Promise<PurchaseAccess>{return request(`/api/me/purchases/access/?store_id=${storeId}`)}
 export function getPurchaseOptions(storeId:number,page:number):Promise<PurchaseOptions>{return request(`/api/me/purchases/options/?store_id=${storeId}&page=${page}`)}
 

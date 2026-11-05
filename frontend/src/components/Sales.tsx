@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import ProductPicker from './ProductPicker'
+import ProductThumbnail from './ProductThumbnail'
 import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getSaleAccess, getSaleOptions, finalizeSale, getPaymentPreview, getSale, getSales, submitCheckout } from '../api'
 import type { AccessibleStore, CheckoutPayload, SaleCustomerChoice, SalePaymentOptions, SaleAccess, PaymentPreview, SaleProductChoice, Sale, SaleStatus, SalesPage } from '../api'
 import { brl, dateTime, decimal, decimalText, displayDate, failure, money, paymentSchedule, signedDecimal, today } from './saleMoney'
@@ -12,7 +14,7 @@ import './Sales.css'
 import { financedKinds, financingFee, minimumEntry } from './saleFinancing'
 
 type Props = { onServiceOrder?: (saleId:number)=>void; startNew?: boolean; initialSaleId?: number; store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
-type Line = { referencePrice: string; productId: number; name: string; code: string; quantity: string; price: string; discount: string }
+type Line = { thumbnailUrl?: string | null; referencePrice: string; productId: number; name: string; code: string; quantity: string; price: string; discount: string }
 type Payment = PaymentPlanRow
 const emptyOptions: SalePaymentOptions = { methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" }
 const emptyPage: SalesPage = { count: 0, next: null, previous: null, results: [] }
@@ -41,7 +43,6 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const [financingRate, setFinancingRate] = useState('0')
   const [payments, setPayments] = useState<Payment[]>([])
   const [productId, setProductId] = useState('')
-  const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
@@ -185,7 +186,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   function accept(sale: Sale) {
     setPrescriptionSelection(null)
     setSelected(sale); setEditor(true); setCustomerId(sale.customer === null ? '' : String(sale.customer)); setNotes(sale.notes)
-    setLines(sale.items.map((item) => ({ productId: item.product, referencePrice: item.reference_price ?? item.unit_price, name: item.product_name, code: item.product_code, quantity: item.quantity, price: item.unit_price, discount: item.discount_amount })))
+    setLines(sale.items.map((item) => ({ productId: item.product, thumbnailUrl: item.thumbnail_url, referencePrice: item.reference_price ?? item.unit_price, name: item.product_name, code: item.product_code, quantity: item.quantity, price: item.unit_price, discount: item.discount_amount })))
     setDiscount(sale.discount_amount || '0')
     setFinancingRate(sale.financing_rate || '0')
     setPayments((sale.payments || []).map((payment) => ({ key: crypto.randomUUID(), methodId: String(payment.method), accountId: String(payment.account), amount: payment.principal_amount ?? payment.amount, auto: false, count: payment.installment_count, due: payment.first_due_date, confirmed: payment.confirmed, intervalUnit: payment.interval_unit ?? 'months', intervalCount: payment.interval_count ?? 1 })))
@@ -194,7 +195,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   function newSale() {
     if (!access?.add || !allowedToLeave()) return
     setPrescriptionSelection(null)
-    setBuilder(false); setPreview(null); setSelected(null); setEditor(true); setLines([]); setPayments([]); setCustomerId(''); setNotes(''); setDiscount('0'); setFinancingRate('0'); setDirty(false); setError(''); setSuccess(''); setCancelOpen(false); setReason(''); setProductId(''); setSearch(''); setApprovalReason(''); setDecisionReasons({})
+    setBuilder(false); setPreview(null); setSelected(null); setEditor(true); setLines([]); setPayments([]); setCustomerId(''); setNotes(''); setDiscount('0'); setFinancingRate('0'); setDirty(false); setError(''); setSuccess(''); setCancelOpen(false); setReason(''); setProductId(''); setApprovalReason(''); setDecisionReasons({})
   }
   async function openSale(id: number) {
     if (!access?.view || !allowedToLeave()) return
@@ -213,7 +214,7 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     const product = products.find((value) => String(value.id) === productId)
     if (!product) return
     if (lines.some((line) => line.productId === product.id)) { setError('Este produto já está na venda. Ajuste a quantidade na lista.'); return }
-    setLines((items) => [...items, { productId: product.id, referencePrice: product.sale_price, name: product.name, code: product.internal_code, quantity: '1', price: product.sale_price, discount: '0' }])
+    setLines((items) => [...items, { productId: product.id, thumbnailUrl: product.thumbnail_url, referencePrice: product.sale_price, name: product.name, code: product.internal_code, quantity: '1', price: product.sale_price, discount: '0' }])
     if (!payments.length && options.methods.length && options.accounts.length) setPayments([defaultPayment()])
     setProductId(''); setDirty(true); setError(''); setSuccess('')
   }
@@ -316,9 +317,9 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
         </div>
           <SalePrescriptionPanel key={`${store.id}:${customerId}:${selected?.id??'new'}`} storeId={store.id} customerId={customerId?Number(customerId):null} saleId={selected?.id??null} current={selected?.prescription??null} selection={prescriptionSelection} readOnly={readOnly} blocked={blocked} onChange={value=>{setPrescriptionSelection(value);setDirty(true)}} />
         <div className="erp-card"><div className="erp-checkout-section"><span>02</span><h2>Produtos</h2><small>{lines.length} itens</small></div>
-          {!readOnly && <div className="erp-checkout-product-picker"><label>Buscar produto<input aria-label="Buscar produto" value={search} disabled={blocked || catalogLoading} onChange={(event) => setSearch(event.target.value)} placeholder="Nome, código ou código de barras" /></label><label>Produto<select aria-label="Produto" value={productId} disabled={blocked || catalogLoading} onChange={(event) => setProductId(event.target.value)}><option value="">Selecione um produto</option>{products.filter((product) => `${product.name} ${product.internal_code} ${product.barcode}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map((product) => <option key={product.id} value={product.id}>{product.internal_code} · {product.name} · {money.format(Number(product.sale_price))}</option>)}</select></label><button className="erp-action-button" disabled={blocked || !productId || catalogLoading || !!catalogError} onClick={addProduct}>Adicionar</button></div>}
+          {!readOnly && <div className="erp-checkout-product-picker"><ProductPicker products={products} value={productId} disabled={blocked || catalogLoading} onChange={setProductId} /><button type="button" className="erp-action-button" disabled={blocked || !productId || catalogLoading || !!catalogError} onClick={addProduct}>Adicionar</button></div>}
           {!lines.length ? <div className="erp-checkout-empty">Adicione os produtos que o cliente está levando.</div> : <div className="erp-checkout-lines">{lines.map((line, index) => <div className="erp-checkout-line" key={line.productId}>
-            <div className="erp-checkout-line-name"><strong>{line.name}</strong><small>{line.code}{!readOnly && ` · Estoque: ${products.find((product) => product.id === line.productId)?.stock_quantity ?? 'indisponível'}`}</small></div>
+            <div className="erp-checkout-line-name"><div className="product-name-with-photo"><ProductThumbnail url={line.thumbnailUrl} name={line.name} /><strong>{line.name}</strong></div><small>{line.code}{!readOnly && ` · Estoque: ${products.find((product) => product.id === line.productId)?.stock_quantity ?? 'indisponível'}`}</small></div>
             <div className="erp-checkout-line-fields"><label>Quantidade<input aria-label={`Quantidade de ${line.name}`} inputMode="decimal" value={line.quantity} disabled={blocked || readOnly} onChange={(event) => changeLine(index,'quantity',event.target.value)} /></label><label>Preço (R$)<input aria-label={`Preço de ${line.name}`} inputMode="decimal" value={line.price} disabled={blocked || readOnly} onChange={(event) => changeLine(index,'price',event.target.value)} /></label><label>Desconto (R$)<input aria-label={`Desconto de ${line.name}`} inputMode="decimal" value={line.discount} disabled={blocked || readOnly} onChange={(event) => changeLine(index,'discount',event.target.value)} /></label><strong>{values[index].valid ? brl(values[index].total) : 'Valor inválido'}</strong>{!readOnly && <button className="erp-table-button is-danger" aria-label={`Remover ${line.name}`} disabled={blocked} onClick={() => { setLines((items) => items.filter((_, number) => number !== index)); setDirty(true) }}>Remover</button>}</div>
           </div>)}</div>}
         </div>

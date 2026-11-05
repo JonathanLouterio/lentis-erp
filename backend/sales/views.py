@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
@@ -36,7 +37,7 @@ def model_errors():
 
 
 def sale_queryset():
-    return Sale.objects.select_related("store", "customer", "created_by").prefetch_related("items", "events__created_by", "payments__method", "payments__account", "payments__installments__entries__account", "payments__installments__entries__method", "payments__installments__entries__created_by")
+    return Sale.objects.select_related("store", "customer", "created_by").prefetch_related(Prefetch("items", queryset=SaleItem.objects.select_related("product")), "events__created_by", "payments__method", "payments__account", "payments__installments__entries__account", "payments__installments__entries__method", "payments__installments__entries__created_by")
 
 
 class SalesPagination(PageNumberPagination):
