@@ -1,0 +1,56 @@
+.product-code-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.product-code-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.product-code-controls input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.product-code-controls button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--lentis-input-border, var(--erp-border));
+  border-radius: 8px;
+  background: var(--erp-surface);
+  color: var(--erp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.product-code-camera {
+  padding: 10px;
+  background: var(--erp-bg);
+  border: 1px solid var(--erp-border);
+  border-radius: 10px;
+}
+
+.product-code-camera video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 230px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #15171a;
+}
+
+.product-code-camera p,
+.product-code-feedback {
+  color: var(--erp-text);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0 0 8px;
+}
