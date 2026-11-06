@@ -10,13 +10,14 @@ type Props = {
   notice?: string
   children: ReactNode
   actions?: ReactNode
+  footerSummary?: ReactNode
   busy?: boolean
   dirty?: boolean
   onClose: () => void
 }
 
 /** Native modal: the rest of the workspace is inert while this window is open. */
-export default function FormDialog({ title, subtitle, sectionLabel = 'CADASTROS', wide = false, notice = '', children, actions, busy = false, dirty = false, onClose }: Props) {
+export default function FormDialog({ title, subtitle, sectionLabel = 'CADASTROS', wide = false, notice = '', children, actions, footerSummary, busy = false, dirty = false, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const [confirmClose, setConfirmClose] = useState(false)
@@ -64,7 +65,7 @@ export default function FormDialog({ title, subtitle, sectionLabel = 'CADASTROS'
         <span>Há alterações não salvas. Deseja descartá-las?</span>
         <button type="button" disabled={busy} onClick={() => setConfirmClose(false)}>Continuar editando</button>
         <button type="button" disabled={busy} className="erp-window-danger" onClick={onClose}>Descartar alterações</button>
-      </div> : <><span>{busy ? 'Aguarde a conclusão da operação…' : dirty ? 'Alterações ainda não salvas' : 'Sua lista permanece aberta ao fundo'}</span><div className="erp-window-actions">{actions}<button type="button" disabled={busy} onClick={requestClose}>Fechar</button></div></>}
+      </div> : <>{footerSummary ?? <span>{busy ? 'Aguarde a conclusão da operação…' : dirty ? 'Alterações ainda não salvas' : 'Sua lista permanece aberta ao fundo'}</span>}<div className="erp-window-actions">{actions}<button type="button" disabled={busy} onClick={requestClose}>Fechar</button></div></>}
     </footer>
   </dialog>
 }
