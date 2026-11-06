@@ -94,3 +94,26 @@ class OrderPermissionTests(TestCase):
     def test_unknown_action_is_denied_without_changes(self):
         order,_=self.create();self.assertEqual(self.post_action(order,'delete').status_code,403)
         self.assertEqual(order.events.count(),1)
+
+
+    def test_only_contact_permission_can_record_pickup_in_selected_store(self):
+        from accounts.models import StoreMembership
+
+        order, _ = self.create()
+        for _ in range(4):
+            self.assertEqual(self.post_action(order, 'advance', confirmed=True).status_code, 200)
+        self.only('view_serviceorder', 'change_serviceorder')
+        self.assertEqual(self.post_action(order, 'notify_pickup', confirmed=True).status_code, 403)
+        self.only('view_serviceorder', 'notify_pickup_serviceorder')
+        StoreMembership.objects.create(user=self.user, store=self.other, role=StoreMembership.Role.SELLER)
+        self.assertEqual(self.client.get(self.endpoint(store=self.other) + '&awaiting_pickup_notice=1').data['count'], 0)
+        foreign = self.client.post(self.endpoint(order, self.other), {
+            'request_id': str(uuid4()), 'action': 'notify_pickup',
+            'expected_version': order.version + 1, 'confirmed': True,
+        }, format='json')
+        self.assertEqual(foreign.status_code, 404)
+        result = self.post_action(order, 'notify_pickup', confirmed=True)
+        self.assertEqual(result.status_code, 200, result.data)
+        self.assertFalse(result.data['actions']['update'])
+        self.assertFalse(result.data['actions']['advance'])
+        self.assertEqual(result.data['events'][0]['reason'], '')
