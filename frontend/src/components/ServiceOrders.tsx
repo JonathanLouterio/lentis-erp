@@ -2,7 +2,7 @@ import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, getOrderSales, getServiceOrder, getServiceOrders, submitServiceOrder } from '../api'
-import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPage, ServiceOrderSummary } from '../api'
+import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPage, ServiceOrderPickupFilter, ServiceOrderSummary } from '../api'
 import { dateTime, displayDate, failure, today } from './saleMoney'
 import './ServiceOrders.css'
 import FormDialog from './FormDialog'
@@ -12,15 +12,16 @@ import { useOrderAccess } from '../hooks/useOrderAccess'
 
 type Props = {store:AccessibleStore;userId:number;initialSaleId?:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
 const labels:Record<string,string>={open:'Aberta',laboratory:'No laboratório',mounting:'Em montagem',checking:'Em conferência',ready:'Pronta para entrega',delivered:'Entregue',cancelled:'Cancelada'}
-const actions:Record<string,string>={create:'Abertura',update:'Alteração',advance:'Avanço de etapa',rework:'Retrabalho',cancel:'Cancelamento',notify_pickup:'Cliente avisado sobre a retirada'}
-const boardCards = [
+const actions:Record<string,string>={create:'Abertura',update:'Alteração',advance:'Avanço de etapa',rework:'Retrabalho',cancel:'Cancelamento',notify_pickup:'Cliente avisado sobre a retirada',remind_pickup:'Lembrete de retirada registrado'}
+const boardCards:{key:keyof ServiceOrderSummary;title:string;description:string;status:string;overdue:boolean;pickupFilter?:ServiceOrderPickupFilter}[] = [
   {key:'active', title:'Em andamento', description:'Todas as etapas em aberto', status:'active', overdue:false},
   {key:'laboratory', title:'No laboratório', description:'Aguardando produção externa', status:'laboratory', overdue:false},
   {key:'overdue', title:'Atrasadas', description:'Previsão de entrega vencida', status:'active', overdue:true},
   {key:'ready', title:'Prontas para retirada', description:'Aguardando entrega ao cliente', status:'ready', overdue:false},
-  {key:'awaiting_pickup_notice', title:'Aguardando aviso', description:'Pedidos prontos sem contato registrado', status:'ready', overdue:false, awaitingNotice:true},
+  {key:'awaiting_pickup_notice', title:'Aguardando aviso', description:'Pedidos prontos sem contato registrado', status:'ready', overdue:false, pickupFilter:'awaiting_pickup_notice'},
+  {key:'pickup_reminder_due', title:'Lembretes pendentes', description:'Pedidos prontos há 72 h ou mais desde o aviso', status:'ready', overdue:false, pickupFilter:'pickup_reminder_due'},
   {key:'delivered', title:'Entregues', description:'Histórico da unidade', status:'delivered', overdue:false},
-] satisfies {key:keyof ServiceOrderSummary;title:string;description:string;status:string;overdue:boolean;awaitingNotice?:boolean}[]
+]
 const blank=()=>({promised_on:today(),laboratory:'',frame_description:'',lens_description:'',notes:''})
 const empty:ServiceOrderPage={count:0,next:null,previous:null,results:[],can_create:false}
 
@@ -31,7 +32,7 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
   const [page,setPage]=useState(1)
   const [status,setStatus]=useState('active')
   const [overdue,setOverdue]=useState(false)
-  const [awaitingNotice,setAwaitingNotice]=useState(false)
+  const [pickupFilter,setPickupFilter]=useState<ServiceOrderPickupFilter>()
   const [reload,setReload]=useState(0)
   const [selected,setSelected]=useState<ServiceOrder|null>(null)
   const [cancelReview,setCancelReview]=useState(false)
@@ -56,23 +57,23 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
   useEffect(()=>{onSavingChange(busy);return()=>onSavingChange(false)},[busy,onSavingChange])
   useEffect(()=>{onDirtyChange(dirty||!!pending||!!reason);return()=>onDirtyChange(false)},[dirty,pending,reason,onDirtyChange])
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty||pending||reason)e.preventDefault()};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty,pending,reason])
-  useEffect(()=>{let ignore=false;setLoading(true);void getServiceOrders(store.id,page,status,overdue,undefined,true,awaitingNotice).then(v=>{if(!ignore)setResult(v)}).catch(e=>{if(!ignore){setError(failure(e));setResult(empty)}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,page,status,overdue,awaitingNotice,reload])
+  useEffect(()=>{let ignore=false;setLoading(true);void getServiceOrders(store.id,page,status,overdue,undefined,true,pickupFilter).then(v=>{if(!ignore)setResult(v)}).catch(e=>{if(!ignore){setError(failure(e));setResult(empty)}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,page,status,overdue,pickupFilter,reload])
   useEffect(()=>{if(!creating||!caps?.create)return;let ignore=false;void getOrderSales(store.id,salesPage).then(v=>{if(!ignore){setSales(v.results);setSalesNext(!!v.next)}}).catch(e=>{if(!ignore)setError(failure(e))});return()=>{ignore=true}},[store.id,creating,salesPage,caps?.create])
   useEffect(()=>{if(!initialSaleId||pending||!caps?.view)return;let ignore=false;setBusy(true);void getServiceOrders(store.id,1,'all',false,initialSaleId).then(async v=>{if(ignore)return;if(v.results[0]){const order=await getServiceOrder(store.id,v.results[0].id);if(!ignore)hydrate(order)}else if(caps?.create){setCreating(true);setSaleId(String(initialSaleId))}}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setBusy(false)});return()=>{ignore=true}},[store.id,initialSaleId,caps?.view,caps?.create])
   function hydrate(order:ServiceOrder){setSelected(order);setCreating(false);setForm({promised_on:order.promised_on,laboratory:order.laboratory,frame_description:order.frame_description,lens_description:order.lens_description,notes:order.notes});setReason('');setConfirmed(false);setDirty(false)}
   async function open(id:number){if(locked||dirty&&!window.confirm('Descartar as alterações não salvas?'))return;setBusy(true);setError('');setNotice('');try{hydrate(await getServiceOrder(store.id,id))}catch(e){setError(failure(e))}finally{setBusy(false)}}
-  async function send(attempt:ServiceOrderAttempt){if(busy||!caps?.[attempt.payload.action]){setError('Você não tem permissão para esta ação.');return}setPending(attempt);try{sessionStorage.setItem(storageKey,JSON.stringify(attempt))}catch{/* O envio permanece na memória desta tela. */}setBusy(true);setError('');setNotice('');try{const saved=await submitServiceOrder(store.id,attempt);try{sessionStorage.removeItem(storageKey)}catch{/* Sem armazenamento disponível. */}setPending(null);hydrate(saved);if(awaitingNotice)setPage(1);setReload(v=>v+1);setNotice(attempt.payload.action==='notify_pickup'?'Aviso de retirada registrado.':'OS registrada. Histórico atualizado.')}catch(e){setError(failure(e));if(e instanceof ApiError&&e.status>=400&&e.status<500){try{sessionStorage.removeItem(storageKey)}catch{/* Sem armazenamento disponível. */}setPending(null)}}finally{setBusy(false)}}
+  async function send(attempt:ServiceOrderAttempt){if(busy||!caps?.[attempt.payload.action]){setError('Você não tem permissão para esta ação.');return}setPending(attempt);try{sessionStorage.setItem(storageKey,JSON.stringify(attempt))}catch{/* O envio permanece na memória desta tela. */}setBusy(true);setError('');setNotice('');try{const saved=await submitServiceOrder(store.id,attempt);try{sessionStorage.removeItem(storageKey)}catch{/* Sem armazenamento disponível. */}setPending(null);hydrate(saved);if(pickupFilter)setPage(1);setReload(v=>v+1);setNotice(attempt.payload.action==='notify_pickup'?'Aviso de retirada registrado.':attempt.payload.action==='remind_pickup'?'Lembrete de retirada registrado.':'OS registrada. Histórico atualizado.')}catch(e){setError(failure(e));if(e instanceof ApiError&&e.status>=400&&e.status<500){try{sessionStorage.removeItem(storageKey)}catch{/* Sem armazenamento disponível. */}setPending(null)}}finally{setBusy(false)}}
   function operation(action:ServiceOrderAttempt['payload']['action']){if(locked||!selected)return;if(dirty&&action!=='update'){setError('Salve as alterações dos campos antes de mudar a etapa.');return}void send({id:selected.id,payload:{request_id:crypto.randomUUID(),action,expected_version:selected.version,reason,confirmed,target_status:target,...(action==='update'?form:{})}})}
-  function recordPickupNotice(){
-    if(locked||!selected||!selected.actions.notify_pickup)return
+  function recordPickupContact(action:'notify_pickup'|'remind_pickup'){
+    if(locked||!selected||!selected.actions[action])return
     if(dirty||reason||confirmed){setError('Conclua ou descarte as alterações da OS antes de registrar o contato.');return}
-    void send({id:selected.id,payload:{request_id:crypto.randomUUID(),action:'notify_pickup',expected_version:selected.version,confirmed:true}})
+    void send({id:selected.id,payload:{request_id:crypto.randomUUID(),action,expected_version:selected.version,confirmed:true}})
   }
   function save(e:FormEvent){e.preventDefault();if(locked)return;if(creating){void send({id:null,payload:{request_id:crypto.randomUUID(),action:'create',sale_id:Number(saleId),...form}})}else operation('update')}
   function closeEditor(){setSelected(null);setCreating(false);setCancelReview(false);setForm(blank());setSaleId('');setReason('');setConfirmed(false);setDirty(false);setError('');setNotice('')}
   function newOrder(){if(locked||dirty&&!window.confirm('Descartar as alterações não salvas?'))return;setSelected(null);setCreating(true);setSaleId('');setSalesPage(1);setConfirmed(false);setTarget('laboratory');setForm(blank());setReason('');setDirty(false);setError('');setNotice('')}
-  function filterOrders(nextStatus:string, onlyOverdue:boolean, onlyAwaitingNotice=false){
-    setStatus(nextStatus);setOverdue(onlyOverdue);setAwaitingNotice(onlyAwaitingNotice);setPage(1)
+  function filterOrders(nextStatus:string, onlyOverdue:boolean, nextPickupFilter?:ServiceOrderPickupFilter){
+    setStatus(nextStatus);setOverdue(onlyOverdue);setPickupFilter(nextPickupFilter);setPage(1)
   }
   const editable=creating?!!caps?.create:!!caps?.update&&!!selected?.actions.update
   if(!caps?.view)return <section className="erp-card"><h1>Ordens de serviço</h1><p>{rights.loading?'Conferindo acessos…':rights.error||'Solicite permissão para consultar ordens de serviço.'}</p></section>
@@ -84,8 +85,8 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
       <div className="os-board-heading"><h2 id="os-board-title">Painel de pedidos</h2><p>Selecione um cartão para filtrar a fila desta unidade.</p></div>
       <div className="os-board-cards">
         {boardCards.map(card=><button type="button" key={card.key} className={`os-board-card is-${card.key}`}
-          aria-pressed={status===card.status&&overdue===card.overdue&&awaitingNotice===('awaitingNotice' in card)} aria-controls="os-queue" disabled={locked}
-          onClick={()=>filterOrders(card.status,card.overdue,'awaitingNotice' in card)}>
+          aria-pressed={status===card.status&&overdue===card.overdue&&pickupFilter===card.pickupFilter} aria-controls="os-queue" disabled={locked}
+          onClick={()=>filterOrders(card.status,card.overdue,card.pickupFilter)}>
           <span className="os-board-card-title">{card.title}</span>
           <strong>{result.summary?.[card.key]??'—'}</strong>
           <small>{card.description}</small>
@@ -99,7 +100,7 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
         {Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
       </select></label>
       <label className="os-check"><input type="checkbox" checked={overdue} disabled={locked||status==='delivered'||status==='cancelled'}
-        onChange={e=>filterOrders(status,e.target.checked,awaitingNotice)}/>Somente atrasadas</label>
+        onChange={e=>filterOrders(status,e.target.checked,pickupFilter)}/>Somente atrasadas</label>
       <button type="button" disabled={locked} onClick={()=>setReload(v=>v+1)}>Atualizar lista</button>
     </div>
     <div className="erp-card os-list" id="os-queue" aria-busy={loading}>
@@ -115,8 +116,9 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
             <span className={`os-stage is-${o.status}`}>{o.status_label}</span>
             {o.overdue&&<span className="os-stage is-overdue">Atrasada</span>}
             {o.status==='ready'&&o.sale_status==='completed'&&<span className={`os-stage is-${o.pickup_notified?'ready':'awaiting_pickup_notice'}`}>
-              {o.pickup_notified?'Cliente avisado':'Aguardando aviso'}
+              {o.pickup_reminded?'Lembrete registrado':o.pickup_notified?'Cliente avisado':'Aguardando aviso'}
             </span>}
+            {o.pickup_reminder_due&&<span className="os-stage is-pickup_reminder_due">Lembrete pendente</span>}
           </span>
           {o.sale_status==='cancelled'&&<small className="os-late os-row-alert">Venda cancelada: confira e cancele a OS.</small>}
         </button>)}
@@ -131,12 +133,15 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
         {selected&&caps.advance&&selected.actions.advance&&<button type="button" className="erp-action-button" disabled={locked||rights.loading||selected.sale_status!=='completed'} onClick={()=>operation('advance')}>Avançar: {labels[selected.next_status||'']||'—'}</button>}
       </>}>
       {error&&<p className="erp-alert" role="alert">{error}</p>}{notice&&<p className="os-notice" role="status">{notice}</p>}
-      {pending&&<div className="erp-card"><strong>{busy?'Registrando operação…':'Envio pendente de confirmação'}</strong><p>Repita o mesmo envio para recuperar o resultado sem duplicar a OS ou a etapa. Os campos ficam bloqueados até a confirmação.</p><button type="button" disabled={busy||rights.loading||!caps[pending.payload.action]} onClick={()=>void send(pending)}>Conferir / repetir envio</button></div>}
+      {pending&&<div className="erp-card"><strong>{busy?'Registrando operação…':'Envio pendente de confirmação'}</strong><p>Repita o mesmo envio para recuperar o resultado sem duplicar o registro. Os campos ficam bloqueados até a confirmação.</p><button type="button" disabled={busy||rights.loading||!caps[pending.payload.action]} onClick={()=>void send(pending)}>Conferir / repetir envio</button></div>}
       {!pending && <div className="os-detail">
       {selected&&<><p>Venda #{selected.sale_id} · {selected.customer_name} · versão {selected.version}</p><ol className="os-steps">{Object.entries(labels).filter(([k])=>k!=='cancelled').map(([k,v])=><li key={k} aria-current={selected.status===k?'step':undefined}>{v}</li>)}</ol>{selected.sale_status==='cancelled'&&<p className="error-message">A venda foi cancelada. A OS mantém o histórico; cancele a ordem para encerrar a produção.</p>}</>}
       {selected&&(selected.pickup_notice||selected.status==='ready'&&selected.sale_status==='completed')&&<ServiceOrderPickup
         key={selected.id} phone={selected.pickup_whatsapp} storeName={store.name} notice={selected.pickup_notice}
-        onRecord={caps.notify_pickup&&selected.actions.notify_pickup?recordPickupNotice:undefined}
+        reminder={selected.pickup_reminder} reminderDue={selected.pickup_reminder_due}
+        reminderAvailableAt={selected.pickup_reminder_available_at}
+        onRecord={caps.notify_pickup&&selected.actions.notify_pickup?()=>recordPickupContact('notify_pickup'):undefined}
+        onRecordReminder={caps.remind_pickup&&selected.actions.remind_pickup?()=>recordPickupContact('remind_pickup'):undefined}
         disabled={locked||rights.loading} />}
       <form id="lentis-order-form" onSubmit={save}><fieldset disabled={locked||!editable}><legend>Dados de produção</legend>
       {creating&&<><label>Venda finalizada com cliente<select aria-label="Venda finalizada com cliente" required value={saleId} onChange={e=>{setSaleId(e.target.value);setDirty(true)}}><option value="">Selecione a venda</option>{initialSaleId&&!sales.some(s=>s.id===initialSaleId)&&<option value={initialSaleId}>Venda #{initialSaleId}</option>}{sales.map(s=><option key={s.id} value={s.id}>#{s.id} · {s.customer_name}</option>)}</select></label><div className="os-pagination"><button type="button" disabled={salesPage===1} onClick={()=>setSalesPage(v=>v-1)}>Vendas anteriores</button><button type="button" disabled={!salesNext} onClick={()=>setSalesPage(v=>v+1)}>Mais vendas</button></div><p className="os-hint">Uma OS por venda. A cópia da receita será preservada, quando houver vínculo na venda.</p></>}

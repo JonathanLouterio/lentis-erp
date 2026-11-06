@@ -14,7 +14,10 @@ from .work_order_models import ServiceOrder
 from .work_order_permissions import OrderActionPermission, order_capabilities, available_order_actions
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
-from .work_order_services import NEXT, PICKUP_CYCLE_ACTIONS, operate_order, pickup_cycle_events
+from .work_order_services import (
+    NEXT, PICKUP_CONTACT_ACTIONS, PICKUP_CYCLE_ACTIONS, PICKUP_REMINDER_DELAY,
+    operate_order, pickup_cycle_events,
+)
 from .prescription_services import can_view_prescriptions, prescription_output
 
 
@@ -41,7 +44,7 @@ def pickup_phone(order):
 
 class OrderWriteSerializer(serializers.Serializer):
     request_id = serializers.UUIDField()
-    action = serializers.ChoiceField(choices=['create','update','advance','rework','cancel','notify_pickup'])
+    action = serializers.ChoiceField(choices=['create','update','advance','rework','cancel','notify_pickup','remind_pickup'])
     sale_id = serializers.IntegerField(min_value=1, required=False)
     expected_version = serializers.IntegerField(min_value=1, required=False)
     promised_on = serializers.DateField(required=False)
@@ -61,28 +64,51 @@ class OrderWriteSerializer(serializers.Serializer):
         return data
 
 
-def output(order, user, detail=False, *, today=None):
-    events = list(order.events.select_related('created_by')) if detail else []
-    notice = next((event for event in events if event.action in PICKUP_CYCLE_ACTIONS), None)
-    pickup_notified = (
-        notice is not None and notice.action == 'notify_pickup' if detail
-        else order.latest_pickup_action == 'notify_pickup'
-    )
-    actions = available_order_actions(order, user, pickup_notified=pickup_notified)
+def pickup_event_output(event):
+    return {'created_at': event.created_at, 'creator_username': event.created_by.username} if event else None
+
+
+def output(order, user, detail=False, *, today=None, reminder_cutoff=None):
+    ready_for_pickup = order.status == ServiceOrder.Status.READY and order.sale.status == 'completed'
+    if detail:
+        events = list(order.events.select_related('created_by'))
+        notice = reminder = None
+        latest_action = ''
+        latest_at = None
+        for event in events:
+            if event.action not in PICKUP_CYCLE_ACTIONS:
+                continue
+            if not latest_action:
+                latest_action, latest_at = event.action, event.created_at
+            if event.action == 'rework':
+                break
+            if event.action == 'notify_pickup':
+                notice = event
+                break
+            if event.action == 'remind_pickup':
+                reminder = event
+    else:
+        latest_action, latest_at = order.latest_pickup_action, order.latest_pickup_at
+    if reminder_cutoff is None:
+        reminder_cutoff = timezone.now() - PICKUP_REMINDER_DELAY
+    pickup_notified = latest_action in PICKUP_CONTACT_ACTIONS
+    reminder_due = ready_for_pickup and latest_action == 'notify_pickup' and latest_at <= reminder_cutoff
+    actions = available_order_actions(order, user, pickup_notified=pickup_notified, pickup_reminder_due=reminder_due)
     data = {'id':order.pk,'sale_id':order.sale_id,'sale_status':order.sale.status,'customer_name':order.snapshot.get('customer_name',''),
         'status':order.status,'status_label':order.get_status_display(),'version':order.version,
         'promised_on':order.promised_on,'laboratory':order.laboratory,'frame_description':order.frame_description,
         'lens_description':order.lens_description,'notes':order.notes,'created_at':order.created_at,'updated_at':order.updated_at,
         'overdue':order.status not in ('delivered','cancelled') and order.promised_on < (today or timezone.localdate()),
         'has_prescription':bool(order.prescription_record_id),'next_status':NEXT.get(order.status),
-        'actions':actions,'can_change':actions['update'],'pickup_notified':pickup_notified}
+        'actions':actions,'can_change':actions['update'],'pickup_notified':pickup_notified,
+        'pickup_reminder_due':reminder_due,'pickup_reminded':latest_action == 'remind_pickup'}
     if detail:
-        data['pickup_notice'] = (
-            {'created_at': notice.created_at, 'creator_username': notice.created_by.username}
-            if notice is not None and pickup_notified else None
+        data['pickup_notice'] = pickup_event_output(notice)
+        data['pickup_reminder'] = pickup_event_output(reminder)
+        data['pickup_reminder_available_at'] = (
+            notice.created_at + PICKUP_REMINDER_DELAY if ready_for_pickup and notice and not reminder else None
         )
-        if (order.status == ServiceOrder.Status.READY and order.sale.status == 'completed'
-                and user.has_perm('organizations.view_customer')):
+        if ready_for_pickup and user.has_perm('organizations.view_customer'):
             data['pickup_whatsapp'] = pickup_phone(order)
         data['items']=order.snapshot.get('items',[])
         data['prescription']=prescription_output(order.prescription_record) if can_view_prescriptions(user) else None
@@ -105,13 +131,16 @@ class OrdersView(SalesBaseView):
 
     def get(self,request):
         store = self.check_access()
-        latest_pickup_action = pickup_cycle_events(OuterRef('pk')).values('action')[:1]
+        reminder_cutoff = timezone.now() - PICKUP_REMINDER_DELAY
+        pickup_events = pickup_cycle_events(OuterRef('pk'))
         base = self.queryset(store).annotate(
-            latest_pickup_action=Coalesce(Subquery(latest_pickup_action), Value('')),
+            latest_pickup_action=Coalesce(Subquery(pickup_events.values('action')[:1]), Value('')),
+            latest_pickup_at=Subquery(pickup_events.values('created_at')[:1]),
         )
-        awaiting_pickup_notice = (
-            Q(status=ServiceOrder.Status.READY, sale__status='completed')
-            & ~Q(latest_pickup_action='notify_pickup')
+        ready_for_pickup = Q(status=ServiceOrder.Status.READY, sale__status='completed')
+        awaiting_pickup_notice = ready_for_pickup & ~Q(latest_pickup_action__in=PICKUP_CONTACT_ACTIONS)
+        pickup_reminder_due = ready_for_pickup & Q(
+            latest_pickup_action='notify_pickup', latest_pickup_at__lte=reminder_cutoff,
         )
         qs = base
         state = request.query_params.get('status', 'all')
@@ -137,6 +166,8 @@ class OrdersView(SalesBaseView):
             qs = qs.filter(overdue)
         if request.query_params.get('awaiting_pickup_notice') == '1':
             qs = qs.filter(awaiting_pickup_notice)
+        if request.query_params.get('pickup_reminder_due') == '1':
+            qs = qs.filter(pickup_reminder_due)
         sort = request.query_params.get('sort', 'newest')
         if sort == 'deadline':
             qs = qs.order_by('promised_on', '-pk')
@@ -145,7 +176,7 @@ class OrdersView(SalesBaseView):
 
         pagination = SalesPagination()
         page = pagination.paginate_queryset(qs, request, view=self)
-        response = pagination.get_paginated_response([output(o, request.user, today=today) for o in page])
+        response = pagination.get_paginated_response([output(o, request.user, today=today, reminder_cutoff=reminder_cutoff) for o in page])
         response.data['can_create'] = request.user.has_perm('sales.add_serviceorder')
         if request.query_params.get('summary') == '1':
             response.data['summary'] = base.aggregate(
@@ -155,6 +186,7 @@ class OrdersView(SalesBaseView):
                 ready=Count('pk', filter=Q(status=ServiceOrder.Status.READY)),
                 delivered=Count('pk', filter=Q(status=ServiceOrder.Status.DELIVERED)),
                 awaiting_pickup_notice=Count('pk', filter=awaiting_pickup_notice),
+                pickup_reminder_due=Count('pk', filter=pickup_reminder_due),
             )
         response['Cache-Control']='no-store, private'
         return response

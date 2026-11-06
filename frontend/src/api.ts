@@ -646,16 +646,20 @@ export type ServiceOrder = {
   items?:{product_id:number;code:string;name:string;quantity:string}[]
   prescription?:SalePrescriptionRecord|null; can_view_prescription?:boolean
   pickup_whatsapp?:string|null
-  pickup_notified:boolean; pickup_notice?:{created_at:string;creator_username:string}|null
+  pickup_notified:boolean; pickup_notice?:PickupContactEvent|null
+  pickup_reminder_due:boolean; pickup_reminded:boolean; pickup_reminder?:PickupContactEvent|null
+  pickup_reminder_available_at?:string|null
   events?:{version:number;action:string;from_status:string;to_status:string;reason:string;snapshot:Record<string,string>;creator_username:string;created_at:string}[]
 }
-export type ServiceOrderSummary = Record<'active' | 'laboratory' | 'overdue' | 'ready' | 'delivered' | 'awaiting_pickup_notice', number>
+export type PickupContactEvent = {created_at:string;creator_username:string}
+export type ServiceOrderPickupFilter = 'awaiting_pickup_notice'|'pickup_reminder_due'
+export type ServiceOrderSummary = Record<'active' | 'laboratory' | 'overdue' | 'ready' | 'delivered' | ServiceOrderPickupFilter, number>
 export type ServiceOrderPage = CashPage<ServiceOrder> & {can_create:boolean;summary?:ServiceOrderSummary}
-export type ServiceOrderAttempt = {id:number|null; payload:{request_id:string;action:'create'|'update'|'advance'|'rework'|'cancel'|'notify_pickup';sale_id?:number;expected_version?:number;promised_on?:string;laboratory?:string;frame_description?:string;lens_description?:string;notes?:string;reason?:string;confirmed?:boolean;target_status?:'laboratory'|'mounting'}}
-export function getServiceOrders(storeId:number,page=1,status='active',overdue=false,saleId?:number,board=false,awaitingPickupNotice=false):Promise<ServiceOrderPage>{
+export type ServiceOrderAttempt = {id:number|null; payload:{request_id:string;action:'create'|'update'|'advance'|'rework'|'cancel'|'notify_pickup'|'remind_pickup';sale_id?:number;expected_version?:number;promised_on?:string;laboratory?:string;frame_description?:string;lens_description?:string;notes?:string;reason?:string;confirmed?:boolean;target_status?:'laboratory'|'mounting'}}
+export function getServiceOrders(storeId:number,page=1,status='active',overdue=false,saleId?:number,board=false,pickupFilter?:ServiceOrderPickupFilter):Promise<ServiceOrderPage>{
   const query=new URLSearchParams({store_id:String(storeId),page:String(page),status})
   if(overdue)query.set('overdue','1')
-  if(awaitingPickupNotice)query.set('awaiting_pickup_notice','1')
+  if(pickupFilter)query.set(pickupFilter,'1')
   if(saleId)query.set('sale_id',String(saleId))
   if(board){
     query.set('summary','1')
@@ -840,7 +844,7 @@ export type QuoteProductChoice = Pick<Product,'id'|'internal_code'|'name'|'sale_
 export function getQuoteAccess(storeId:number):Promise<QuoteAccess>{return request(`/api/me/quotes/access/?store_id=${storeId}`)}
 export function getQuoteOptions(storeId:number):Promise<{customers:QuoteCustomerChoice[];products:QuoteProductChoice[]}>{return request(`/api/me/quotes/options/?store_id=${storeId}`)}
 
-export type OrderActions = {view:boolean;create:boolean;update:boolean;advance:boolean;rework:boolean;cancel:boolean;notify_pickup:boolean}
+export type OrderActions = {view:boolean;create:boolean;update:boolean;advance:boolean;rework:boolean;cancel:boolean;notify_pickup:boolean;remind_pickup:boolean}
 export type OrderAccess = {store_id:number;actions:OrderActions}
 export function getOrderAccess(storeId:number):Promise<OrderAccess>{return request(`/api/me/service-orders/access/?store_id=${storeId}`)}
 export function getOrderSales(storeId:number,page:number):Promise<{results:{id:number;customer_name:string}[];next:string|null}>{return request(`/api/me/service-orders/sales/?store_id=${storeId}&page=${page}`)}
