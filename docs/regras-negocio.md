@@ -485,3 +485,11 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 ### Leitura de códigos na venda
 
 - Em **Nova venda → Produtos**, o ícone de código de barras à direita do seletor abre a câmera. A leitura seleciona o produto ativo cujo código de barras cadastrado coincide exatamente com o código ou QR Code lido na unidade da venda. O item só entra na venda ao clicar em **Adicionar**. A busca manual continua disponível quando não há correspondência ou acesso à câmera.
+
+## Transferências de estoque entre unidades
+
+- Em **Operação → Transferências de estoque**, a unidade selecionada define a origem de um envio ou a unidade que confirma o recebimento. O histórico está disponível nas duas pontas para quem tem permissão de consulta e vínculo ativo.
+- Para enviar, é preciso ter acesso às duas unidades ativas da mesma empresa. Selecione até 30 produtos ativos cadastrados em ambas. O Lentis associa pelo mesmo código de barras; se os dois cadastros não tiverem código de barras, usa o código interno igual. Confira os nomes e códigos mostrados antes de enviar. Não cria produto nem altera preço.
+- Ao registrar o envio, a origem baixa o saldo e a transferência fica **Em trânsito**. Transferências bloqueiam saldo negativo mesmo quando a origem permite saldo negativo em outras operações.
+- A unidade de destino só registra a entrada ao confirmar que recebeu todos os itens. Em caso de retorno, apenas a origem pode confirmar a devolução física de todos os itens com motivo e repor seu saldo. Recebimento e devolução são mutuamente exclusivos; esta etapa não admite recebimento parcial.
+- Cada ação registra usuário e data. As saídas e entradas aparecem no histórico de estoque com o número da transferência. Não há movimento financeiro. Conceda as permissões de consultar, cadastrar, confirmar recebimento e/ou confirmar devolução em **Usuários e acessos**, conforme a função da equipe.

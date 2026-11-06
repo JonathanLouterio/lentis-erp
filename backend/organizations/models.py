@@ -401,3 +401,5 @@ from .supplier_models import Supplier, SupplierEvent, SupplierOperation  # noqa:
 from .configuration_models import ConfigurationEvent  # noqa: E402,F401
 
 from .product_photo_models import ProductPhoto, ProductPhotoAsset  # noqa: E402,F401
+
+from .stock_transfer_models import StockTransfer, StockTransferItem  # noqa: E402,F401
