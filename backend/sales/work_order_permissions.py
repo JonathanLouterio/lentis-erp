@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 from organizations.access_permissions import fresh_actor
 
-CODES={'view':'view','create':'add','update':'change','advance':'advance','rework':'rework','cancel':'cancel'}
+CODES={'view':'view','create':'add','update':'change','advance':'advance','rework':'rework','cancel':'cancel','notify_pickup':'notify_pickup'}
 
 def order_capabilities(user):
     active=bool(user and user.is_active)
@@ -14,7 +14,7 @@ def require_order_action(user,action):
     if not order_capabilities(user).get(action,False):
         raise PermissionDenied('Você não tem permissão para esta ação de ordem de serviço.')
 
-def available_order_actions(order,user):
+def available_order_actions(order,user, *, pickup_notified=False):
     caps=order_capabilities(user)
     active=order.status not in ('delivered','cancelled')
     completed=order.sale.status=='completed'
@@ -22,6 +22,7 @@ def available_order_actions(order,user):
     caps['advance'] &= active and completed
     caps['rework'] &= completed and order.status in ('checking','ready')
     caps['cancel'] &= active
+    caps['notify_pickup'] &= completed and order.status == 'ready' and not pickup_notified
     return caps
 
 class OrderActionPermission(BasePermission):

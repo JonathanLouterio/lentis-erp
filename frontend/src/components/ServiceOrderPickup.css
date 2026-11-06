@@ -25,3 +25,6 @@
 .os-pickup-action a:hover { background: #104b38; }
 .os-pickup-action a:focus-visible { outline: 2px solid #9c87f5; outline-offset: 3px; }
 .os-pickup-action small { color: var(--erp-muted, #667085); }
+.os-pickup-action { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.os-pickup-action small { flex-basis: 100%; }
+.os-pickup p + p { margin-top: 6px; }

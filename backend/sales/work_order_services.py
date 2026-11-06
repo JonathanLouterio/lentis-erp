@@ -14,6 +14,14 @@ def order_fields(order):
     return {key: str(getattr(order,key)) for key in FIELDS}
 
 
+# Um retrabalho encerra o ciclo de retirada, mas conserva os avisos no histórico.
+PICKUP_CYCLE_ACTIONS = ('notify_pickup', 'rework')
+
+
+def pickup_cycle_events(order_id):
+    return ServiceOrderEvent.objects.filter(order_id=order_id, action__in=PICKUP_CYCLE_ACTIONS)
+
+
 def operate_order(*, user, store, sale_id, order_id, values, digest):
     if not user or not user.is_authenticated:
         raise PermissionDenied('A autenticação é obrigatória.')
@@ -74,6 +82,12 @@ def operate_order(*, user, store, sale_id, order_id, values, digest):
                 if order.status not in ('checking','ready') or values.get('target_status') not in ('laboratory','mounting') or not reason:
                     raise ValidationError('O retrabalho deve partir da conferência ou da entrega, com destino e motivo.')
                 order.status = values['target_status']
+            elif action == 'notify_pickup':
+                if order.status != ServiceOrder.Status.READY or values.get('confirmed') is not True:
+                    raise ValidationError('Confirme o contato com o cliente de uma OS pronta para retirada.')
+                if pickup_cycle_events(order.pk).values_list('action', flat=True).first() == 'notify_pickup':
+                    raise ValidationError('O cliente já foi avisado neste ciclo de retirada.')
+                reason = ''
             elif action == 'cancel':
                 if not reason:
                     raise ValidationError('Informe o motivo do cancelamento da OS.')

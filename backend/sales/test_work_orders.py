@@ -15,7 +15,7 @@ class ServiceOrderTests(TestCase):
 
     def grant(self, user=None, *codes):
         user = user or self.user
-        codes = codes or ('view_serviceorder','add_serviceorder','change_serviceorder','advance_serviceorder','rework_serviceorder','cancel_serviceorder')
+        codes = codes or ('view_serviceorder','add_serviceorder','change_serviceorder','advance_serviceorder','rework_serviceorder','cancel_serviceorder','notify_pickup_serviceorder')
         user.user_permissions.add(*Permission.objects.filter(content_type__app_label='sales',codename__in=codes))
         for attr in ('_perm_cache','_user_perm_cache','_group_perm_cache'):
             if hasattr(user,attr):delattr(user,attr)
@@ -172,7 +172,7 @@ class ServiceOrderTests(TestCase):
             self.assertEqual(active.data['count'], 3)
             self.assertEqual([row['id'] for row in active.data['results']], [earlier.pk])
             self.assertTrue(active.data['results'][0]['overdue'])
-            expected = {'active': 3, 'laboratory': 1, 'overdue': 2, 'ready': 1, 'delivered': 1}
+            expected = {'active': 3, 'laboratory': 1, 'overdue': 2, 'ready': 1, 'delivered': 1, 'awaiting_pickup_notice': 1}
             self.assertEqual(active.data['summary'], expected)
 
             late = self.client.get(base + '&overdue=1&sort=deadline&page=2')
@@ -265,6 +265,75 @@ class ServiceOrderTests(TestCase):
             cancellation_reason='Desistência',
         )
         self.assertNotIn('pickup_whatsapp', self.client.get(self.endpoint(order)).data)
+
+    def test_pickup_notice_updates_queue_and_history_without_changing_stage(self):
+        order, _ = self.create()
+        self.operate(order, 'notify_pickup', expected=400, confirmed=True)
+        for _ in range(3):
+            self.operate(order)
+        self.operate(order, confirmed=True)
+        self.operate(order, 'notify_pickup', expected=400)
+        queue = self.endpoint() + '&awaiting_pickup_notice=1&summary=1'
+        before = self.client.get(queue).data
+        self.assertEqual([row['id'] for row in before['results']], [order.pk])
+        self.assertTrue(before['results'][0]['actions']['notify_pickup'])
+        self.assertEqual(before['summary']['awaiting_pickup_notice'], 1)
+
+        response, payload = self.operate(order, 'notify_pickup', confirmed=True)
+        self.assertEqual(response.data['status'], 'ready')
+        self.assertEqual(response.data['sale_status'], 'completed')
+        self.assertEqual(response.data['version'], payload['expected_version'] + 1)
+        self.assertTrue(response.data['pickup_notified'])
+        self.assertFalse(response.data['actions']['notify_pickup'])
+        notice = response.data['pickup_notice']
+        self.assertEqual(notice['creator_username'], self.user.username)
+        self.assertEqual(notice['created_at'], response.data['events'][0]['created_at'])
+        self.assertEqual(response.data['events'][0]['action'], 'notify_pickup')
+        self.assertEqual(response.data['events'][0]['from_status'], 'ready')
+        self.assertNotIn('pickup_whatsapp', response.data)
+        self.assertEqual(self.client.post(self.endpoint(order), payload, format='json').status_code, 200)
+        self.operate(order, 'notify_pickup', expected=400, confirmed=True)
+        self.assertEqual(order.events.filter(action='notify_pickup').count(), 1)
+
+        after = self.client.get(queue).data
+        self.assertEqual(after['results'], [])
+        self.assertEqual(after['summary']['awaiting_pickup_notice'], 0)
+        self.assertEqual(after['summary']['ready'], before['summary']['ready'])
+        delivered, _ = self.operate(order, confirmed=True, reason='Recebido na loja')
+        self.assertEqual(delivered.data['pickup_notice'], notice)
+        self.assertFalse(delivered.data['actions']['notify_pickup'])
+
+    def test_rework_reopens_pickup_queue_after_new_conference(self):
+        order, _ = self.create()
+        for _ in range(3):
+            self.operate(order)
+        self.operate(order, confirmed=True)
+        self.operate(order, 'notify_pickup', confirmed=True)
+        queue = self.endpoint() + '&awaiting_pickup_notice=1'
+        rework, _ = self.operate(order, 'rework', target_status='mounting', reason='Ajustar lentes')
+        self.assertIsNone(rework.data['pickup_notice'])
+        self.assertEqual(self.client.get(queue).data['count'], 0)
+        self.operate(order)
+        ready, _ = self.operate(order, confirmed=True)
+        self.assertFalse(ready.data['pickup_notified'])
+        self.assertTrue(ready.data['actions']['notify_pickup'])
+        self.assertEqual(self.client.get(queue).data['count'], 1)
+        self.operate(order, 'notify_pickup', confirmed=True)
+        self.assertEqual(order.events.filter(action='notify_pickup').count(), 2)
+
+    def test_cancelled_sale_does_not_enter_pickup_queue_or_accept_notice(self):
+        order, _ = self.create()
+        for _ in range(3):
+            self.operate(order)
+        self.operate(order, confirmed=True)
+        Sale.objects.filter(pk=order.sale_id).update(
+            status='cancelled', cancelled_at=__import__('django').utils.timezone.now(),
+            cancellation_reason='Desistência',
+        )
+        data = self.client.get(self.endpoint() + '&awaiting_pickup_notice=1&summary=1').data
+        self.assertEqual(data['count'], 0)
+        self.assertEqual(data['summary']['awaiting_pickup_notice'], 0)
+        self.operate(order, 'notify_pickup', expected=400, confirmed=True)
 
     def test_edit_keeps_opening_snapshot_and_records_previous_details(self):
         order,_=self.create();snapshot=order.snapshot.copy()

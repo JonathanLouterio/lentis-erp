@@ -43,3 +43,5 @@
   .os-row { grid-template-columns: minmax(0, 1fr); }
   .os-row-badges { justify-content: flex-start; }
 }
+.os-board-card.is-awaiting_pickup_notice, .os-stage.is-awaiting_pickup_notice { --os-tone: #794600; --os-tint: #fff1d8; }
+[data-theme='dark'] :is(.os-board-card, .os-stage).is-awaiting_pickup_notice { --os-tone: #ffdc9e; --os-tint: #46351c; }
