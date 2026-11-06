@@ -152,3 +152,18 @@
 /* Mantém os controles dentro das colunas, inclusive em telas pequenas. */
 .erp-sales-page :is(input, select, textarea) { box-sizing: border-box; max-width: 100%; min-width: 0; }
 .erp-sales-page label { min-width: 0; }
+
+.erp-checkout-footer-summary { min-width: 0; }
+.erp-checkout-footer-totals { display: none; }
+.erp-checkout-footer-hint { margin: 0; font-size: .8125rem; line-height: 1.3; color: var(--erp-text); overflow-wrap: anywhere; }
+.erp-checkout-footer-hint:empty { display: none; }
+@media (max-width: 1050px), (pointer: coarse) {
+  .erp-layout.erp-layout .erp-window-wide .erp-window-footer:has(.erp-checkout-footer-summary) { gap: 8px 14px; flex-wrap: wrap; }
+  .erp-checkout-footer-summary { flex: 1 1 260px; display: grid; gap: 5px; }
+  .erp-checkout-footer-totals { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0; }
+  .erp-checkout-footer-totals > div { min-width: 0; }
+  .erp-checkout-footer-totals dt { color: var(--erp-muted); font-size: .75rem; }
+  .erp-checkout-footer-totals dd { color: var(--erp-text); font-weight: 700; margin: 0; overflow-wrap: anywhere; }
+  .erp-checkout-footer-totals .is-unbalanced dd { color: #9a3629; }
+  [data-theme='dark'] .erp-checkout-footer-totals .is-unbalanced dd { color: #ffb4a8; }
+}

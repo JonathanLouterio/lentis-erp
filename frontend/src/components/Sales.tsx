@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import ProductPicker from './ProductPicker'
 import ProductThumbnail from './ProductThumbnail'
 import { ApiError, cancelSale, requestDiscountAuthorization, decideDiscountAuthorization, getSaleAccess, getSaleOptions, finalizeSale, getPaymentPreview, getSale, getSales, submitCheckout } from '../api'
@@ -22,6 +22,7 @@ const immediate = ['cash', 'pix', 'transfer']
 const credit = ['credit', 'store_credit', 'boleto']
 
 export default function Sales({ startNew = false, initialSaleId, store, userId, onSavingChange, onDirtyChange, onServiceOrder }: Props) {
+  const completionHintId = useId()
   const storageKey = `lentis.checkout.${userId}.${store.id}`
   const [sales, setSales] = useState<SalesPage>(emptyPage)
   const [page, setPage] = useState(1)
@@ -174,8 +175,36 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
   const closedCashPayments = payments.filter(payment => payment.confirmed && options.methods.find(method => String(method.id) === payment.methodId)?.kind === 'cash' && options.accounts.some(account => String(account.id) === payment.accountId && account.cash_control_enabled && !account.cash_is_open))
   const financingValid = rateValid && (!rate || hasFinanced)
   const entryValid = received >= entryMinimum
-  const canComplete = financingValid && entryValid && !!access?.finalize && mayWrite && !builder && !closedCashPayments.length && discountAllowed && itemValid && lines.length > 0 && paymentsValid && allocated === total && (!needsCustomer || !!customerId) && !catalogLoading && !catalogError && (options.allow_negative_stock || predictedNegativeStock.length === 0)
+  const allocationGap = total - allocated
+  const amountsValid = paymentAmounts.every(amount => amount !== null)
+  const checkoutTotalValid = itemValid && financingValid && (!rate || amountsValid)
+  const allocationValuesValid = checkoutTotalValid && amountsValid
+  const completionIssue = (() => {
+    if (!access?.finalize || !mayWrite) return 'Seu acesso não permite concluir esta venda.'
+    if (catalogLoading) return 'Carregando produtos e formas de pagamento…'
+    if (catalogError) return 'Recarregue os cadastros antes de concluir.'
+    if (!lines.length) return 'Adicione pelo menos um produto.'
+    if (!itemValid) return 'Revise as quantidades, os preços e os descontos.'
+    if (!options.allow_negative_stock && predictedNegativeStock.length) return 'Estoque insuficiente. Revise a quantidade dos itens.'
+    if (!discountAllowed) return 'O desconto precisa de autorização para concluir.'
+    if (builder) return 'Aplique ou feche o plano de pagamento.'
+    if (!financingValid) return 'Revise o acréscimo. Ele só se aplica ao saldo em boleto ou crediário.'
+    if (needsCustomer && !customerId) return 'Selecione um cliente para boleto ou crediário.'
+    if ((!options.methods.length || !options.accounts.length) && (total > 0n || payments.length)) return 'Configure as formas e contas de pagamento da unidade.'
+    if (!paymentsValid) return 'Revise a forma, a conta e as condições de pagamento.'
+    if (allocationGap > 0n) return `Faltam ${brl(allocationGap)} nas formas de pagamento.`
+    if (allocationGap < 0n) return `Reduza ${brl(-allocationGap)} nas formas de pagamento.`
+    if (!entryValid) return `Faltam ${brl(entryMinimum - received)} de entrada confirmada.`
+    if (closedCashPayments.length) return 'Abra o caixa selecionado para receber em dinheiro.'
+    return ''
+  })()
+  const canComplete = completionIssue === ''
   const canDraft = financingValid && mayWrite && !builder && itemValid && (paymentsValid || payments.length === 0) && !catalogLoading && !catalogError
+  const footerHint = busy ? 'Aguarde a conclusão da operação…'
+    : pending ? 'Confira o último envio antes de tentar novamente.'
+    : accessLoading ? 'Conferindo permissões…'
+    : accessError ? 'Não foi possível conferir suas permissões.'
+    : completionIssue
   const chosenCustomer = customers.find((customer) => String(customer.id) === customerId)
 
   function closeEditor() {
@@ -302,7 +331,31 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
       {loading ? <p role="status">Carregando vendas…</p> : !sales.results.length ? <p>Nenhuma venda encontrada.</p> : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Venda</th><th>Data</th><th>Cliente</th><th>Situação</th><th>Total</th><th>Ação</th></tr></thead><tbody>{sales.results.map((sale) => <tr key={sale.id}><td>#{sale.id}</td><td>{dateTime.format(new Date(sale.created_at))}</td><td>{sale.customer_name || 'Venda balcão'}</td><td><span className={`erp-sale-badge is-${sale.status}`}>{sale.status_label}</span>{sale.discount_requests?.some(request => request.state === "pending" && request.current) && <small className="erp-sales-item-name">Desconto aguardando autorização</small>}</td><td>{money.format(Number(sale.total))}</td><td><button className="erp-table-button" disabled={blocked} onClick={() => void openSale(sale.id)}>Abrir venda {sale.id}</button></td></tr>)}</tbody></table></div>}
       <div className="erp-sales-pagination"><button className="erp-secondary-button" disabled={blocked || loading || !sales.previous} onClick={() => setPage((value) => value - 1)}>Anterior</button><span>Página {page}</span><button className="erp-secondary-button" disabled={blocked || loading || !sales.next} onClick={() => setPage((value) => value + 1)}>Próxima</button></div>
     </div>}
-    {editor && <FormDialog wide notice={error || success || catalogError} sectionLabel="COMERCIAL · VENDAS" title={selected ? `Venda #${selected.id} · ${selected.status_label}` : 'Nova venda'} subtitle={store.name} busy={busy || !!pending} dirty={dirty || builder || !!reason || !!approvalReason || Object.values(decisionReasons).some(Boolean)} onClose={closeEditor} actions={<>{!readOnly && <><button className="erp-secondary-button" disabled={blocked || !canDraft} onClick={() => void persist(buildPayload('draft'), true)}>Salvar rascunho</button><button className="erp-action-button" disabled={blocked || !canComplete} onClick={() => void reviewPayments()}>Concluir venda</button></>}{selected?.status === 'draft' && !mayWrite && access.finalize && selected.can_finalize && <button className="erp-action-button" disabled={blocked} onClick={() => void finalizeSaved()}>Confirmar venda salva</button>}</>}>
+    {editor && <FormDialog wide notice={error || success || catalogError} sectionLabel="COMERCIAL · VENDAS"
+      title={selected ? `Venda #${selected.id} · ${selected.status_label}` : 'Nova venda'} subtitle={store.name}
+      busy={busy || !!pending} dirty={dirty || builder || !!reason || !!approvalReason || Object.values(decisionReasons).some(Boolean)}
+      onClose={closeEditor}
+      footerSummary={!readOnly ? <div className="erp-checkout-footer-summary">
+        {!pending && <dl className="erp-checkout-footer-totals" aria-label="Resumo da venda">
+          <div><dt>Total da venda</dt><dd>{checkoutTotalValid ? brl(grandTotal) : '—'}</dd></div>
+          <div className={allocationValuesValid && allocationGap !== 0n ? 'is-unbalanced' : ''}>
+            <dt>{allocationValuesValid && allocationGap < 0n ? 'Valor excedente' : 'Falta distribuir'}</dt>
+            <dd>{allocationValuesValid ? brl(allocationGap < 0n ? -allocationGap : allocationGap) : '—'}</dd>
+          </div>
+        </dl>}
+        <p id={completionHintId} className="erp-checkout-footer-hint" role="status">
+          {footerHint || (dirty ? 'Alterações ainda não salvas.' : '')}
+        </p>
+      </div> : undefined}
+      actions={<>
+        {!readOnly && <>
+          <button className="erp-secondary-button" disabled={blocked || !canDraft} onClick={() => void persist(buildPayload('draft'), true)}>Salvar rascunho</button>
+          <button className="erp-action-button" disabled={blocked || !canComplete} aria-describedby={footerHint ? completionHintId : undefined}
+            onClick={() => void reviewPayments()}>Concluir venda</button>
+        </>}
+        {selected?.status === 'draft' && !mayWrite && access.finalize && selected.can_finalize &&
+          <button className="erp-action-button" disabled={blocked} onClick={() => void finalizeSaved()}>Confirmar venda salva</button>}
+      </>}>
     {success && <p className="erp-sales-success" role="status">{success}</p>}
     {error && <p className="erp-alert" role="alert">{error}</p>}
     {pending && <div className="erp-card erp-checkout-recovery" role="alert"><h2>Conferir o último envio</h2><p>A resposta da operação não foi confirmada. Repita o mesmo envio para recuperar o resultado com segurança.</p><button className="erp-action-button" disabled={busy} onClick={() => void persist(pending, pending.action === 'draft')}>{busy ? 'Conferindo…' : 'Repetir envio com segurança'}</button></div>}
