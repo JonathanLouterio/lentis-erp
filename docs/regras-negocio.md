@@ -180,6 +180,7 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - A conferência exige confirmação explícita. A entrega exige confirmação e identificação de quem recebeu no campo de observação.
 - Retrabalho parte da conferência ou da etapa pronta para entrega, retorna ao laboratório ou montagem e exige motivo.
 - Previsão de entrega obrigatória; OS em andamento com previsão anterior à data local do sistema aparece atrasada.
+- Em **Ordens de serviço**, o **Painel de pedidos** mostra os totais da unidade para OS em andamento, no laboratório, atrasadas, prontas para retirada e entregues. Cada cartão filtra a fila, sem alterar as etapas. As contagens abrangem todas as páginas e uma OS pronta que já passou da previsão pode aparecer em ambos os totais. A fila de trabalho mostra primeiro as previsões mais próximas.
 - Edição dos dados de produção exige motivo. Cada alteração preserva os dados da versão, responsável e data no histórico.
 - Versão esperada impede gravação de tela desatualizada; UUID de operação impede duplicação por reenvio.
 - A OS não movimenta novamente o estoque, contas a receber ou caixa. Cancelar a OS não cancela a venda.

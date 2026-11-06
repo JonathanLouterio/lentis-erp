@@ -1,4 +1,3 @@
-.erp-layout.erp-layout .os-grid { grid-template-columns: minmax(0,1fr); }
 .erp-layout.erp-layout .os-page .erp-window .os-detail { min-width: 0; }
 .erp-layout.erp-layout .os-page .erp-window-wide { width: min(1440px, calc(100vw - 48px)); }
 .erp-layout.erp-layout .os-page .erp-window .os-detail > form > fieldset { margin-top: 20px; }
