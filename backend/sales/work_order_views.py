@@ -1,6 +1,7 @@
 import hashlib
 import json
 from django.db import IntegrityError
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
@@ -37,12 +38,12 @@ class OrderWriteSerializer(serializers.Serializer):
         return data
 
 
-def output(order, user, detail=False):
+def output(order, user, detail=False, *, today=None):
     data = {'id':order.pk,'sale_id':order.sale_id,'sale_status':order.sale.status,'customer_name':order.snapshot.get('customer_name',''),
         'status':order.status,'status_label':order.get_status_display(),'version':order.version,
         'promised_on':order.promised_on,'laboratory':order.laboratory,'frame_description':order.frame_description,
         'lens_description':order.lens_description,'notes':order.notes,'created_at':order.created_at,'updated_at':order.updated_at,
-        'overdue':order.status not in ('delivered','cancelled') and order.promised_on < timezone.localdate(),
+        'overdue':order.status not in ('delivered','cancelled') and order.promised_on < (today or timezone.localdate()),
         'has_prescription':bool(order.prescription_record_id),'next_status':NEXT.get(order.status),
         'actions':available_order_actions(order,user),
         'can_change':available_order_actions(order,user)['update']}
@@ -67,22 +68,48 @@ class OrdersView(SalesBaseView):
         return ServiceOrder.objects.filter(sale__store=store).select_related('sale','prescription_record__created_by')
 
     def get(self,request):
-        store=self.check_access(); qs=self.queryset(store)
-        state=request.query_params.get('status','all')
-        if state not in ['all','active',*ServiceOrder.Status.values]:
+        store = self.check_access()
+        base = self.queryset(store)
+        qs = base
+        state = request.query_params.get('status', 'all')
+        if state not in ['all', 'active', *ServiceOrder.Status.values]:
             raise ValidationError('Situação de OS inválida.')
-        if state=='active':qs=qs.exclude(status__in=['delivered','cancelled'])
-        elif state!='all':qs=qs.filter(status=state)
-        sale=request.query_params.get('sale_id')
+        active = ~Q(status__in=[ServiceOrder.Status.DELIVERED, ServiceOrder.Status.CANCELLED])
+        today = timezone.localdate()
+        overdue = active & Q(promised_on__lt=today)
+        if state == 'active':
+            qs = qs.filter(active)
+        elif state != 'all':
+            qs = qs.filter(status=state)
+        sale = request.query_params.get('sale_id')
         if sale:
-            try: sale=int(sale)
-            except (ValueError,TypeError):raise ValidationError('Venda inválida.')
-            if sale<1:raise ValidationError('Venda inválida.')
-            qs=qs.filter(sale_id=sale)
-        if request.query_params.get('overdue')=='1':qs=qs.exclude(status__in=['delivered','cancelled']).filter(promised_on__lt=timezone.localdate())
-        pagination=SalesPagination(); page=pagination.paginate_queryset(qs,request,view=self)
-        response=pagination.get_paginated_response([output(o,request.user) for o in page])
-        response.data['can_create']=request.user.has_perm('sales.add_serviceorder')
+            try:
+                sale = int(sale)
+            except (ValueError, TypeError):
+                raise ValidationError('Venda inválida.')
+            if sale < 1:
+                raise ValidationError('Venda inválida.')
+            qs = qs.filter(sale_id=sale)
+        if request.query_params.get('overdue') == '1':
+            qs = qs.filter(overdue)
+        sort = request.query_params.get('sort', 'newest')
+        if sort == 'deadline':
+            qs = qs.order_by('promised_on', '-pk')
+        elif sort != 'newest':
+            raise ValidationError('Ordenação de OS inválida.')
+
+        pagination = SalesPagination()
+        page = pagination.paginate_queryset(qs, request, view=self)
+        response = pagination.get_paginated_response([output(o, request.user, today=today) for o in page])
+        response.data['can_create'] = request.user.has_perm('sales.add_serviceorder')
+        if request.query_params.get('summary') == '1':
+            response.data['summary'] = base.aggregate(
+                active=Count('pk', filter=active),
+                laboratory=Count('pk', filter=Q(status=ServiceOrder.Status.LAB)),
+                overdue=Count('pk', filter=overdue),
+                ready=Count('pk', filter=Q(status=ServiceOrder.Status.READY)),
+                delivered=Count('pk', filter=Q(status=ServiceOrder.Status.DELIVERED)),
+            )
         response['Cache-Control']='no-store, private'
         return response
 

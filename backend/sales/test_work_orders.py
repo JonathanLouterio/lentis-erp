@@ -146,6 +146,47 @@ class ServiceOrderTests(TestCase):
         data={'request_id':str(uuid4()),'action':'create','sale_id':order.sale_id,'promised_on':'invalid'}
         self.assertEqual(self.client.post(self.endpoint(),data,format='json').status_code,400)
 
+    def test_board_totals_cover_all_pages_and_only_selected_store(self):
+        from accounts.models import StoreMembership
+
+        earlier, _ = self.create(promised_on='2026-10-01')
+        ready, _ = self.create(promised_on='2026-10-02')
+        today_order, _ = self.create(promised_on='2026-10-03')
+        delivered, _ = self.create(promised_on='2026-09-30')
+        cancelled, _ = self.create(promised_on='2026-09-29')
+        ServiceOrder.objects.filter(pk=earlier.pk).update(status=ServiceOrder.Status.LAB)
+        ServiceOrder.objects.filter(pk=ready.pk).update(status=ServiceOrder.Status.READY)
+        ServiceOrder.objects.filter(pk=delivered.pk).update(status=ServiceOrder.Status.DELIVERED)
+        ServiceOrder.objects.filter(pk=cancelled.pk).update(status=ServiceOrder.Status.CANCELLED)
+        StoreMembership.objects.create(user=self.user, store=self.other, role=StoreMembership.Role.SELLER)
+        other_sale = Sale.objects.create(store=self.other, created_by=self.user)
+        ServiceOrder(
+            sale=other_sale, created_by=self.user, promised_on=date(2026, 9, 28),
+            status=ServiceOrder.Status.LAB,
+        ).save(_service=True)
+
+        with patch('sales.work_order_views.timezone.localdate', return_value=date(2026, 10, 3)):
+            base = self.endpoint() + '&summary=1&page_size=1'
+            active = self.client.get(base + '&status=active&sort=deadline')
+            self.assertEqual(active.status_code, 200, active.data)
+            self.assertEqual(active.data['count'], 3)
+            self.assertEqual([row['id'] for row in active.data['results']], [earlier.pk])
+            self.assertTrue(active.data['results'][0]['overdue'])
+            expected = {'active': 3, 'laboratory': 1, 'overdue': 2, 'ready': 1, 'delivered': 1}
+            self.assertEqual(active.data['summary'], expected)
+
+            late = self.client.get(base + '&overdue=1&sort=deadline&page=2')
+            self.assertEqual(late.data['count'], 2)
+            self.assertEqual([row['id'] for row in late.data['results']], [ready.pk])
+            self.assertEqual(late.data['summary'], expected)
+
+            on_time = self.client.get(base + '&status=active&sort=deadline&page=3')
+            self.assertEqual(on_time.data['results'][0]['id'], today_order.pk)
+            self.assertFalse(on_time.data['results'][0]['overdue'])
+
+        self.assertNotIn('summary', self.client.get(self.endpoint()).data)
+        self.assertEqual(self.client.get(self.endpoint() + '&sort=invalid').status_code, 400)
+
     def test_post_requires_csrf_with_session_auth(self):
         self.grant();sale=self.sale();client=APIClient(enforce_csrf_checks=True);client.force_login(self.user)
         response=client.post(self.endpoint(),{'request_id':str(uuid4()),'action':'create','sale_id':sale.pk,'promised_on':'2026-11-01'},format='json')

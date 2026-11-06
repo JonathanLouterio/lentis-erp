@@ -2,8 +2,8 @@ import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, getOrderSales, getServiceOrder, getServiceOrders, submitServiceOrder } from '../api'
-import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPage } from '../api'
-import { dateTime, failure, today } from './saleMoney'
+import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPage, ServiceOrderSummary } from '../api'
+import { dateTime, displayDate, failure, today } from './saleMoney'
 import './ServiceOrders.css'
 import FormDialog from './FormDialog'
 import './OperationsWindows.css'
@@ -12,6 +12,13 @@ import { useOrderAccess } from '../hooks/useOrderAccess'
 type Props = {store:AccessibleStore;userId:number;initialSaleId?:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
 const labels:Record<string,string>={open:'Aberta',laboratory:'No laboratório',mounting:'Em montagem',checking:'Em conferência',ready:'Pronta para entrega',delivered:'Entregue',cancelled:'Cancelada'}
 const actions:Record<string,string>={create:'Abertura',update:'Alteração',advance:'Avanço de etapa',rework:'Retrabalho',cancel:'Cancelamento'}
+const boardCards = [
+  {key:'active', title:'Em andamento', description:'Todas as etapas em aberto', status:'active', overdue:false},
+  {key:'laboratory', title:'No laboratório', description:'Aguardando produção externa', status:'laboratory', overdue:false},
+  {key:'overdue', title:'Atrasadas', description:'Previsão de entrega vencida', status:'active', overdue:true},
+  {key:'ready', title:'Prontas para retirada', description:'Aguardando entrega ao cliente', status:'ready', overdue:false},
+  {key:'delivered', title:'Entregues', description:'Histórico da unidade', status:'delivered', overdue:false},
+] satisfies {key:keyof ServiceOrderSummary;title:string;description:string;status:string;overdue:boolean}[]
 const blank=()=>({promised_on:today(),laboratory:'',frame_description:'',lens_description:'',notes:''})
 const empty:ServiceOrderPage={count:0,next:null,previous:null,results:[],can_create:false}
 
@@ -46,7 +53,7 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
   useEffect(()=>{onSavingChange(busy);return()=>onSavingChange(false)},[busy,onSavingChange])
   useEffect(()=>{onDirtyChange(dirty||!!pending||!!reason);return()=>onDirtyChange(false)},[dirty,pending,reason,onDirtyChange])
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty||pending||reason)e.preventDefault()};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[dirty,pending,reason])
-  useEffect(()=>{let ignore=false;setLoading(true);void getServiceOrders(store.id,page,status,overdue).then(v=>{if(!ignore)setResult(v)}).catch(e=>{if(!ignore){setError(failure(e));setResult(empty)}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,page,status,overdue,reload])
+  useEffect(()=>{let ignore=false;setLoading(true);void getServiceOrders(store.id,page,status,overdue,undefined,true).then(v=>{if(!ignore)setResult(v)}).catch(e=>{if(!ignore){setError(failure(e));setResult(empty)}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,page,status,overdue,reload])
   useEffect(()=>{if(!creating||!caps?.create)return;let ignore=false;void getOrderSales(store.id,salesPage).then(v=>{if(!ignore){setSales(v.results);setSalesNext(!!v.next)}}).catch(e=>{if(!ignore)setError(failure(e))});return()=>{ignore=true}},[store.id,creating,salesPage,caps?.create])
   useEffect(()=>{if(!initialSaleId||pending||!caps?.view)return;let ignore=false;setBusy(true);void getServiceOrders(store.id,1,'all',false,initialSaleId).then(async v=>{if(ignore)return;if(v.results[0]){const order=await getServiceOrder(store.id,v.results[0].id);if(!ignore)hydrate(order)}else if(caps?.create){setCreating(true);setSaleId(String(initialSaleId))}}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setBusy(false)});return()=>{ignore=true}},[store.id,initialSaleId,caps?.view,caps?.create])
   function hydrate(order:ServiceOrder){setSelected(order);setCreating(false);setForm({promised_on:order.promised_on,laboratory:order.laboratory,frame_description:order.frame_description,lens_description:order.lens_description,notes:order.notes});setReason('');setConfirmed(false);setDirty(false)}
@@ -56,14 +63,53 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
   function save(e:FormEvent){e.preventDefault();if(locked)return;if(creating){void send({id:null,payload:{request_id:crypto.randomUUID(),action:'create',sale_id:Number(saleId),...form}})}else operation('update')}
   function closeEditor(){setSelected(null);setCreating(false);setCancelReview(false);setForm(blank());setSaleId('');setReason('');setConfirmed(false);setDirty(false);setError('');setNotice('')}
   function newOrder(){if(locked||dirty&&!window.confirm('Descartar as alterações não salvas?'))return;setSelected(null);setCreating(true);setSaleId('');setSalesPage(1);setConfirmed(false);setTarget('laboratory');setForm(blank());setReason('');setDirty(false);setError('');setNotice('')}
+  function filterOrders(nextStatus:string, onlyOverdue:boolean){
+    setStatus(nextStatus);setOverdue(onlyOverdue);setPage(1)
+  }
   const editable=creating?!!caps?.create:!!caps?.update&&!!selected?.actions.update
   if(!caps?.view)return <section className="erp-card"><h1>Ordens de serviço</h1><p>{rights.loading?'Conferindo acessos…':rights.error||'Solicite permissão para consultar ordens de serviço.'}</p></section>
   return <section className="os-page">
-    <header className="os-heading"><div><span className="eyebrow">OPERAÇÃO · {store.name}</span><h1>Ordens de serviço</h1><p>Da preparação à entrega, com cada etapa registrada.</p></div><button type="button" className="primary-button" hidden={!caps.create} disabled={locked} onClick={newOrder}>Nova OS</button></header>
+    <header className="os-heading"><div><span className="eyebrow">OPERAÇÃO · {store.name}</span><h1>Ordens de serviço</h1><p>Acompanhe os pedidos da ótica, da produção à retirada.</p></div><button type="button" className="primary-button" hidden={!caps.create} disabled={locked} onClick={newOrder}>Nova OS</button></header>
     {error&&<p className="error-message" role="alert">{error}</p>}{notice&&<p role="status" className="os-notice">{notice}</p>}
 
-    <div className="os-filters"><label>Situação<select aria-label="Situação da OS" value={status} disabled={locked} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option value="active">Em andamento</option><option value="all">Todas</option>{Object.entries(labels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label className="os-check"><input type="checkbox" checked={overdue} disabled={locked} onChange={e=>{setOverdue(e.target.checked);setPage(1)}}/>Somente atrasadas</label><button type="button" disabled={locked} onClick={()=>setReload(v=>v+1)}>Atualizar lista</button></div>
-    <div className="os-grid"><div className="erp-card os-list" aria-busy={loading}><h2>Fila de atendimento <small>({result.count})</small></h2>{loading?<p role="status">Carregando…</p>:result.results.length===0?<p>Nenhuma OS neste filtro.</p>:result.results.map(o=><button type="button" className={`os-row${selected?.id===o.id?' is-selected':''}`} disabled={locked} key={o.id} onClick={()=>void open(o.id)}><span><strong>OS #{o.id} · {o.customer_name}</strong><small>Venda #{o.sale_id} · Entrega {o.promised_on.split('-').reverse().join('/')}</small></span><span className={o.overdue?'os-late':'os-badge'}>{o.overdue?'Atrasada · ':''}{o.status_label}</span>{o.sale_status==='cancelled'&&<small className="os-late">Venda cancelada: confira e cancele a OS.</small>}</button>)}<div className="os-pagination"><button type="button" disabled={locked||page===1} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={locked||!result.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div></div>
+    <section className="os-board" aria-labelledby="os-board-title" aria-busy={loading}>
+      <div className="os-board-heading"><h2 id="os-board-title">Painel de pedidos</h2><p>Selecione um cartão para filtrar a fila desta unidade.</p></div>
+      <div className="os-board-cards">
+        {boardCards.map(card=><button type="button" key={card.key} className={`os-board-card is-${card.key}`}
+          aria-pressed={status===card.status&&overdue===card.overdue} aria-controls="os-queue" disabled={locked}
+          onClick={()=>filterOrders(card.status,card.overdue)}>
+          <span className="os-board-card-title">{card.title}</span>
+          <strong>{result.summary?.[card.key]??'—'}</strong>
+          <small>{card.description}</small>
+        </button>)}
+      </div>
+    </section>
+    <div className="os-filters">
+      <label>Situação<select aria-label="Situação da OS" value={status} disabled={locked}
+        onChange={e=>filterOrders(e.target.value,overdue&&!['delivered','cancelled'].includes(e.target.value))}>
+        <option value="active">Em andamento</option><option value="all">Todas</option>
+        {Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
+      </select></label>
+      <label className="os-check"><input type="checkbox" checked={overdue} disabled={locked||status==='delivered'||status==='cancelled'}
+        onChange={e=>filterOrders(status,e.target.checked)}/>Somente atrasadas</label>
+      <button type="button" disabled={locked} onClick={()=>setReload(v=>v+1)}>Atualizar lista</button>
+    </div>
+    <div className="erp-card os-list" id="os-queue" aria-busy={loading}>
+      <h2>Fila de atendimento <small>({result.count})</small></h2>
+      {loading?<p role="status">Carregando…</p>:result.results.length===0?<p>Nenhuma OS neste filtro.</p>:result.results.map(o=>
+        <button type="button" className={`os-row${selected?.id===o.id?' is-selected':''}`} disabled={locked} key={o.id} onClick={()=>void open(o.id)}>
+          <span className="os-row-info">
+            <strong>OS #{o.id} · {o.customer_name}</strong>
+            <small>Venda #{o.sale_id} · Previsão {displayDate(o.promised_on)}</small>
+            {o.laboratory&&<small>Laboratório: {o.laboratory}</small>}
+          </span>
+          <span className="os-row-badges">
+            <span className={`os-stage is-${o.status}`}>{o.status_label}</span>
+            {o.overdue&&<span className="os-stage is-overdue">Atrasada</span>}
+          </span>
+          {o.sale_status==='cancelled'&&<small className="os-late os-row-alert">Venda cancelada: confira e cancele a OS.</small>}
+        </button>)}
+      <div className="os-pagination"><button type="button" disabled={locked||loading||page===1} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={locked||loading||!result.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div>
     </div>
     {(creating || selected || pending) && <FormDialog wide
       title={creating?'Abrir ordem de serviço':selected?`OS #${selected.id} · ${selected.status_label}`:'Conferir envio pendente'}

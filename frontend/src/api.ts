@@ -647,12 +647,17 @@ export type ServiceOrder = {
   prescription?:SalePrescriptionRecord|null; can_view_prescription?:boolean
   events?:{version:number;action:string;from_status:string;to_status:string;reason:string;snapshot:Record<string,string>;creator_username:string;created_at:string}[]
 }
-export type ServiceOrderPage = CashPage<ServiceOrder> & {can_create:boolean}
+export type ServiceOrderSummary = Record<'active' | 'laboratory' | 'overdue' | 'ready' | 'delivered', number>
+export type ServiceOrderPage = CashPage<ServiceOrder> & {can_create:boolean;summary?:ServiceOrderSummary}
 export type ServiceOrderAttempt = {id:number|null; payload:{request_id:string;action:'create'|'update'|'advance'|'rework'|'cancel';sale_id?:number;expected_version?:number;promised_on?:string;laboratory?:string;frame_description?:string;lens_description?:string;notes?:string;reason?:string;confirmed?:boolean;target_status?:'laboratory'|'mounting'}}
-export function getServiceOrders(storeId:number,page=1,status='active',overdue=false,saleId?:number):Promise<ServiceOrderPage>{
+export function getServiceOrders(storeId:number,page=1,status='active',overdue=false,saleId?:number,board=false):Promise<ServiceOrderPage>{
   const query=new URLSearchParams({store_id:String(storeId),page:String(page),status})
   if(overdue)query.set('overdue','1')
   if(saleId)query.set('sale_id',String(saleId))
+  if(board){
+    query.set('summary','1')
+    if(overdue || !['all','delivered','cancelled'].includes(status))query.set('sort','deadline')
+  }
   return request(`/api/me/service-orders/?${query}`)
 }
 export function getServiceOrder(storeId:number,id:number):Promise<ServiceOrder>{return request(`/api/me/service-orders/${id}/?store_id=${storeId}`)}
