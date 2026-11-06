@@ -117,3 +117,32 @@ class OrderPermissionTests(TestCase):
         self.assertFalse(result.data['actions']['update'])
         self.assertFalse(result.data['actions']['advance'])
         self.assertEqual(result.data['events'][0]['reason'], '')
+
+
+    def test_reminder_reuses_contact_permission_and_keeps_unit_scope(self):
+        from datetime import timedelta
+        from unittest.mock import patch
+        from django.utils import timezone
+        from accounts.models import StoreMembership
+
+        order, _ = self.create()
+        for _ in range(4):
+            self.assertEqual(self.post_action(order, 'advance', confirmed=True).status_code, 200)
+        with patch.object(timezone, 'now', return_value=timezone.now() - timedelta(days=4)):
+            self.assertEqual(self.post_action(order, 'notify_pickup', confirmed=True).status_code, 200)
+        self.only('view_serviceorder', 'change_serviceorder')
+        detail = self.client.get(self.endpoint(order)).data
+        self.assertTrue(detail['pickup_reminder_due'])
+        self.assertFalse(detail['actions']['remind_pickup'])
+        self.assertEqual(self.post_action(order, 'remind_pickup', confirmed=True).status_code, 403)
+
+        self.only('view_serviceorder', 'notify_pickup_serviceorder')
+        StoreMembership.objects.create(user=self.user, store=self.other, role=StoreMembership.Role.SELLER)
+        other_queue = self.client.get(self.endpoint(store=self.other) + '&pickup_reminder_due=1&summary=1').data
+        self.assertEqual(other_queue['summary']['pickup_reminder_due'], 0)
+        self.assertEqual(other_queue['count'], 0)
+        order.refresh_from_db()
+        payload = {'request_id': str(uuid4()), 'action': 'remind_pickup',
+                   'expected_version': order.version, 'confirmed': True}
+        self.assertEqual(self.client.post(self.endpoint(order, self.other), payload, format='json').status_code, 404)
+        self.assertEqual(self.client.post(self.endpoint(order), payload, format='json').status_code, 200)

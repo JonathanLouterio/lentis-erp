@@ -1,8 +1,10 @@
+from datetime import date, datetime, timedelta, timezone as utc_timezone
 from uuid import uuid4
 from unittest.mock import patch
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 from . import test_payments as fixtures
 from .models import ServiceOrder, ServiceOrderEvent, Sale, FinancialEntry
@@ -172,7 +174,7 @@ class ServiceOrderTests(TestCase):
             self.assertEqual(active.data['count'], 3)
             self.assertEqual([row['id'] for row in active.data['results']], [earlier.pk])
             self.assertTrue(active.data['results'][0]['overdue'])
-            expected = {'active': 3, 'laboratory': 1, 'overdue': 2, 'ready': 1, 'delivered': 1, 'awaiting_pickup_notice': 1}
+            expected = {'active': 3, 'laboratory': 1, 'overdue': 2, 'ready': 1, 'delivered': 1, 'awaiting_pickup_notice': 1, 'pickup_reminder_due': 0}
             self.assertEqual(active.data['summary'], expected)
 
             late = self.client.get(base + '&overdue=1&sort=deadline&page=2')
@@ -303,14 +305,81 @@ class ServiceOrderTests(TestCase):
         self.assertEqual(delivered.data['pickup_notice'], notice)
         self.assertFalse(delivered.data['actions']['notify_pickup'])
 
+    def test_pickup_reminder_becomes_due_after_72_hours_and_records_once(self):
+        order, _ = self.create()
+        for _ in range(4):
+            self.operate(order, confirmed=True)
+        self.operate(order, 'remind_pickup', expected=400, confirmed=True)
+        notified_at = datetime(2026, 11, 2, 17, tzinfo=utc_timezone.utc)
+        due_at = notified_at + timedelta(hours=72)
+        queue = self.endpoint() + '&pickup_reminder_due=1&summary=1'
+        with patch.object(timezone, 'now', return_value=notified_at):
+            initial, _ = self.operate(order, 'notify_pickup', confirmed=True)
+            self.assertEqual(initial.data['pickup_reminder_available_at'], due_at)
+            self.assertFalse(initial.data['actions']['remind_pickup'])
+
+        with patch.object(timezone, 'now', return_value=due_at - timedelta(seconds=1)):
+            self.assertEqual(self.client.get(queue).data['count'], 0)
+            self.operate(order, 'remind_pickup', expected=400, confirmed=True)
+        with patch.object(timezone, 'now', return_value=due_at):
+            listing = self.client.get(queue).data
+            self.assertEqual([row['id'] for row in listing['results']], [order.pk])
+            self.assertTrue(listing['results'][0]['pickup_reminder_due'])
+            self.assertEqual(listing['summary']['pickup_reminder_due'], 1)
+            self.operate(order, 'remind_pickup', expected=400)
+            result, payload = self.operate(order, 'remind_pickup', confirmed=True)
+            self.assertEqual(result.data['status'], 'ready')
+            self.assertEqual(result.data['pickup_notice'], initial.data['pickup_notice'])
+            self.assertEqual(result.data['pickup_reminder'], {
+                'created_at': due_at, 'creator_username': self.user.username,
+            })
+            self.assertTrue(result.data['pickup_notified'])
+            self.assertTrue(result.data['pickup_reminded'])
+            self.assertFalse(result.data['pickup_reminder_due'])
+            self.assertFalse(result.data['actions']['remind_pickup'])
+            self.assertEqual(result.data['events'][0]['action'], 'remind_pickup')
+            self.assertEqual(self.client.post(self.endpoint(order), payload, format='json').status_code, 200)
+            self.operate(order, 'remind_pickup', expected=400, confirmed=True)
+            self.operate(order, 'notify_pickup', expected=400, confirmed=True)
+            self.assertEqual(order.events.filter(action='remind_pickup').count(), 1)
+            after = self.client.get(queue).data
+            self.assertEqual(after['count'], 0)
+            self.assertEqual(after['summary']['awaiting_pickup_notice'], 0)
+            self.assertEqual(after['summary']['ready'], 1)
+            delivered, _ = self.operate(order, confirmed=True, reason='Recebido na loja')
+            self.assertEqual(delivered.data['pickup_reminder'], result.data['pickup_reminder'])
+            self.assertFalse(delivered.data['actions']['remind_pickup'])
+
+    def test_reminder_queue_excludes_completed_pickups_and_cancelled_sales(self):
+        pending, _ = self.create()
+        delivered, _ = self.create()
+        cancelled, _ = self.create()
+        for order in (pending, delivered, cancelled):
+            for _ in range(4):
+                self.operate(order, confirmed=True)
+            with patch.object(timezone, 'now', return_value=timezone.now() - timedelta(days=4)):
+                self.operate(order, 'notify_pickup', confirmed=True)
+        self.operate(delivered, confirmed=True, reason='Cliente retirou')
+        Sale.objects.filter(pk=cancelled.sale_id).update(
+            status='cancelled', cancelled_at=timezone.now(), cancellation_reason='Desistência',
+        )
+        self.operate(cancelled, 'remind_pickup', expected=400, confirmed=True)
+        queue = self.client.get(self.endpoint() + '&pickup_reminder_due=1&summary=1&page_size=1').data
+        self.assertEqual([row['id'] for row in queue['results']], [pending.pk])
+        self.assertEqual(queue['summary']['pickup_reminder_due'], 1)
+        self.assertEqual(queue['count'], 1)
+
     def test_rework_reopens_pickup_queue_after_new_conference(self):
         order, _ = self.create()
         for _ in range(3):
             self.operate(order)
         self.operate(order, confirmed=True)
-        self.operate(order, 'notify_pickup', confirmed=True)
+        with patch.object(timezone, 'now', return_value=timezone.now() - timedelta(days=4)):
+            self.operate(order, 'notify_pickup', confirmed=True)
+        self.operate(order, 'remind_pickup', confirmed=True)
         queue = self.endpoint() + '&awaiting_pickup_notice=1'
         rework, _ = self.operate(order, 'rework', target_status='mounting', reason='Ajustar lentes')
+        self.assertIsNone(rework.data['pickup_reminder'])
         self.assertIsNone(rework.data['pickup_notice'])
         self.assertEqual(self.client.get(queue).data['count'], 0)
         self.operate(order)
@@ -320,6 +389,8 @@ class ServiceOrderTests(TestCase):
         self.assertEqual(self.client.get(queue).data['count'], 1)
         self.operate(order, 'notify_pickup', confirmed=True)
         self.assertEqual(order.events.filter(action='notify_pickup').count(), 2)
+        self.assertEqual(order.events.filter(action='remind_pickup').count(), 1)
+        self.assertEqual(self.client.get(self.endpoint() + '&pickup_reminder_due=1').data['count'], 0)
 
     def test_cancelled_sale_does_not_enter_pickup_queue_or_accept_notice(self):
         order, _ = self.create()
@@ -346,7 +417,6 @@ class ServiceOrderTests(TestCase):
 
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
 from django.test import TransactionTestCase

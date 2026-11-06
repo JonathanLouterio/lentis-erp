@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
 from accounts.selectors import get_accessible_stores
 from .work_order_permissions import require_order_action
 from .models import Sale
@@ -15,11 +18,13 @@ def order_fields(order):
 
 
 # Um retrabalho encerra o ciclo de retirada, mas conserva os avisos no histórico.
-PICKUP_CYCLE_ACTIONS = ('notify_pickup', 'rework')
+PICKUP_CONTACT_ACTIONS = ('notify_pickup', 'remind_pickup')
+PICKUP_CYCLE_ACTIONS = (*PICKUP_CONTACT_ACTIONS, 'rework')
+PICKUP_REMINDER_DELAY = timedelta(days=3)
 
 
 def pickup_cycle_events(order_id):
-    return ServiceOrderEvent.objects.filter(order_id=order_id, action__in=PICKUP_CYCLE_ACTIONS)
+    return ServiceOrderEvent.objects.filter(order_id=order_id, action__in=PICKUP_CYCLE_ACTIONS).order_by('-version')
 
 
 def operate_order(*, user, store, sale_id, order_id, values, digest):
@@ -82,11 +87,16 @@ def operate_order(*, user, store, sale_id, order_id, values, digest):
                 if order.status not in ('checking','ready') or values.get('target_status') not in ('laboratory','mounting') or not reason:
                     raise ValidationError('O retrabalho deve partir da conferência ou da entrega, com destino e motivo.')
                 order.status = values['target_status']
-            elif action == 'notify_pickup':
+            elif action in PICKUP_CONTACT_ACTIONS:
                 if order.status != ServiceOrder.Status.READY or values.get('confirmed') is not True:
                     raise ValidationError('Confirme o contato com o cliente de uma OS pronta para retirada.')
-                if pickup_cycle_events(order.pk).values_list('action', flat=True).first() == 'notify_pickup':
-                    raise ValidationError('O cliente já foi avisado neste ciclo de retirada.')
+                latest = pickup_cycle_events(order.pk).first()
+                if action == 'notify_pickup':
+                    if latest and latest.action in PICKUP_CONTACT_ACTIONS:
+                        raise ValidationError('O cliente já foi avisado neste ciclo de retirada.')
+                elif (not latest or latest.action != 'notify_pickup'
+                        or latest.created_at > timezone.now() - PICKUP_REMINDER_DELAY):
+                    raise ValidationError('O lembrete só pode ser registrado uma vez por ciclo, 72 horas após o primeiro aviso.')
                 reason = ''
             elif action == 'cancel':
                 if not reason:
