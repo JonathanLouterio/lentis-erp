@@ -1,0 +1,16 @@
+.erp-transfers { display:grid; gap:1rem; min-width:0; }
+.erp-transfer-card, .erp-transfer-form { display:grid; gap:1rem; }
+.erp-transfer-filters { display:flex; align-items:end; flex-wrap:wrap; gap:.75rem; }
+.erp-transfer-filters label { display:grid; gap:.35rem; min-width:0; }
+.erp-transfer-filters select { max-width:100%; }
+.erp-transfer-list { display:grid; gap:.5rem; margin:0; padding:0; list-style:none; }
+.erp-transfer-list button { width:100%; text-align:left; display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:.5rem; }
+.erp-transfer-list small,.erp-transfer-detail small,.erp-transfer-line small { display:block; margin-top:.25rem; color:var(--erp-muted); }
+.erp-transfer-list strong,.erp-transfer-line,.erp-transfer-detail { overflow-wrap:anywhere; }
+.erp-transfer-badge { border:1px solid currentColor; border-radius:1rem; padding:.2rem .55rem; font-size:.8rem; }
+.erp-transfer-detail ul { padding-inline-start:1.25rem; }
+.erp-transfer-detail li + li { margin-top:.55rem; }
+.erp-transfer-line { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,14rem) auto; align-items:end; gap:.65rem; border:1px solid var(--erp-border); border-radius:.6rem; padding:.65rem; }
+.erp-transfer-form .erp-transfer-confirm { display:flex; align-items:center; gap:.5rem; }
+.erp-transfer-form .erp-transfer-confirm input { width:auto; }
+@media(max-width:650px) { .erp-transfer-line { grid-template-columns:minmax(0,1fr); } }

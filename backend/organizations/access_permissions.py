@@ -47,6 +47,8 @@ def catalog_capabilities(user):
                            for action in ("view", "add", "change", "delete")}
     result["stock"] = {action: user.has_perm(f"organizations.{action}_stockmovement")
                        for action in ("view", "add")}
+    from .stock_transfer_services import transfer_capabilities
+    result["transfers"] = transfer_capabilities(user)
     return result
 
 

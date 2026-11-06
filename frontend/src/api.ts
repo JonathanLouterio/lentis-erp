@@ -810,6 +810,7 @@ export type CatalogAccess = {
   customers: CatalogActions
   products: CatalogActions
   stock: { view: boolean; add: boolean }
+  transfers: TransferActions
 }
 export type StockProductChoice = Pick<Product, 'id' | 'internal_code' | 'name' | 'stock_quantity' | 'minimum_stock'>
 export type StockOptions = {
@@ -925,4 +926,38 @@ export async function saveMyProfile(data: ProfilePayload): Promise<MyProfile> {
   const body = new FormData()
   for (const [key, value] of Object.entries(data)) if (value !== undefined) body.append(key, value instanceof File ? value : String(value))
   return request('/api/me/profile/', { method: 'PATCH', headers: { 'X-CSRFToken': token }, body })
+}
+
+export type TransferActions = {view:boolean;add:boolean;receive:boolean;return:boolean}
+export type TransferStatus = 'in_transit'|'received'|'returned'
+export type TransferUnit = {id:number;name:string}
+export type TransferProduct = {
+  source_product_id:number;destination_product_id:number;source_label:string;destination_label:string;source_stock:string
+}
+export type StockTransfer = {
+  id:number;status:TransferStatus;status_label:string;source:TransferUnit;destination:TransferUnit
+  sent_by:string;sent_at:string;note:string;resolved_by:string|null;resolved_at:string|null;resolution_note:string
+  can_receive:boolean;can_return:boolean
+  items:{id:number;source_label:string;destination_label:string;quantity:string;outgoing_movement_id:number;incoming_movement_id:number|null}[]
+}
+export type TransferAttempt =
+  | {id:null;payload:{request_id:string;destination_id:number;note:string;items:{source_product_id:number;destination_product_id:number;quantity:string}[]}}
+  | {id:number;payload:{request_id:string;action:'receive'|'return';note:string}}
+export type TransferPage = {count:number;next:string|null;previous:string|null;results:StockTransfer[]}
+const transferPath='/api/me/stock-transfers/'
+
+export function getTransfers(storeId:number,page:number,direction:string,status:string):Promise<TransferPage>{
+  const query=new URLSearchParams({store_id:String(storeId),page:String(page),direction,status})
+  return request(transferPath+'?'+query)
+}
+export function getTransferOptions(storeId:number,destinationId?:string):Promise<{destinations:TransferUnit[];products:TransferProduct[]}>{
+  const query=new URLSearchParams({store_id:String(storeId)})
+  if(destinationId)query.set('destination_id',destinationId)
+  return request(transferPath+'options/?'+query)
+}
+export async function submitTransfer(storeId:number,attempt:TransferAttempt):Promise<StockTransfer>{
+  const token=await getCsrfToken()
+  return request(transferPath+(attempt.id===null?'':attempt.id+'/')+'?store_id='+storeId,{
+    method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload),
+  })
 }

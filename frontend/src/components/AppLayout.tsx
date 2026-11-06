@@ -43,6 +43,7 @@ import './MobileWorkspace.css'
 
 const AdminWorkspace = lazy(() => import('./AdminWorkspace'))
 const MyProfile = lazy(() => import('./MyProfile'))
+const StockTransfers = lazy(() => import('./StockTransfers'))
 
 type AppLayoutProps = {
   user: CurrentUser
@@ -56,7 +57,7 @@ type AppLayoutProps = {
 const menuGroups = [
   { title: 'Cadastros', icon: 'cadastros', items: ['Clientes', 'Produtos', 'Receitas', 'Fornecedores'] },
   { title: 'Comercial', icon: 'comercial', items: ['Vendas', 'Orçamentos', 'Compras', 'Caixa'] },
-  { title: 'Operação', icon: 'operacao', items: ['Estoque', 'Ordens de serviço', 'Atendimento domiciliar'] },
+  { title: 'Operação', icon: 'operacao', items: ['Estoque', 'Transferências de estoque', 'Ordens de serviço', 'Atendimento domiciliar'] },
   { title: 'Gestão', icon: 'gestao', items: ['Financeiro', 'Contas a pagar', 'Relatórios', 'Usuários e acessos'] },
 ]
 
@@ -248,6 +249,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     if(item==='Caixa')return !!financeRights.access && Object.values(financeRights.access.cash).some(Boolean)
     if(item==='Financeiro')return !!financeRights.access && (financeRights.access.receipts.view || financeRights.access.receipts.receive)
     if (item === 'Vendas') return !!saleAccess && saleAccess.store_id === selectedStore?.id && Object.entries(saleAccess).some(([key,value]) => key !== 'store_id' && value === true)
+    if (item === 'Transferências de estoque') return !!access?.transfers?.view && !catalogError
     if (!access || catalogError) return !['Clientes', 'Produtos', 'Estoque'].includes(item)
     if (item === 'Clientes') return Object.values(access.customers).some(Boolean)
     if (item === 'Produtos') return Object.values(access.products).some(Boolean)
@@ -469,7 +471,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   }
 
   function leaveSaleAllowed() {
-    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Fornecedores', 'Compras', 'Contas a pagar', 'Usuários e acessos', 'Meu perfil'].includes(page) || !saleDirty || window.confirm(page === 'Meu perfil' ? 'Descartar as alterações não salvas do seu perfil?' : 'Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
+    return !['Vendas', 'Financeiro', 'Caixa', 'Orçamentos', 'Receitas', 'Ordens de serviço', 'Transferências de estoque', 'Fornecedores', 'Compras', 'Contas a pagar', 'Usuários e acessos', 'Meu perfil'].includes(page) || !saleDirty || window.confirm(page === 'Meu perfil' ? 'Descartar as alterações não salvas do seu perfil?' : 'Sair deste atendimento? Alterações não salvas serão descartadas. Um envio pendente poderá ser conferido ao retornar.')
   }
 
   function changePage(nextPage: string) {
@@ -634,6 +636,11 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
             <CashRegister key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Financeiro' ? (
             <Receivables key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+          ) : page === 'Transferências de estoque' && access?.transfers?.view ? (
+            <Suspense fallback={<p role="status">Carregando transferências…</p>}>
+              <StockTransfers key={selectedStore.id} store={selectedStore} userId={user.id}
+                permissions={access.transfers} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            </Suspense>
           ) : page === 'Estoque' ? (
             <StockMovements key={selectedStore.id} store={selectedStore}
               initialProductId={stockProductId} permissions={access?.stock ?? { view: false, add: false }} onSavingChange={setSavingStock} />

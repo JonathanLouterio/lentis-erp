@@ -24,8 +24,12 @@ from .configuration_api import (CompaniesView, CompanyDetailView, ConfigurationS
                                 ConfigurationStoreDetailView, ConfigurationHistoryView)
 
 from .product_photo_api import ProductPhotoView
+from .stock_transfer_api import StockTransferDetailView, StockTransferOptionsView, StockTransfersView
 
 urlpatterns = [
+    path("me/stock-transfers/", StockTransfersView.as_view(), name="stock-transfers"),
+    path("me/stock-transfers/options/", StockTransferOptionsView.as_view(), name="stock-transfer-options"),
+    path("me/stock-transfers/<int:transfer_id>/", StockTransferDetailView.as_view(), name="stock-transfer-detail"),
     path("me/products/<int:product_id>/photos/<int:slot>/<str:variant>/", ProductPhotoView.as_view(), name="product-photo"),
     path("system/companies/", CompaniesView.as_view()),
     path("system/companies/<int:pk>/", CompanyDetailView.as_view()),

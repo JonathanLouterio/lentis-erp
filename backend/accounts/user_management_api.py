@@ -24,7 +24,7 @@ from .models import StoreMembership, UserAccessEvent
 User = get_user_model()
 BUSINESS_APPS = ("organizations", "sales", "purchases")
 BUSINESS_MODELS = (
-    "company", "store", "customer", "product", "stockmovement", "prescription", "supplier",
+    "company", "store", "customer", "product", "stockmovement", "stocktransfer", "prescription", "supplier",
     "sale", "salepayment", "receivable", "financialaccount", "financialentry", "paymentmethod",
     "quote", "serviceorder", "cashsession", "discountauthorization", "discountpolicy",
     "purchase", "payableplan", "payableinstallment", "payablepayment",

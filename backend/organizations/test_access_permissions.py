@@ -249,7 +249,7 @@ class CatalogPermissionsTests(TestCase):
         self.grant("view_customer", "change_product")
         response = self.client.get(self.url("catalog-access") + "&user_id=999")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.data), {"store_id", "customers", "products", "stock"})
+        self.assertEqual(set(response.data), {"store_id", "customers", "products", "stock", "transfers"})
         self.assertEqual(response.data["customers"], {"view": True, "add": False, "change": False, "delete": False})
         self.assertTrue(response.data["products"]["change"])
         self.assertEqual(response.data["stock"], {"view": False, "add": False})
