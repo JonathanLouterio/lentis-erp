@@ -184,6 +184,7 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Edição dos dados de produção exige motivo. Cada alteração preserva os dados da versão, responsável e data no histórico.
 - Versão esperada impede gravação de tela desatualizada; UUID de operação impede duplicação por reenvio.
 - A OS não movimenta novamente o estoque, contas a receber ou caixa. Cancelar a OS não cancela a venda.
+- Na OS pronta para entrega de uma venda finalizada, quem também pode consultar clientes tem acesso a **Avisar retirada pelo WhatsApp**. O contato vem do campo WhatsApp atual do cliente ativo da unidade. A mensagem abre para revisão e envio manual no WhatsApp, sem dados de receita ou pagamento, sem registrar envio no Lentis e sem alterar a etapa da OS.
 - Cancelar a venda não apaga a OS: as ações de produção ficam bloqueadas, a fila exibe alerta e o operador deve cancelar a OS com motivo. OS já entregue preserva seu encerramento e histórico.
 - OS entregue ou cancelada não pode ser editada, excluída ou reaberta nesta etapa.
 - Acesso exige vínculo ativo com a unidade e permissão sales.view_serviceorder; abertura exige add_serviceorder; alterações exigem change_serviceorder. Ser staff não concede essas permissões.

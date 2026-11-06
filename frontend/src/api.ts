@@ -645,6 +645,7 @@ export type ServiceOrder = {
   created_at:string; updated_at:string; overdue:boolean; has_prescription:boolean; can_change:boolean; actions:OrderActions; next_status:ServiceOrderStatus|null
   items?:{product_id:number;code:string;name:string;quantity:string}[]
   prescription?:SalePrescriptionRecord|null; can_view_prescription?:boolean
+  pickup_whatsapp?:string|null
   events?:{version:number;action:string;from_status:string;to_status:string;reason:string;snapshot:Record<string,string>;creator_username:string;created_at:string}[]
 }
 export type ServiceOrderSummary = Record<'active' | 'laboratory' | 'overdue' | 'ready' | 'delivered', number>

@@ -223,6 +223,49 @@ class ServiceOrderTests(TestCase):
         self.assertEqual(self.client.post(self.endpoint(),data,format='json').status_code,403)
         self.assertEqual(order.events.count(),1)
 
+    def test_pickup_contact_requires_ready_order_and_customer_access(self):
+        permission = Permission.objects.get(
+            content_type__app_label='organizations', codename='view_customer',
+        )
+        self.customer.whatsapp = '(41) 99999-0000'
+        self.customer.save(update_fields=['whatsapp'])
+        order, _ = self.create()
+        self.user.user_permissions.add(permission)
+        self.assertNotIn('pickup_whatsapp', self.client.get(self.endpoint(order)).data)
+
+        for _ in range(3):
+            self.operate(order)
+        ready, _ = self.operate(order, confirmed=True)
+        self.assertEqual(ready.data['pickup_whatsapp'], '5541999990000')
+        listing = self.client.get(self.endpoint()).data['results']
+        self.assertNotIn('pickup_whatsapp', listing[0])
+
+        self.customer.phone = '(41) 98888-0000'
+        for value in ('', 'https://wa.me/5541999990000', '4199990000 ramal 1', '+55 41 9999'):
+            self.customer.whatsapp = value
+            self.customer.save(update_fields=['phone', 'whatsapp'])
+            detail = self.client.get(self.endpoint(order))
+            self.assertEqual(detail.status_code, 200)
+            self.assertIsNone(detail.data['pickup_whatsapp'])
+
+        self.customer.whatsapp = '+55 (41) 98888-1234'
+        self.customer.save(update_fields=['whatsapp'])
+        self.assertEqual(self.client.get(self.endpoint(order)).data['pickup_whatsapp'], '5541988881234')
+        self.customer.is_active = False
+        self.customer.save(update_fields=['is_active'])
+        self.assertIsNone(self.client.get(self.endpoint(order)).data['pickup_whatsapp'])
+        self.customer.is_active = True
+        self.customer.save(update_fields=['is_active'])
+
+        self.user.user_permissions.remove(permission)
+        self.assertNotIn('pickup_whatsapp', self.client.get(self.endpoint(order)).data)
+        self.user.user_permissions.add(permission)
+        Sale.objects.filter(pk=order.sale_id).update(
+            status='cancelled', cancelled_at=__import__('django').utils.timezone.now(),
+            cancellation_reason='Desistência',
+        )
+        self.assertNotIn('pickup_whatsapp', self.client.get(self.endpoint(order)).data)
+
     def test_edit_keeps_opening_snapshot_and_records_previous_details(self):
         order,_=self.create();snapshot=order.snapshot.copy()
         self.operate(order,'update',reason='Troca de laboratório',laboratory='Novo laboratório',notes='Conferir encaixe')
