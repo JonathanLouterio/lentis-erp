@@ -6,6 +6,7 @@ import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPa
 import { dateTime, displayDate, failure, today } from './saleMoney'
 import './ServiceOrders.css'
 import FormDialog from './FormDialog'
+import ServiceOrderPickup from './ServiceOrderPickup'
 import './OperationsWindows.css'
 import { useOrderAccess } from '../hooks/useOrderAccess'
 
@@ -123,6 +124,8 @@ export default function ServiceOrders({store,userId,initialSaleId,onSavingChange
       {pending&&<div className="erp-card"><strong>{busy?'Registrando operação…':'Envio pendente de confirmação'}</strong><p>Repita o mesmo envio para recuperar o resultado sem duplicar a OS ou a etapa. Os campos ficam bloqueados até a confirmação.</p><button type="button" disabled={busy||rights.loading||!caps[pending.payload.action]} onClick={()=>void send(pending)}>Conferir / repetir envio</button></div>}
       {!pending && <div className="os-detail">
       {selected&&<><p>Venda #{selected.sale_id} · {selected.customer_name} · versão {selected.version}</p><ol className="os-steps">{Object.entries(labels).filter(([k])=>k!=='cancelled').map(([k,v])=><li key={k} aria-current={selected.status===k?'step':undefined}>{v}</li>)}</ol>{selected.sale_status==='cancelled'&&<p className="error-message">A venda foi cancelada. A OS mantém o histórico; cancele a ordem para encerrar a produção.</p>}</>}
+      {selected?.pickup_whatsapp !== undefined && <ServiceOrderPickup
+        key={selected.id} phone={selected.pickup_whatsapp} storeName={store.name} />}
       <form id="lentis-order-form" onSubmit={save}><fieldset disabled={locked||!editable}><legend>Dados de produção</legend>
       {creating&&<><label>Venda finalizada com cliente<select aria-label="Venda finalizada com cliente" required value={saleId} onChange={e=>{setSaleId(e.target.value);setDirty(true)}}><option value="">Selecione a venda</option>{initialSaleId&&!sales.some(s=>s.id===initialSaleId)&&<option value={initialSaleId}>Venda #{initialSaleId}</option>}{sales.map(s=><option key={s.id} value={s.id}>#{s.id} · {s.customer_name}</option>)}</select></label><div className="os-pagination"><button type="button" disabled={salesPage===1} onClick={()=>setSalesPage(v=>v-1)}>Vendas anteriores</button><button type="button" disabled={!salesNext} onClick={()=>setSalesPage(v=>v+1)}>Mais vendas</button></div><p className="os-hint">Uma OS por venda. A cópia da receita será preservada, quando houver vínculo na venda.</p></>}
       <div className="os-fields">{(['promised_on','laboratory','frame_description','lens_description'] as const).map(key=><label key={key}>{({promised_on:'Previsão de entrega',laboratory:'Laboratório',frame_description:'Armação / identificação',lens_description:'Lentes / tratamento'})[key]}<input type={key==='promised_on'?'date':'text'} required={key==='promised_on'} maxLength={key==='laboratory'?180:key==='lens_description'?500:255} value={form[key]} onChange={e=>{setForm({...form,[key]:e.target.value});setDirty(true)}}/></label>)}</div><label>Observações operacionais<textarea maxLength={4000} value={form.notes} onChange={e=>{setForm({...form,notes:e.target.value});setDirty(true)}}/></label>

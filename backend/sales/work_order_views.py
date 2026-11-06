@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from django.db import IntegrityError
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
@@ -14,6 +15,27 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from .work_order_services import operate_order, NEXT
 from .prescription_services import can_view_prescriptions, prescription_output
+
+
+def pickup_phone(order):
+    customer = order.sale.customer
+    if not customer or not customer.is_active or customer.store_id != order.sale.store_id:
+        return None
+    raw = customer.whatsapp.strip()
+    if not re.fullmatch(r"\+?[0-9(). -]+", raw):
+        return None
+    digits = re.sub(r"[^0-9]", "", raw)
+    if not raw.startswith("+"):
+        if len(digits) in (10, 11):
+            digits = "55" + digits
+        elif not digits.startswith("55"):
+            return None
+    if digits.startswith("55"):
+        if not re.fullmatch(r"55[1-9][0-9](?:[2-9][0-9]{7}|9[0-9]{8})", digits):
+            return None
+    elif not re.fullmatch(r"[1-9][0-9]{7,14}", digits):
+        return None
+    return digits
 
 
 class OrderWriteSerializer(serializers.Serializer):
@@ -48,6 +70,9 @@ def output(order, user, detail=False, *, today=None):
         'actions':available_order_actions(order,user),
         'can_change':available_order_actions(order,user)['update']}
     if detail:
+        if (order.status == ServiceOrder.Status.READY and order.sale.status == 'completed'
+                and user.has_perm('organizations.view_customer')):
+            data['pickup_whatsapp'] = pickup_phone(order)
         data['items']=order.snapshot.get('items',[])
         data['prescription']=prescription_output(order.prescription_record) if can_view_prescriptions(user) else None
         data['can_view_prescription']=can_view_prescriptions(user)
