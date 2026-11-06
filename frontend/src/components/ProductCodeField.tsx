@@ -1,8 +1,41 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
+import type { Ref } from 'react'
 import type { IScannerControls } from '@zxing/browser'
 import './ProductCodeField.css'
 
 const CODE_LIMIT = 30
+
+export function readProductCode(raw: string) {
+  const code = raw.trim()
+  const characters = Array.from(code)
+  const hasControlCharacter = characters.some(char => {
+    const point = char.charCodeAt(0)
+    return point < 32 || point === 127
+  })
+  return code && characters.length <= CODE_LIMIT && !hasControlCharacter ? code : null
+}
+
+type ScanButtonProps = {
+  scanning: boolean
+  disabled?: boolean
+  cameraId: string
+  onToggle: () => void
+  ref?: Ref<HTMLButtonElement>
+}
+
+export function CodeScanButton({ scanning, disabled, cameraId, onToggle, ref }: ScanButtonProps) {
+  const expanded = scanning && !disabled
+  return (
+    <button type="button" className="product-code-scan" ref={ref} disabled={disabled}
+      aria-label={expanded ? 'Fechar câmera' : 'Ler com câmera'}
+      title={expanded ? 'Fechar câmera' : 'Ler código de barras ou QR Code'}
+      aria-expanded={expanded} aria-controls={expanded ? cameraId : undefined} onClick={onToggle}>
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d={expanded ? 'm6 6 12 12M18 6 6 18' : 'M8 4H4v4m12-4h4v4m0 8v4h-4m-8 0H4v-4M7.5 8v8m3-8v8m3-8v8m3-8v8'} />
+      </svg>
+    </button>
+  )
+}
 
 function cameraError(error: unknown) {
   const name = error instanceof Error ? error.name : ''
@@ -13,7 +46,7 @@ function cameraError(error: unknown) {
   return 'Não foi possível iniciar a câmera. Verifique se ela está livre ou digite o código.'
 }
 
-function CodeCamera({ onCode, onError }: { onCode: (value: string) => void; onError: (message: string) => void }) {
+export function CodeCamera({ onCode, onError }: { onCode: (value: string) => void; onError: (message: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [ready, setReady] = useState(false)
   const receive = useEffectEvent(onCode)
@@ -99,13 +132,8 @@ export default function ProductCodeField({ value, disabled, onChange }: { value:
   }
 
   function acceptCode(raw: string) {
-    const code = raw.trim()
-    const characters = Array.from(code)
-    const hasControlCharacter = characters.some(char => {
-      const point = char.charCodeAt(0)
-      return point < 32 || point === 127
-    })
-    if (!code || characters.length > CODE_LIMIT || hasControlCharacter) {
+    const code = readProductCode(raw)
+    if (!code) {
       finish('Use um código de produto em uma única linha, com até 30 caracteres. O campo foi mantido.', true)
       return
     }
@@ -123,12 +151,14 @@ export default function ProductCodeField({ value, disabled, onChange }: { value:
             // Keyboard-style readers often send Enter after the code. Saving remains explicit.
             if (event.key === 'Enter') event.preventDefault()
           }} />
-        <button type="button" aria-expanded={scanning && !disabled} onClick={() => {
+        <CodeScanButton scanning={scanning} disabled={disabled} cameraId={`${fieldId}-camera`} onToggle={() => {
           setFeedback(null)
-          setScanning(!scanning)
-        }}>{scanning && !disabled ? 'Fechar câmera' : 'Ler com câmera'}</button>
+          setScanning(current => !current)
+        }} />
       </div>
-      {scanning && !disabled && <CodeCamera onCode={acceptCode} onError={message => finish(message, true)} />}
+      {scanning && !disabled && <div id={`${fieldId}-camera`}>
+        <CodeCamera onCode={acceptCode} onError={message => finish(message, true)} />
+      </div>}
       {feedback && <p className="product-code-feedback" role={feedback.error ? 'alert' : 'status'}>{feedback.text}</p>}
     </div>
   )

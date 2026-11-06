@@ -19,8 +19,10 @@
 .product-photo-actions{display:grid;gap:6px;margin-top:10px}.product-photo-actions button{font-size:12px;padding:8px 4px;border:1px solid var(--erp-border);border-radius:6px;background:var(--erp-surface);color:var(--erp-text);cursor:pointer}.product-photo-actions button:disabled{opacity:.6;cursor:default}
 .product-characteristics{margin-top:20px;padding-top:16px;border-top:1px solid var(--erp-border)}.product-characteristics h3{margin:0 0 5px}.product-characteristics p{font-size:13px;color:var(--erp-muted)}
 .product-picker{position:relative;min-width:0;width:100%;color:var(--erp-text)}.product-picker-label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
-.product-picker>button{display:flex;align-items:center;gap:10px;width:100%;min-height:60px;padding:6px 10px;text-align:left;border:1px solid var(--erp-border);border-radius:10px;background:var(--erp-surface);color:var(--erp-text);cursor:pointer}
-.product-picker>button>span:nth-child(2){flex:1;overflow-wrap:anywhere}.product-picker button:disabled{opacity:.6;cursor:default}
+.product-picker-row{display:flex;align-items:stretch;gap:8px}
+.product-picker-trigger{flex:1;min-width:0;display:flex;align-items:center;gap:10px;width:100%;min-height:60px;padding:6px 10px;text-align:left;border:1px solid var(--erp-border);border-radius:10px;background:var(--erp-surface);color:var(--erp-text);cursor:pointer}
+.product-picker-trigger>span:nth-child(2){flex:1;overflow-wrap:anywhere}.product-picker button:disabled{opacity:.6;cursor:default}
+.product-picker-camera:not(:empty){display:grid;gap:8px;margin-top:8px}
 .product-picker-panel{position:relative;box-sizing:border-box;margin-top:6px;padding:12px;border:1px solid var(--erp-border);border-radius:12px;background:var(--erp-surface)}
 .product-picker-panel label{font-size:12px;display:block;margin-bottom:6px}.product-picker-panel input{width:100%;box-sizing:border-box}
 .product-picker-panel ul{list-style:none;margin:8px 0 0;padding:0;max-height:235px;overflow-y:auto;overscroll-behavior:contain}
