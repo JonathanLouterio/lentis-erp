@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -120,6 +121,65 @@ class OperatingExpenseTests(TestCase):
         self.assertIn(f'Despesa #{plan["id"]}', posting.reason)
         self.post(f'payments/{payment}/reverse/', self.cancellation())
         self.assertEqual(session.expected_cash, Decimal('50.00'))
+
+    def paid_expense(self, **overrides):
+        payment = {'account_id': self.bank.pk, 'method_id': self.pix.pk, 'paid_on': str(timezone.localdate()), **overrides}
+        return {**self.data(), 'category': 'transport', 'description': 'Uber da loja', 'total': '25.00',
+                'installment_count': 1, 'first_due_date': payment['paid_on'], 'payment': payment}
+
+    def test_creates_and_pays_expense_once_with_same_request(self):
+        body = self.paid_expense(paid_on=str(timezone.localdate() - timedelta(days=1)))
+        plan = self.post('expenses/', body)
+        self.assertEqual((plan['status'], plan['paid'], plan['remaining']), ('paid', '25.00', '0.00'))
+        self.assertEqual(plan['installments'][0]['payments'][0]['paid_on'].isoformat(), body['payment']['paid_on'])
+        self.assertEqual(self.post('expenses/', body)['id'], plan['id'])
+        self.post('expenses/', {**body, 'total': '27.00'}, 400)
+        self.assertEqual(PayablePlan.objects.count(), 1)
+        self.assertEqual(PayablePayment.objects.count(), 1)
+        self.assertEqual(self.bank.balance, Decimal('-25.00'))
+        self.assertFalse(CashPosting.objects.exists())
+        self.assertFalse(StockMovement.objects.exists())
+        payment = plan['installments'][0]['payments'][0]['id']
+        self.post(f'payments/{payment}/reverse/', self.cancellation())
+        self.assertEqual(self.post('expenses/', body)['status'], 'pending')
+        self.assertEqual(PayablePayment.objects.count(), 2)
+        self.assertEqual(self.bank.balance, Decimal('0.00'))
+
+    def test_create_and_pay_requires_payment_permission_even_on_retry(self):
+        body = self.paid_expense()
+        self.post('expenses/', body)
+        self.user.user_permissions.remove(Permission.objects.get(content_type__app_label='purchases', codename='pay_payable'))
+        self.post('expenses/', body, 403)
+        self.post('expenses/', self.paid_expense(), 403)
+        self.assertEqual(self.post('expenses/', self.data())['status'], 'pending')
+        self.assertEqual(PayablePayment.objects.count(), 1)
+
+    def test_invalid_payment_rolls_back_the_expense(self):
+        other_bank = FinancialAccount.objects.create(store=self.other, code='bank', name='Outro banco')
+        self.post('expenses/', self.paid_expense(account_id=other_bank.pk), 404)
+        self.post('expenses/', self.paid_expense(paid_on=str(timezone.localdate() + timedelta(days=1))), 400)
+        self.post('expenses/', {**self.paid_expense(), 'installment_count': 2}, 400)
+        self.assertFalse(PayablePlan.objects.exists())
+        self.assertFalse(PayablePayment.objects.exists())
+
+    def test_cash_payment_requires_permission_open_session_and_balance(self):
+        cash = FinancialAccount.objects.create(store=self.store, code='cash', name='Caixa')
+        method = PaymentMethod.objects.create(store=self.store, code='cash', kind='cash', name='Dinheiro')
+        body = self.paid_expense(account_id=cash.pk, method_id=method.pk)
+        self.post('expenses/', body, 403)
+        self.grant('sales', 'view_cashsession', 'add_cashsession', 'move_cash')
+        self.post('expenses/', body, 400)
+        session = open_cash(user=self.user, store=self.store, account_id=cash.pk,
+                            amount=Decimal('30.00'), note='', request_id=uuid4())
+        self.post('expenses/', {**body, 'total': '31.00'}, 400)
+        self.assertFalse(PayablePlan.objects.exists())
+        plan = self.post('expenses/', body)
+        self.assertEqual(self.post('expenses/', body)['id'], plan['id'])
+        self.assertEqual(list(CashPosting.objects.values_list('amount', flat=True)), [Decimal('-25.00')])
+        self.assertEqual(session.expected_cash, Decimal('5.00'))
+        self.user.user_permissions.remove(Permission.objects.get(content_type__app_label='sales', codename='move_cash'))
+        self.post('expenses/', body, 403)
+        self.assertEqual(PayablePayment.objects.count(), 1)
 
     def test_invalid_expenses_do_not_create_titles(self):
         for invalid in ({'description': '  '}, {'total': '0'}, {'total': '0.01'}, {'category': 'unknown'}):

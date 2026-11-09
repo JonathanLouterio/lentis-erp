@@ -73,12 +73,26 @@ def create_plan(user, values, digest, total, **source):
 @transaction.atomic
 def create_expense(*, user, store, values):
     user = actor(user, store, 'add_operating_expense')
+    payment = values.get('payment')
+    if payment:
+        if not user.has_perm('purchases.pay_payable'):
+            raise PermissionDenied('Seu usuário não tem permissão para registrar o pagamento.')
+        if values['installment_count'] != 1:
+            raise ValidationError({'installment_count': 'Para lançar como já paga, informe uma única parcela.'})
     digest = digest_data('expense', store.pk, values)
     previous = PayablePlan.objects.filter(request_id=values['request_id']).first()
     if previous:
-        return replay(previous, user, store, digest)
-    return create_plan(user, values, digest, values['total'], expense_store=store, expense_category=values['category'],
-        expense_description=values['description'], expense_payee=values['payee'], expense_reference=values['reference'])
+        plan = replay(previous, user, store, digest)
+    else:
+        plan = create_plan(user, values, digest, values['total'], expense_store=store, expense_category=values['category'],
+            expense_description=values['description'], expense_payee=values['payee'], expense_reference=values['reference'])
+    if payment:
+        # O mesmo UUID recupera o título e a baixa; ambos são gravados ou revertidos juntos.
+        pay_installment(user=user, store=store, installment_id=plan.installments.get(number=1).pk, values={
+            **payment, 'request_id': values['request_id'], 'amount': values['total'],
+            'reason': 'Pagamento registrado no lançamento da despesa.',
+        })
+    return plan
 
 
 @transaction.atomic
