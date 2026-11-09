@@ -56,8 +56,9 @@ def permission_output(permission):
     model = apps.get_model(permission.content_type.app_label, permission.content_type.model)
     singular = str(model._meta.verbose_name) if model else permission.content_type.model
     plural = str(model._meta.verbose_name_plural) if model else permission.content_type.model
-    action = permission.codename.split("_", 1)[0]
-    prefix = {"add": "Cadastrar", "view": "Consultar", "change": "Editar", "delete": "Excluir / inativar"}.get(action)
+    action, _, target = permission.codename.partition("_")
+    prefix = ({"add": "Cadastrar", "view": "Consultar", "change": "Editar", "delete": "Excluir / inativar"}.get(action)
+              if target == permission.content_type.model else None)
     return {"id": permission.pk,
             "key": f"{permission.content_type.app_label}.{permission.codename}",
             "name": f"{prefix}: {singular}" if prefix else permission.name,

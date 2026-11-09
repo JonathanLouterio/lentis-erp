@@ -10,17 +10,28 @@ from rest_framework.response import Response
 from sales.models import FinancialAccount, PaymentMethod
 from sales.views import SalesBaseView, SalesPagination, model_errors
 from .access_permissions import PayableActionPermission, payable_capabilities
-from .models import PayablePlan, PayableInstallment
-from .payable_services import generate_plan, pay_installment, reverse_payment, ALLOWED_METHODS
+from .models import ExpenseCancellation, PayablePlan, PayableInstallment
+from .payable_services import cancel_expense, create_expense, generate_plan, pay_installment, reverse_payment, ALLOWED_METHODS
 
 
-class PlanInput(serializers.Serializer):
+class InstallmentTerms(serializers.Serializer):
     request_id = serializers.UUIDField()
-    purchase_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
     installment_count = serializers.IntegerField(min_value=1, max_value=12)
     first_due_date = serializers.DateField()
     interval_unit = serializers.ChoiceField(choices=['months', 'days'], default='months')
     interval_count = serializers.IntegerField(min_value=1, max_value=365, default=1)
+
+
+class PlanInput(InstallmentTerms):
+    purchase_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
+
+
+class ExpenseInput(InstallmentTerms):
+    category = serializers.ChoiceField(choices=PayablePlan.ExpenseCategory.choices)
+    description = serializers.CharField(max_length=160)
+    payee = serializers.CharField(max_length=140, required=False, allow_blank=True, default='')
+    reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default='')
+    total = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal('0.01'))
 
 
 class PaymentInput(serializers.Serializer):
@@ -39,27 +50,37 @@ class ReversalInput(serializers.Serializer):
 
 def permissions(user):
     caps=payable_capabilities(user)
-    return {'can_create':caps['generate'],'can_pay':caps['pay'],'can_reverse':caps['reverse']}
+    return {'can_create':caps['generate'],'can_create_expense':caps['expense'],'can_cancel_expense':caps['cancel_expense'],'can_pay':caps['pay'],'can_reverse':caps['reverse']}
 
 
 def plan_query(store):
     cash = DecimalField(max_digits=28, decimal_places=2)
     due = PayableInstallment.objects.filter(plan_id=OuterRef('pk'), due_date__lt=timezone.localdate()).annotate(net=Coalesce(Sum('payments__amount'), Value(Decimal('0')), output_field=cash)).filter(amount__gt=F('net'))
-    return PayablePlan.objects.filter(purchase__store=store).select_related('purchase__supplier', 'created_by').annotate(paid_sum=Coalesce(Sum('installments__payments__amount'), Value(Decimal('0')), output_field=cash)).annotate(remaining_sum=ExpressionWrapper(F('total') - F('paid_sum'), output_field=cash), is_overdue=Exists(due)).order_by('-pk')
+    return PayablePlan.objects.filter(PayablePlan.for_stores([store])).select_related('purchase__supplier', 'created_by', 'cancellation__created_by').annotate(paid_sum=Coalesce(Sum('installments__payments__amount'), Value(Decimal('0')), output_field=cash)).annotate(remaining_sum=ExpressionWrapper(F('total') - F('paid_sum'), output_field=cash), is_overdue=Exists(due)).order_by('-pk')
 
 
 def output(plan, user, detail=False):
-    result = {'id': plan.pk, 'purchase_id': plan.purchase_id, 'supplier_name': plan.purchase.supplier_snapshot.get('name', plan.purchase.supplier.name), 'reference': plan.purchase.reference,
-              'total': f'{plan.total:.2f}', 'paid': f'{plan.paid_sum:.2f}', 'remaining': f'{plan.remaining_sum:.2f}', 'status': 'paid' if plan.remaining_sum == 0 else 'partial' if plan.paid_sum > 0 else 'pending', 'overdue': plan.is_overdue,
+    purchase = plan.purchase
+    cancellation = getattr(plan, 'cancellation', None)
+    result = {'id': plan.pk, 'purchase_id': plan.purchase_id, 'supplier_name': plan.party_name,
+              'source': 'purchase' if purchase else 'expense',
+              'category': plan.expense_category, 'category_label': plan.get_expense_category_display(),
+              'description': plan.expense_description, 'payee': plan.expense_payee,
+              'reference': purchase.reference if purchase else plan.expense_reference,
+              'total': f'{plan.total:.2f}', 'paid': f'{plan.paid_sum:.2f}', 'remaining': '0.00' if cancellation else f'{plan.remaining_sum:.2f}',
+              'status': 'cancelled' if cancellation else 'paid' if plan.remaining_sum == 0 else 'partial' if plan.paid_sum > 0 else 'pending',
+              'overdue': plan.is_overdue and not cancellation,
               'installment_count': plan.installment_count, 'first_due_date': plan.first_due_date, 'interval_unit': plan.interval_unit, 'interval_count': plan.interval_count,
               'creator_username': plan.created_by.username, 'created_at': plan.created_at, **permissions(user)}
     if detail:
+        result['cancellation'] = {'reason': cancellation.reason, 'created_at': cancellation.created_at,
+                                  'creator_username': cancellation.created_by.username} if cancellation else None
         result['installments'] = []
         for installment in plan.installments.prefetch_related('payments__created_by', 'payments__reversal'):
             payments = list(installment.payments.all())
             paid = sum((p.amount for p in payments), Decimal('0.00'))
-            remaining = installment.amount - paid
-            result['installments'].append({'id': installment.pk, 'number': installment.number, 'due_date': installment.due_date, 'amount': f'{installment.amount:.2f}', 'paid': f'{paid:.2f}', 'remaining': f'{remaining:.2f}', 'status': 'paid' if remaining == 0 else 'partial' if paid > 0 else 'pending', 'overdue': remaining > 0 and installment.due_date < timezone.localdate(),
+            remaining = Decimal('0.00') if cancellation else installment.amount - paid
+            result['installments'].append({'id': installment.pk, 'number': installment.number, 'due_date': installment.due_date, 'amount': f'{installment.amount:.2f}', 'paid': f'{paid:.2f}', 'remaining': f'{remaining:.2f}', 'status': 'cancelled' if cancellation else 'paid' if remaining == 0 else 'partial' if paid > 0 else 'pending', 'overdue': remaining > 0 and installment.due_date < timezone.localdate(),
                 'payments': [{'id': p.pk, 'amount': f'{p.amount:.2f}', 'account_name': p.account_name, 'method_name': p.method_name, 'paid_on': p.paid_on, 'reason': p.reason, 'reversal_of': p.reversal_of_id, 'reversed': hasattr(p, 'reversal'), 'cash_posting_id': p.cash_posting_id, 'creator_username': p.created_by.username, 'created_at': p.created_at} for p in payments]})
     return result
 
@@ -83,11 +104,21 @@ class PayablesView(SalesBaseView):
     def get(self, request):
         qs = plan_query(self.check_access())
         state = request.query_params.get('status', 'pending')
-        if state not in ('all', 'pending', 'paid', 'overdue'):
+        if state not in ('all', 'pending', 'paid', 'overdue', 'cancelled'):
             raise ValidationError('Situação de contas a pagar inválida.')
+        if state != 'all': qs = qs.filter(cancellation__isnull=state != 'cancelled')
         if state == 'pending': qs = qs.filter(remaining_sum__gt=0)
         if state == 'paid': qs = qs.filter(remaining_sum=0)
         if state == 'overdue': qs = qs.filter(is_overdue=True)
+        source = request.query_params.get('source', 'all')
+        category = request.query_params.get('category', '')
+        if source not in ('all', 'purchase', 'expense'):
+            raise ValidationError('Origem de contas a pagar inválida.')
+        if source != 'all': qs = qs.filter(purchase__isnull=source == 'expense')
+        if category:
+            if category not in PayablePlan.ExpenseCategory.values:
+                raise ValidationError('Categoria de despesa inválida.')
+            qs = qs.filter(expense_category=category)
         if 'purchase_id' in request.query_params:
             try:
                 purchase_id = int(request.query_params['purchase_id'])
@@ -111,11 +142,27 @@ class PayablesView(SalesBaseView):
                 result = service(user=self.request.user, store=store, values=serializer.validated_data, **target)
         except IntegrityError as exc:
             raise ValidationError('Este envio conflitou com outra operação. Confira o título antes de continuar.') from exc
-        plan_id = result.pk if isinstance(result, PayablePlan) else result.installment.plan_id
+        plan_id = result.pk if isinstance(result, PayablePlan) else result.plan_id if isinstance(result, ExpenseCancellation) else result.installment.plan_id
         return Response(output(plan_query(store).get(pk=plan_id), self.request.user, True), headers={'Cache-Control': 'no-store, private'})
 
     def post(self, request):
         return self.write(generate_plan, PlanInput)
+
+
+class ExpenseCreateView(PayablesView):
+    payable_action = 'expense'
+    http_method_names = ['post', 'options']
+
+    def post(self, request):
+        return self.write(create_expense, ExpenseInput)
+
+
+class ExpenseCancelView(PayablesView):
+    payable_action = 'cancel_expense'
+    http_method_names = ['post', 'options']
+
+    def post(self, request, plan_id):
+        return self.write(cancel_expense, ReversalInput, plan_id=plan_id)
 
 
 class PayableDetailView(PayablesView):
@@ -148,11 +195,12 @@ class PayableOptionsView(PayablesView):
     http_method_names = ['get', 'head', 'options']
     def get(self, request):
         store = self.check_access()
+        categories = [{'value': value, 'label': label} for value, label in PayablePlan.ExpenseCategory.choices]
         if not payable_capabilities(request.user)['pay']:
-            return Response({'can_cash':False,'can_view_balances':False,'accounts':[],'methods':[],**permissions(request.user)})
+            return Response({'can_cash':False,'can_view_balances':False,'accounts':[],'methods':[],'expense_categories':categories,**permissions(request.user)})
         accounts = FinancialAccount.objects.filter(store=store, is_active=True)
         methods = PaymentMethod.objects.filter(store=store, is_active=True, kind__in=ALLOWED_METHODS)
         can_cash=request.user.has_perm('sales.move_cash')
         if not can_cash: methods=methods.exclude(kind='cash')
         balances=request.user.has_perm('sales.view_financialaccount')
-        return Response({'can_cash':can_cash,'can_view_balances':balances,'accounts': [{'id': a.pk, 'name': a.name, 'cash_box': a.cash_box, **({'balance': f'{a.balance:.2f}'} if balances else {})} for a in accounts], 'methods': [{'id': m.pk, 'name': m.name, 'kind': m.kind} for m in methods], **permissions(request.user)}, headers={'Cache-Control': 'no-store, private'})
+        return Response({'can_cash':can_cash,'can_view_balances':balances,'expense_categories':categories,'accounts': [{'id': a.pk, 'name': a.name, 'cash_box': a.cash_box, **({'balance': f'{a.balance:.2f}'} if balances else {})} for a in accounts], 'methods': [{'id': m.pk, 'name': m.name, 'kind': m.kind} for m in methods], **permissions(request.user)}, headers={'Cache-Control': 'no-store, private'})

@@ -731,19 +731,23 @@ export function getPurchase(storeId:number,id:number):Promise<Purchase>{return r
 export async function submitPurchase(storeId:number,attempt:PurchaseAttempt):Promise<Purchase>{const token=await getCsrfToken();return request(`/api/me/purchases/${attempt.id?`${attempt.id}/`:''}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
 
 export type PayablePayment = {id:number;amount:string;account_name:string;method_name:string;paid_on:string;reason:string;reversal_of:number|null;reversed:boolean;cash_posting_id:number|null;creator_username:string;created_at:string}
-export type PayableInstallment = {id:number;number:number;due_date:string;amount:string;paid:string;remaining:string;status:'pending'|'partial'|'paid';overdue:boolean;payments:PayablePayment[]}
-export type PayablePermissions = {can_create:boolean;can_pay:boolean;can_reverse:boolean}
-export type PayablePlan = PayablePermissions & {id:number;purchase_id:number;supplier_name:string;reference:string;total:string;paid:string;remaining:string;status:'pending'|'partial'|'paid';overdue:boolean;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;creator_username:string;created_at:string;installments?:PayableInstallment[]}
+export type PayableInstallment = {id:number;number:number;due_date:string;amount:string;paid:string;remaining:string;status:'pending'|'partial'|'paid'|'cancelled';overdue:boolean;payments:PayablePayment[]}
+export type PayablePermissions = {can_create:boolean;can_create_expense:boolean;can_cancel_expense:boolean;can_pay:boolean;can_reverse:boolean}
+export type PayablePlan = PayablePermissions & {id:number;purchase_id:number|null;source:'purchase'|'expense';supplier_name:string;category:string;category_label:string;description:string;payee:string;cancellation?:{reason:string;created_at:string;creator_username:string}|null;reference:string;total:string;paid:string;remaining:string;status:'pending'|'partial'|'paid'|'cancelled';overdue:boolean;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;creator_username:string;created_at:string;installments?:PayableInstallment[]}
 export type PayablesPage = CashPage<PayablePlan> & PayablePermissions
-export type PayableOptions = PayablePermissions & {accounts:{id:number;name:string;cash_box:boolean;balance?:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
+export type PayableOptions = PayablePermissions & {expense_categories:{value:string;label:string}[];accounts:{id:number;name:string;cash_box:boolean;balance?:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
+export type ExpenseInput = {category:string;description:string;payee:string;reference:string;total:string;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number}
+export type PayableSource = 'all'|'purchase'|'expense'
 export type PayableAttempt =
+  | {kind:'expense';payload:ExpenseInput & {request_id:string}}
+  | {kind:'cancel_expense';planId:number;payload:{request_id:string;reason:string}}
   | {kind:'generate';payload:{request_id:string;purchase_id:number;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number}}
   | {kind:'pay';installmentId:number;payload:{request_id:string;account_id:number;method_id:number;amount:string;paid_on:string;reason:string}}
   | {kind:'reverse';paymentId:number;payload:{request_id:string;reason:string}}
-export function getPayables(storeId:number,page=1,status='pending',purchaseId?:number):Promise<PayablesPage>{const query=new URLSearchParams({store_id:String(storeId),page:String(page),status});if(purchaseId)query.set('purchase_id',String(purchaseId));return request(`/api/me/payables/?${query}`)}
+export function getPayables(storeId:number,page=1,status='pending',purchaseId?:number,source:PayableSource='all',category=''):Promise<PayablesPage>{const query=new URLSearchParams({store_id:String(storeId),page:String(page),status});if(purchaseId)query.set('purchase_id',String(purchaseId));if(source!=='all')query.set('source',source);if(category)query.set('category',category);return request(`/api/me/payables/?${query}`)}
 export function getPayable(storeId:number,id:number):Promise<PayablePlan>{return request(`/api/me/payables/${id}/?store_id=${storeId}`)}
 export function getPayableOptions(storeId:number):Promise<PayableOptions>{return request(`/api/me/payables/options/?store_id=${storeId}`)}
-export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
+export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:attempt.kind==='expense'?'expenses/':attempt.kind==='cancel_expense'?`expenses/${attempt.planId}/cancel/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
 
 export type ReportKind='sales'|'movements'|'receivables'|'payables'
 export type ReportFilters={all_dates?:boolean;customer?:string;sale_id?:number|null;method?:string;risk?:string;aging?:string;warning_days?:number;report:ReportKind;start:string;end:string;status:'all'|'pending'|'paid'|'partial'|'overdue';debtor:'all'|'customer'|'operator';direction:'all'|'in'|'out';account_id?:number|null}
@@ -866,7 +870,7 @@ export function getOrderAccess(storeId:number):Promise<OrderAccess>{return reque
 export function getOrderSales(storeId:number,page:number):Promise<{results:{id:number;customer_name:string}[];next:string|null}>{return request(`/api/me/service-orders/sales/?store_id=${storeId}&page=${page}`)}
 
 export type PurchaseActions={view:boolean;create:boolean;update:boolean;receive:boolean;cancel:boolean;update_cost:boolean}
-export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{view:boolean;generate:boolean;pay:boolean;reverse:boolean}}
+export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{view:boolean;generate:boolean;pay:boolean;reverse:boolean;expense:boolean;cancel_expense:boolean}}
 export type PurchaseOptions={results:{id:number;name:string;document:string}[];next:string|null;products:{id:number;internal_code:string;name:string;cost_price:string;thumbnail_url:string|null}[]}
 export function getPurchaseAccess(storeId:number):Promise<PurchaseAccess>{return request(`/api/me/purchases/access/?store_id=${storeId}`)}
 export function getPurchaseOptions(storeId:number,page:number):Promise<PurchaseOptions>{return request(`/api/me/purchases/options/?store_id=${storeId}&page=${page}`)}

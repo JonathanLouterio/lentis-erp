@@ -5,16 +5,16 @@ from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from purchases.models import PayableInstallment, PayablePayment
+from purchases.models import PayableInstallment, PayablePayment, PayablePlan
 from .insight_permissions import report_allowed
 from .models import FinancialAccount, FinancialEntry, Receivable
 from .dashboard_views import BUSINESS_TZ, MONEY, ZERO, bounds, money, sales_for
 
 REPORTS = {
     'sales': {'title': 'Vendas finalizadas', 'permissions': ('sales.view_sale',), 'basis': 'Data de finalização', 'description': 'Vendas que continuam finalizadas, pelo dia de finalização em São Paulo. Rascunhos e vendas canceladas são excluídos. Os valores incluem os descontos e os acréscimos registrados.'},
-    'movements': {'title': 'Movimentações registradas', 'permissions': ('sales.view_financialentry', 'purchases.view_payableplan'), 'basis': 'Data de registro', 'description': 'Recebimentos, pagamentos a fornecedores e seus estornos pela data de registro em São Paulo. A data informada do pagamento aparece em outra coluna. Não inclui abertura, suprimento ou retirada manual de caixa, nem representa lucro ou extrato bancário.'},
+    'movements': {'title': 'Movimentações registradas', 'permissions': ('sales.view_financialentry', 'purchases.view_payableplan'), 'basis': 'Data de registro', 'description': 'Recebimentos, pagamentos de compras e despesas e seus estornos pela data de registro em São Paulo. A data informada do pagamento aparece em outra coluna. Não inclui abertura, suprimento ou retirada manual de caixa, nem representa lucro ou extrato bancário.'},
     'receivables': {'title': 'Contas a receber', 'permissions': ('sales.view_receivable',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas com vencimento no período e situação atual, incluindo recebimentos posteriores ao período. Não é um saldo histórico na data final. Vendas canceladas são excluídas. O responsável distingue cliente e operadora de cartão.'},
-    'payables': {'title': 'Contas a pagar', 'permissions': ('purchases.view_payableplan',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas de compras com vencimento no período e situação atual, incluindo pagamentos posteriores ao período. Não é um saldo histórico na data final. Somente compras com plano de contas a pagar gerado aparecem.'},
+    'payables': {'title': 'Contas a pagar', 'permissions': ('purchases.view_payableplan',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas de compras e despesas com vencimento no período e situação atual, incluindo pagamentos posteriores ao período. Não é um saldo histórico na data final. Despesas canceladas são excluídas.'},
 }
 
 
@@ -118,11 +118,12 @@ def prepare_report(store, values, now, today, lower, upper):
             if values['debtor']!='all':query=query.filter(debtor=values['debtor'])
             query=installment_rows(query,values,today,True).select_related('payment')
         else:
-            query=installment_rows(PayableInstallment.objects.filter(plan__purchase__store=store),values,today,False).select_related('plan__purchase__supplier')
+            query=installment_rows(PayableInstallment.objects.filter(PayablePlan.for_stores([store], 'plan__'), plan__cancellation__isnull=True),values,today,False).select_related('plan__purchase__supplier')
         sums=query.aggregate(count=Count('pk'),original=Sum('amount'),paid=Sum('report_paid'),remaining=Sum('report_remaining'),overdue=Sum('report_remaining',filter=Q(due_date__lt=today,report_remaining__gt=0)))
         summary=[metric('count','Parcelas no filtro',sums['count'],'integer'),metric('original','Valor original',sums['original']),metric('paid','Recebido líquido' if kind=='receivables' else 'Pago líquido',sums['paid']),metric('remaining','Saldo em aberto',sums['remaining']),metric('overdue','Saldo vencido',sums['overdue'])]
-        columns += [col('id','Parcela'),col('document','Venda' if kind=='receivables' else 'Compra'),col('number','Número','integer'),col('party','Cliente' if kind=='receivables' else 'Fornecedor')]
+        columns += [col('id','Parcela'),col('document','Venda' if kind=='receivables' else 'Documento'),col('number','Número','integer'),col('party','Cliente' if kind=='receivables' else 'Favorecido')]
         if kind=='receivables':columns += [col('debtor','Responsável')]
+        else:columns += [col('category','Categoria da despesa')]
         columns += [col('due_date','Vencimento','date'),col('amount','Valor original','money'),col('paid','Recebido líquido' if kind=='receivables' else 'Pago líquido','money'),col('remaining','Saldo atual','money'),col('status','Situação atual')]
         query=query.order_by('due_date','pk')
     return query, columns, summary
@@ -130,7 +131,7 @@ def prepare_report(store, values, now, today, lower, upper):
 
 def movement_rows(store,values,now,lower,upper):
     receipts=FinancialEntry.objects.filter(receivable__payment__sale__store=store,created_at__gte=lower,created_at__lt=upper,created_at__lte=now)
-    payouts=PayablePayment.objects.filter(installment__plan__purchase__store=store,created_at__gte=lower,created_at__lt=upper,created_at__lte=now)
+    payouts=PayablePayment.objects.filter(PayablePlan.for_stores([store], 'installment__plan__'),created_at__gte=lower,created_at__lt=upper,created_at__lte=now)
     if values.get('account_id'):
         receipts=receipts.filter(account_id=values['account_id']);payouts=payouts.filter(account_id=values['account_id'])
     common={'r_date':F('created_at'),'r_author':F('created_by__username'),'r_reason':F('reason')}
@@ -138,9 +139,13 @@ def movement_rows(store,values,now,lower,upper):
         r_document=Concat(Value('Venda #'),Cast('receivable__payment__sale_id',CharField())),
         r_party=Case(When(receivable__debtor='operator',then=Concat(Value('Operadora · '),F('receivable__payment__method_name'))),default=Coalesce(NullIf('receivable__customer_name',Value('')),Value('Venda balcão')),output_field=CharField()),
         r_account=F('account__name'),r_method=F('method__name'),r_amount=ExpressionWrapper(F('amount'),output_field=MONEY))
-    payouts=payouts.annotate(**common,r_id=Concat(Value('PAG-'),Cast('pk',CharField())),r_paid_on=F('paid_on'),r_type=Case(When(amount__gt=0,then=Value('Pagamento a fornecedor')),default=Value('Estorno de pagamento a fornecedor')),
-        r_document=Concat(Value('Compra #'),Cast('installment__plan__purchase_id',CharField())),
-        r_party=Coalesce(NullIf(KeyTextTransform('name','installment__plan__purchase__supplier_snapshot'),Value('')),F('installment__plan__purchase__supplier__name'),output_field=CharField()),
+    payouts=payouts.annotate(**common,r_id=Concat(Value('PAG-'),Cast('pk',CharField())),r_paid_on=F('paid_on'),r_type=Case(When(installment__plan__expense_store__isnull=False, amount__gt=0, then=Value('Pagamento de despesa')),
+            When(installment__plan__expense_store__isnull=False, then=Value('Estorno de despesa')),
+            When(amount__gt=0,then=Value('Pagamento a fornecedor')),default=Value('Estorno de pagamento a fornecedor')),
+        r_document=Case(When(installment__plan__purchase__isnull=True, then=Concat(Value('Despesa #'),Cast('installment__plan_id',CharField()))),
+            default=Concat(Value('Compra #'),Cast('installment__plan__purchase_id',CharField())),output_field=CharField()),
+        r_party=Coalesce(NullIf(KeyTextTransform('name','installment__plan__purchase__supplier_snapshot'),Value('')),F('installment__plan__purchase__supplier__name'),
+            NullIf('installment__plan__expense_payee',Value('')),F('installment__plan__expense_description'),output_field=CharField()),
         r_account=F('account_name'),r_method=F('method_name'),r_amount=ExpressionWrapper(-F('amount'),output_field=MONEY))
     if values['direction']!='all':
         condition={'r_amount__gt':0} if values['direction']=='in' else {'r_amount__lt':0}
@@ -169,6 +174,6 @@ def serialize_row(obj,kind,store,today,warning_days=7):
             from .receivable_report import decorate_row
             decorate_row(row,obj,today,warning_days)
         else:
-            purchase=obj.plan.purchase
-            row.update(document=f'#{purchase.pk}',party=purchase.supplier_snapshot.get('name') or purchase.supplier.name)
+            plan=obj.plan
+            row.update(document=f'#{plan.purchase_id}' if plan.purchase_id else plan.document_label,party=plan.party_name,category=plan.get_expense_category_display())
     return row
