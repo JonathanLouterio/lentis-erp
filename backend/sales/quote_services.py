@@ -3,6 +3,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from accounts.selectors import get_accessible_stores
 from .quote_permissions import require_quote_action
+from .quote_models import quote_today
 from .models import Quote, QuoteItem, QuoteEvent, QuoteOperation, Sale, SaleItem
 
 
@@ -30,6 +31,7 @@ def operate_quote(*, user, store, quote_id, action, request_id, digest, validate
         version = values.pop('expected_version', None)
         if quote is not None and version != quote.version:
             raise ValidationError('Este orçamento foi atualizado por outra operação. Reabra-o antes de continuar.')
+        next_contact_on = None
         if action == 'save':
             if quote and quote.status in ('converted', 'rejected'):
                 raise ValidationError('Um orçamento convertido ou recusado não pode ser substituído.')
@@ -51,7 +53,14 @@ def operate_quote(*, user, store, quote_id, action, request_id, digest, validate
         else:
             if quote is None: raise ValidationError('Salve o orçamento antes de mudar sua situação.')
             reason = values.get('reason', '').strip()
-            if action == 'reject':
+            if action == 'followup':
+                if not quote.can_followup:
+                    raise ValidationError('Acompanhe uma proposta pronta com cliente ativo desta unidade.')
+                next_contact_on = values['next_contact_on']
+                if next_contact_on is not None and next_contact_on < quote_today():
+                    raise ValidationError({'next_contact_on': 'Agende o retorno para hoje ou uma data futura.'})
+                event = values['kind']
+            elif action == 'reject':
                 if quote.status not in ('draft','sent','accepted'): raise ValidationError('Esta proposta não pode ser recusada nesta situação.')
                 if not reason: raise ValidationError({'reason': 'Informe o motivo da recusa.'})
                 quote.status = 'rejected'
@@ -73,7 +82,10 @@ def operate_quote(*, user, store, quote_id, action, request_id, digest, validate
                     sale.discount_amount = quote.discount_amount; sale.save()
                     quote.sale = sale; quote.status = 'converted'
             else: raise ValidationError('Operação de orçamento inválida.')
-            quote.version += 1; quote.save(_allow_transition=True); event = action
-        QuoteEvent.objects.create(quote=quote, action=event, created_by=user, reason=reason, version=quote.version)
+            quote.version += 1; quote.save(_allow_transition=True)
+            if action != 'followup':
+                event = action
+        QuoteEvent.objects.create(quote=quote, action=event, created_by=user, reason=reason, version=quote.version,
+                                  next_contact_on=next_contact_on)
         QuoteOperation.objects.create(request_id=request_id, quote=quote, created_by=user, digest=digest)
         return quote

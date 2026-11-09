@@ -276,3 +276,100 @@ class QuotePermissionTests(TestCase):
         self.assertEqual(self.client.head(self.url()).status_code,200);self.assertEqual(self.client.options(self.url()).status_code,200)
         self.assertEqual(self.action('invalid').status_code,400)
         access=self.client.get(self.url('access/'));self.assertTrue(access.data['actions']['convert']);self.assertIn('no-store',access['Cache-Control'])
+
+    def test_followup_schedule_and_contact_are_distinct_without_changing_proposal(self):
+        self.grant('view', 'followup')
+        self.state('sent')
+        day = business_today()
+        scheduled = self.action('followup', kind='schedule', next_contact_on=str(day), reason='Ligar depois do almoço')
+        self.assertEqual(scheduled.status_code, 200, scheduled.data)
+        self.assertIsNone(scheduled.data['last_contact'])
+        self.assertEqual(scheduled.data['next_contact_on'], day)
+        self.assertEqual(scheduled.data['status'], 'sent')
+        self.assertEqual(scheduled.data['events'][-1]['action'], 'schedule')
+        due_url = self.url() + '&followup=due'
+        self.assertEqual([item['id'] for item in self.client.get(due_url).data['results']], [self.quote.pk])
+
+        payload = {'request_id': str(uuid.uuid4()), 'expected_version': scheduled.data['version'],
+                   'kind': 'contact', 'next_contact_on': None, 'reason': 'Cliente confirmou o recebimento da proposta'}
+        url = self.url(f'{self.quote.pk}/followup/')
+        contact = self.client.post(url, payload, format='json')
+        self.assertEqual(contact.status_code, 200, contact.data)
+        self.assertEqual(contact.data['last_contact']['creator_username'], self.user.username)
+        self.assertEqual(contact.data['status'], 'sent')
+        self.assertEqual(contact.data['total'], '100.00')
+        self.assertEqual(contact.data['events'][-1]['action'], 'contact')
+        self.assertIsNone(contact.data['next_contact_on'])
+        self.assertEqual(self.client.get(due_url).data['count'], 0)
+        self.assertEqual(self.client.post(url, payload, format='json').status_code, 200)
+        self.assertEqual(self.client.post(url, {**payload, 'request_id': str(uuid.uuid4())}, format='json').status_code, 400)
+        self.assertEqual(self.quote.events.count(), 2)
+        self.assertFalse(Sale.objects.exists())
+        self.no_effects()
+
+    def test_due_filter_includes_overdue_and_today_but_not_future_or_another_store(self):
+        self.grant('view', 'followup')
+        self.state('sent')
+        today = business_today()
+        future = Quote.objects.create(store=self.store, customer=self.customer, created_by=self.user, valid_until=today, status='sent')
+        due_today = Quote.objects.create(store=self.store, customer=self.customer, created_by=self.user, valid_until=today, status='sent')
+        foreign_customer = Customer.objects.create(store=self.other, name='Cliente filial')
+        foreign = Quote.objects.create(store=self.other, customer=foreign_customer, created_by=self.user, valid_until=today, status='sent')
+        yesterday = today - timedelta(days=1)
+        with patch('sales.quote_services.quote_today', return_value=yesterday):
+            overdue = self.action('followup', kind='schedule', next_contact_on=str(yesterday))
+            self.assertEqual(overdue.status_code, 200, overdue.data)
+        self.assertEqual(self.action('followup', due_today, kind='schedule', next_contact_on=str(today)).status_code, 200)
+        self.assertEqual(self.action('followup', future, kind='schedule', next_contact_on=str(today + timedelta(days=1))).status_code, 200)
+        self.assertEqual(self.action('followup', foreign, kind='schedule', next_contact_on=str(today)).status_code, 403)
+        QuoteEvent.objects.create(quote=foreign, action='schedule', created_by=self.user, next_contact_on=today, version=2)
+        url = self.url() + '&followup=due&page_size=1'
+        first = self.client.get(url).data
+        second = self.client.get(url + '&page=2').data
+        self.assertEqual(first['count'], 2)
+        self.assertEqual([first['results'][0]['id'], second['results'][0]['id']], [self.quote.pk, due_today.pk])
+        self.assertEqual(self.client.get(self.url() + '&followup=invalid').status_code, 400)
+
+    def test_followup_requires_permission_eligible_proposal_and_valid_date(self):
+        today = business_today()
+        kwargs = {'kind': 'schedule', 'next_contact_on': str(today)}
+        self.grant('view','followup')
+        self.assertEqual(self.action('followup', **kwargs).status_code, 400)
+        self.state('sent')
+        for value in (None, str(today - timedelta(days=1))):
+            self.assertEqual(self.action('followup', kind='schedule', next_contact_on=value).status_code, 400)
+        self.grant('view','change')
+        self.assertEqual(self.action('followup', **kwargs).status_code, 403)
+        self.grant('followup')
+        self.assertEqual(self.action('followup', **kwargs).status_code, 403)
+        self.grant('view','followup')
+        self.customer.is_active = False
+        self.customer.save(update_fields=['is_active'])
+        self.assertEqual(self.action('followup', **kwargs).status_code, 400)
+        self.assertFalse(QuoteEvent.objects.exists())
+
+    def test_revision_clears_current_followup_and_preserves_audit_history(self):
+        self.grant('view','change','send','followup')
+        self.state('sent')
+        today = business_today()
+        contact = self.action('followup', kind='contact', next_contact_on=str(today))
+        self.assertEqual(contact.status_code, 200, contact.data)
+        revised = self.write(self.payload(expected_version=contact.data['version']), self.quote)
+        self.assertEqual(revised.status_code, 200, revised.data)
+        prepared = self.action('send')
+        self.assertEqual(prepared.status_code, 200, prepared.data)
+        self.assertIsNone(prepared.data['next_contact_on'])
+        self.assertIsNone(prepared.data['last_contact'])
+        self.assertEqual([event['action'] for event in prepared.data['events']], ['contact', 'updated', 'send'])
+        self.assertEqual(self.client.get(self.url() + '&followup=due').data['count'], 0)
+
+    def test_accepted_quote_keeps_last_contact_but_leaves_followup_queue(self):
+        self.grant('view','accept','followup')
+        self.state('sent')
+        self.assertEqual(self.action('followup', kind='contact', next_contact_on=str(business_today())).status_code, 200)
+        accepted = self.action('accept')
+        self.assertEqual(accepted.status_code, 200, accepted.data)
+        self.assertIsNotNone(accepted.data['last_contact'])
+        self.assertIsNone(accepted.data['next_contact_on'])
+        self.assertFalse(accepted.data['actions']['followup'])
+        self.assertEqual(self.client.get(self.url() + '&followup=due').data['count'], 0)

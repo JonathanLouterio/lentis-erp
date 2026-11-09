@@ -2,3 +2,8 @@
 .erp-quote-product-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 20px; }
 .erp-quotes-page .erp-checkout-summary { gap: 16px; }
 @media (max-width: 760px) { .erp-quote-header-fields, .erp-quote-product-picker { grid-template-columns: 1fr; } }
+
+.erp-quote-followup dl { display:flex; flex-wrap:wrap; gap:.75rem 1.5rem; margin:0 0 1rem; }
+.erp-quote-followup dt { color:var(--erp-muted); font-size:.8125rem; }
+.erp-quote-followup dd { margin:.25rem 0 0; font-weight:600; overflow-wrap:anywhere; }
+.erp-quote-followup fieldset { display:grid; gap:.75rem; border:0; padding:0; margin:0; min-width:0; }

@@ -3,13 +3,14 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import BasePermission
 from organizations.access_permissions import fresh_actor
 
-ACTIONS=('view','add','change','send','accept','reject','convert','print')
+ACTIONS=('view','add','change','send','accept','reject','convert','print','followup')
 
 
 def quote_capabilities(user):
     result={action:bool(user and user.has_perm(f'sales.{action}_quote')) for action in ACTIONS}
     result['convert']=result['convert'] and user.has_perm('sales.add_sale')
     result['print']=result['print'] and result['view']
+    result['followup']=result['followup'] and result['view']
     return result
 
 
@@ -26,6 +27,7 @@ def available_quote_actions(quote,user):
     result['change'] &= quote.status not in ('converted','rejected')
     result['send'] &= quote.status=='draft' and not quote.is_expired and has_items
     result['accept'] &= quote.status=='sent' and not quote.is_expired and has_items
+    result['followup'] &= quote.can_followup
     result['reject'] &= quote.status in ('draft','sent','accepted')
     result['convert'] &= quote.status=='accepted' and not quote.is_expired and has_items
     return result
@@ -46,5 +48,5 @@ class QuoteActionPermission(BasePermission):
         if action=='options':return capabilities['add'] or capabilities['change']
         if action=='transition':
             action=view.kwargs.get('action')
-            if action not in ('send','accept','reject','convert'):return True
+            if action not in ('send','accept','reject','convert','followup'):return True
         return capabilities[action]

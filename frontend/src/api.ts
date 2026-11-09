@@ -600,14 +600,21 @@ export type Quote = {
   status: QuoteStatus; status_label: string; is_expired: boolean; valid_until: string; notes: string
   discount_amount: string; version: number; sale: number | null; created_at: string; updated_at: string
   subtotal: string; total: string
+  last_contact: { created_at:string; creator_username:string } | null
+  next_contact_on: string | null
   items: { id: number; product: number; product_name: string; product_code: string; quantity: string; unit_price: string; discount_amount: string; subtotal: string; total: string }[]
-  events: { id: number; action: string; creator_username: string; reason: string; created_at: string; version: number }[]
+  events: { id: number; action: string; creator_username: string; reason: string; created_at: string; version: number; next_contact_on:string|null }[]
 }
 export type QuotePayload = { request_id: string; expected_version?: number; customer_id: number | null; valid_until: string; notes: string; discount_amount: string; items: SaleItemPayload[] }
 export type QuoteAttempt =
   | { action: 'save'; quoteId: number | null; payload: QuotePayload }
   | { action: 'send' | 'accept' | 'reject' | 'convert'; quoteId: number; payload: { request_id: string; expected_version: number; reason: string } }
-export function getQuotes(storeId: number, page = 1, status = 'all'): Promise<CashPage<Quote>> { return request(`/api/me/quotes/?store_id=${storeId}&page=${page}&status=${status}`) }
+  | { action: 'followup'; quoteId: number; payload: { request_id:string; expected_version:number; kind:'contact'|'schedule'; next_contact_on:string|null; reason:string } }
+export function getQuotes(storeId: number, page = 1, status = 'all', dueOnly = false): Promise<CashPage<Quote>> {
+  const query = new URLSearchParams({store_id:String(storeId),page:String(page),status})
+  if(dueOnly)query.set('followup','due')
+  return request(`/api/me/quotes/?${query}`)
+}
 export function getQuote(storeId: number, id: number): Promise<Quote> { return request(`/api/me/quotes/${id}/?store_id=${storeId}`) }
 export async function submitQuoteOperation(storeId: number, attempt: QuoteAttempt): Promise<Quote> {
   const token = await getCsrfToken()
@@ -838,7 +845,7 @@ export type FinanceAccess = {store_id:number;cash:{view:boolean;open:boolean;mov
 export function getFinanceAccess(storeId:number):Promise<FinanceAccess>{return request(`/api/me/finance-access/?store_id=${storeId}`)}
 
 
-export type QuoteActions = {view:boolean;add:boolean;change:boolean;send:boolean;accept:boolean;reject:boolean;convert:boolean;print:boolean}
+export type QuoteActions = {view:boolean;add:boolean;change:boolean;send:boolean;accept:boolean;reject:boolean;convert:boolean;print:boolean;followup:boolean}
 export type QuoteAccess = {store_id:number;actions:QuoteActions;can_open_sale:boolean}
 export type QuoteCustomerChoice = Pick<Customer,'id'|'name'>
 export type QuoteProductChoice = Pick<Product,'id'|'internal_code'|'name'|'sale_price'>
