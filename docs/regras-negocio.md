@@ -108,6 +108,12 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Atalhos para nova venda/cliente e atendimento recente; reposição abre o produto na movimentação. Recebimentos abrem o módulo financeiro, onde se escolhe a parcela.
 - Metas, margem, rankings, relatórios exportáveis e notificações automáticas não foram introduzidos nesta etapa.
 
+### Pendências operacionais no painel inicial
+
+- **Atenção hoje** mostra **OS atrasadas**, **Retiradas pendentes** e **Orçamentos para retornar** na unidade selecionada. Os atalhos abrem as filas já filtradas e usam o dia de São Paulo, independentemente do período do gráfico.
+- Retiradas pendentes contam OS prontas de vendas finalizadas. OS de venda cancelada continuam disponíveis na consulta geral para conferência. Orçamentos para retornar incluem agendamentos de hoje ou anteriores ainda pendentes.
+- Além de consultar o painel, o usuário precisa poder consultar a OS ou o orçamento para ver o respectivo total e atalho.
+
 
 ## Orçamentos
 

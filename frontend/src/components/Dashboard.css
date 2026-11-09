@@ -22,7 +22,8 @@
 .lentis-kpi > small { color: var(--erp-muted); line-height: 1.6; font-size: 11px; }
 .lentis-kpi.is-primary { border-top: 3px solid #8d5ac5; }
 .lentis-kpi.is-primary > strong { color: #7541ae; }
-.lentis-dashboard-main { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+.lentis-dashboard-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 20px; }
+.lentis-dashboard-main > :only-child { grid-column: 1 / -1; }
 .lentis-dashboard-secondary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .lentis-dashboard .erp-card { min-width: 0; }
 .lentis-panel-heading h2 { font-size: 16px; margin: 0; }

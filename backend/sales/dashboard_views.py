@@ -10,7 +10,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from organizations.models import Product
-from .models import CashSession, FinancialEntry, Receivable, Sale, SaleItem
+from .models import CashSession, FinancialEntry, Quote, Receivable, Sale, SaleItem, ServiceOrder
+from .queue_queries import READY_FOR_PICKUP, due_quotes, overdue_orders, with_quote_schedule
 from .views import SalesBaseView
 from .insight_permissions import InsightPermission, dashboard_sections, insight_access
 
@@ -120,6 +121,11 @@ class DashboardView(SalesBaseView):
         cash_summary = cash.aggregate(count=Count('pk'), amount=Sum('dashboard_balance')) if allowed['cash'] else {}
         cash_rows = [{'id': item.pk, 'account_name': item.account.name, 'owner': item.opened_by.username, 'opened_at': item.opened_at.isoformat(), 'expected_cash': money(item.dashboard_balance)} for item in cash.select_related('account', 'opened_by').order_by('-opened_at', '-pk')[:5]] if allowed['cash'] else []
         recent = [{'id': item.pk, 'customer_name': item.customer.name if item.customer_id else 'Venda balcão', 'completed_at': item.completed_at.isoformat(), 'total': money(item.dashboard_total)} for item in sales.filter(completed_at__gte=lower, completed_at__lt=upper).select_related('customer').order_by('-completed_at', '-pk')[:5]] if allowed['sales'] else []
+        order_attention = ServiceOrder.objects.filter(sale__store=store).aggregate(
+            overdue=Count('pk', filter=overdue_orders(today)),
+            ready=Count('pk', filter=READY_FOR_PICKUP),
+        ) if allowed['orders'] else None
+        quote_returns = due_quotes(with_quote_schedule(Quote.objects.filter(store=store)), store, today).count() if allowed['quotes'] else None
         return Response({
             'permissions':allowed,'shortcuts':insight_access(request.user)['shortcuts'],
             'store_id': store.pk, 'generated_at': now.isoformat(), 'today': today.isoformat(), 'timezone': 'America/Sao_Paulo',
@@ -129,5 +135,6 @@ class DashboardView(SalesBaseView):
             'receivables': {'customer': balance(customer), 'operator': balance(operator), 'overdue': balance(overdue), 'due_today': balance(due_today), 'attention': next_due} if allowed['receivables'] else None,
             'stock': {'low_count': low.count(), 'negative_count': products.filter(stock_quantity__lt=0).count(), 'items': low_rows} if allowed['stock'] else None,
             'cash': {'count': cash_summary['count'], 'expected_cash': money(cash_summary['amount']), 'items': cash_rows} if allowed['cash'] else None,
+            'attention': {'orders': order_attention, 'quote_returns': quote_returns},
             'chart': chart, 'recent_sales': recent,
         })

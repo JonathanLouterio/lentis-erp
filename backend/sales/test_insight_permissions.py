@@ -102,3 +102,14 @@ class InsightPermissionTests(TestCase):
         self.grant('view_dashboard','view_reports','export_reports','view_sale')
         before=Sale.objects.count();self.dashboard();self.report();self.report(export='csv')
         self.assertEqual(Sale.objects.count(),before)
+
+    def test_attention_requires_each_sources_own_permission(self):
+        self.grant('view_dashboard')
+        self.assertEqual(self.dashboard().data['attention'], {'orders':None,'quote_returns':None})
+        self.grant('view_dashboard','view_serviceorder')
+        data = self.dashboard().data
+        self.assertEqual(data['attention'], {'orders':{'overdue':0,'ready':0},'quote_returns':None})
+        self.assertTrue(data['permissions']['orders'])
+        self.assertFalse(data['permissions']['quotes'])
+        self.grant('view_dashboard','view_quote')
+        self.assertEqual(self.dashboard().data['attention'], {'orders':None,'quote_returns':0})

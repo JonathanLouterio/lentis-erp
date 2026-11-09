@@ -6,7 +6,8 @@ def dashboard_sections(user):
     active=bool(user and user.is_active)
     def has(code):return bool(active and user.has_perm(code))
     return {'sales':has('sales.view_sale'), 'receipts':has('sales.view_receivable') and has('sales.view_financialentry'),
-        'receivables':has('sales.view_receivable'), 'stock':has('organizations.view_product') or has('organizations.view_stockmovement'), 'cash':has('sales.view_cashsession')}
+        'receivables':has('sales.view_receivable'), 'stock':has('organizations.view_product') or has('organizations.view_stockmovement'), 'cash':has('sales.view_cashsession'),
+        'orders':has('sales.view_serviceorder'), 'quotes':has('sales.view_quote')}
 
 def report_allowed(user,permissions):
     return bool(user and user.is_active and user.has_perm('sales.view_reports') and all(user.has_perm(code) for code in permissions))
