@@ -28,3 +28,7 @@
 
 [data-theme="dark"] .payable-page :is(input,select,textarea){background:#263149;color:#e2e8f0;color-scheme:dark}
 [data-theme="dark"] .payable-summary>div:last-child dd{color:#93c5fd}
+.payable-heading-actions{display:flex;gap:10px;flex-wrap:wrap}
+.payable-cancel{margin-top:18px}
+.payable-refresh+.payable-refresh{margin-inline-start:10px}
+@media(max-width:580px){.payable-heading-actions button{min-height:44px}.payable-toolbar label{max-width:100%}}

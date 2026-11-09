@@ -62,6 +62,8 @@ class CashPostingSerializer(serializers.ModelSerializer):
     def get_kind_label(self, obj):
         payment = getattr(obj, 'payable_payment', None)
         if payment:
+            if not payment.installment.plan.purchase_id:
+                return 'Estorno de despesa' if payment.reversal_of_id else 'Pagamento de despesa'
             return 'Estorno de pagamento a fornecedor' if payment.reversal_of_id else 'Pagamento a fornecedor'
         return obj.get_kind_display()
 

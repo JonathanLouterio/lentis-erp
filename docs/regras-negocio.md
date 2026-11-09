@@ -265,6 +265,15 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Reenvios preservam o UUID e os mesmos dados, autor, unidade e alvo. Uma resposta perdida não duplica parcelas, pagamento, estorno ou movimento de caixa. Locks de plano/parcela e conta protegem pagamentos simultâneos contra baixa excessiva.
 - Plano, parcelas e pagamentos são imutáveis pelo fluxo de aplicação; exclusão física não é exposta. Administração oferece consulta somente leitura e filtrada por unidade. Não há geração retroativa automática, alteração de plano, cancelamento de título, juros, multas, descontos financeiros ou renegociação nesta etapa.
 
+## Despesas operacionais da unidade
+
+- Em **Gestão → Contas a pagar → Nova despesa**, registre transporte/Uber, aluguel, água, energia, internet/telefone, financiamento, boleto de fornecedor ou outras despesas. Informe categoria, descrição, valor total e vencimento. Favorecido e referência são opcionais.
+- O lançamento gera um título independente de compra, com 1 a 12 parcelas mensais, sem mover estoque, caixa ou banco. Para um boleto de uma compra que já gerou título, use o título da compra para evitar lançar a mesma obrigação duas vezes.
+- A lista permite filtrar por origem e categoria. A baixa, inclusive parcial, e o estorno usam as mesmas contas, regras de caixa e histórico dos títulos de compras. A baixa registra um pagamento que já ocorreu; não paga o boleto no banco.
+- Cancelar uma despesa exige justificativa e permissão própria. Se houver pagamentos ativos, estorne-os antes. Canceladas permanecem consultáveis, saem dos saldos a pagar e preservam pagamentos e estornos nos movimentos.
+- **Lançar despesa operacional** e **Cancelar despesa operacional** exigem consulta de contas a pagar e vínculo com a unidade. São independentes dos direitos de compras. O lançamento não concede direito a pagar ou estornar.
+- Contas a pagar e Movimentações registradas incluem despesas. Contas mensais de valor variável são lançadas conforme chegam; o plano parcelado não cria recorrências automáticas.
+
 ## Relatórios gerenciais
 
 - Consultas e exportações são somente leitura e usam a unidade selecionada, o vínculo ativo e permissões explícitas. O indicador staff não libera relatórios. Nenhuma ação gera, recebe, paga, estorna ou altera estoque.

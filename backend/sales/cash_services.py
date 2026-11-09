@@ -145,7 +145,7 @@ def post_payable_cash(*, user, store, account, method, amount, reason, request_i
         raise ValidationError('Selecione uma conta ativa de caixa físico para dinheiro.')
     session = CashSession.objects.select_for_update(of=('self',)).filter(account=account, closed_at__isnull=True).first()
     if session is None:
-        raise ValidationError('Abra o caixa antes de registrar pagamento ou estorno a fornecedor em dinheiro.')
+        raise ValidationError('Abra o caixa antes de registrar pagamento ou estorno em dinheiro.')
     if not can_operate(user, session):
         raise PermissionDenied('Somente o responsável ou uma pessoa com permissão de caixa pode movimentar dinheiro.')
     if session.expected_cash - amount < 0:

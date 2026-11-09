@@ -33,11 +33,11 @@ from .models import PayablePlan, PayablePayment
 
 @admin.register(PayablePlan)
 class PayablePlanAdmin(PurchaseReadPermission, admin.ModelAdmin):
-    list_display = ('id', 'purchase', 'total', 'installment_count', 'created_by', 'created_at')
+    list_display = ('id', 'purchase', 'expense_description', 'total', 'installment_count', 'created_by', 'created_at')
     readonly_fields = tuple(field.name for field in PayablePlan._meta.fields)
     actions = None
     def get_queryset(self, request):
-        return super().get_queryset(request).filter(purchase__store__in=get_accessible_stores(request.user))
+        return super().get_queryset(request).filter(PayablePlan.for_stores(get_accessible_stores(request.user)))
     def has_add_permission(self, request): return False
     def has_change_permission(self, request, obj=None): return False
     def has_delete_permission(self, request, obj=None): return False
@@ -49,7 +49,7 @@ class PayablePaymentAdmin(PurchaseReadPermission, admin.ModelAdmin):
     readonly_fields = tuple(field.name for field in PayablePayment._meta.fields)
     actions = None
     def get_queryset(self, request):
-        return super().get_queryset(request).filter(installment__plan__purchase__store__in=get_accessible_stores(request.user))
+        return super().get_queryset(request).filter(PayablePlan.for_stores(get_accessible_stores(request.user), 'installment__plan__'))
     def has_add_permission(self, request): return False
     def has_change_permission(self, request, obj=None): return False
     def has_delete_permission(self, request, obj=None): return False

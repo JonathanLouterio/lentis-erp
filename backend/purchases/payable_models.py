@@ -1,4 +1,4 @@
-"""Títulos de compras e lançamentos imutáveis; escritas pelo serviço transacional."""
+"""Títulos de compras e despesas e lançamentos imutáveis; escritas pelo serviço transacional."""
 from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -20,7 +20,22 @@ class PayableRecord(models.Model):
 
 
 class PayablePlan(PayableRecord):
-    purchase = models.OneToOneField('purchases.Purchase', on_delete=models.PROTECT, related_name='payable_plan')
+    class ExpenseCategory(models.TextChoices):
+        TRANSPORT = 'transport', 'Transporte / Uber'
+        RENT = 'rent', 'Aluguel'
+        WATER = 'water', 'Água'
+        ELECTRICITY = 'electricity', 'Energia elétrica'
+        INTERNET = 'internet', 'Internet / telefone'
+        FINANCING = 'financing', 'Financiamento'
+        SUPPLIER_BILL = 'supplier_bill', 'Boleto de fornecedor'
+        OTHER = 'other', 'Outras despesas'
+
+    purchase = models.OneToOneField('purchases.Purchase', on_delete=models.PROTECT, related_name='payable_plan', null=True, blank=True)
+    expense_store = models.ForeignKey('organizations.Store', on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    expense_category = models.CharField(max_length=20, choices=ExpenseCategory.choices, blank=True, default='')
+    expense_description = models.CharField(max_length=160, blank=True, default='')
+    expense_payee = models.CharField(max_length=140, blank=True, default='')
+    expense_reference = models.CharField(max_length=120, blank=True, default='')
     total = models.DecimalField(max_digits=18, decimal_places=2)
     installment_count = models.PositiveSmallIntegerField()
     first_due_date = models.DateField()
@@ -32,21 +47,54 @@ class PayablePlan(PayableRecord):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Conta a pagar da compra'
-        verbose_name_plural = 'Contas a pagar das compras'
+        verbose_name = 'Conta a pagar'
+        verbose_name_plural = 'Contas a pagar'
         ordering = ['-pk']
-        permissions = [('pay_payable', 'Registrar pagamento de conta a pagar'), ('reverse_payable', 'Estornar pagamento de conta a pagar')]
+        permissions = [('pay_payable', 'Registrar pagamento de conta a pagar'), ('reverse_payable', 'Estornar pagamento de conta a pagar'), ('add_operating_expense', 'Lançar despesa operacional'), ('cancel_operating_expense', 'Cancelar despesa operacional')]
         constraints = [
+            models.CheckConstraint(condition=(
+                models.Q(purchase__isnull=False, expense_store__isnull=True, expense_category='', expense_description='', expense_payee='', expense_reference='') |
+                (models.Q(purchase__isnull=True, expense_store__isnull=False) & ~models.Q(expense_category='') & ~models.Q(expense_description=''))
+            ), name='payable_plan_single_source'),
             models.CheckConstraint(condition=models.Q(total__gt=0, installment_count__gte=1, installment_count__lte=12), name='payable_plan_values_valid'),
             models.CheckConstraint(condition=(models.Q(interval_unit='months', interval_count__gte=1, interval_count__lte=12) | models.Q(interval_unit='days', interval_count__gte=1, interval_count__lte=365)), name='payable_plan_interval_valid'),
         ]
 
+    @classmethod
+    def for_stores(cls, stores, prefix=''):
+        return models.Q(**{f'{prefix}purchase__store__in': stores}) | models.Q(**{f'{prefix}expense_store__in': stores})
+
+    @property
+    def store_id(self):
+        return self.expense_store_id if self.expense_store_id else self.purchase.store_id
+
+    @property
+    def document_label(self):
+        return f'Compra #{self.purchase_id}' if self.purchase_id else f'Despesa #{self.pk}'
+
+    @property
+    def party_name(self):
+        if self.purchase_id:
+            return self.purchase.supplier_snapshot.get('name') or self.purchase.supplier.name
+        return self.expense_payee or self.expense_description
+
     def clean(self):
-        if self.purchase.status != 'received' or self.total != self.purchase.total:
+        if self.purchase_id and (self.purchase.status != 'received' or self.total != self.purchase.total):
             raise ValidationError('Gere o título com o total de uma compra recebida.')
+        if not self.purchase_id and (not self.expense_store_id or not self.expense_description.strip()):
+            raise ValidationError('Informe a unidade e a descrição da despesa.')
 
     def __str__(self):
-        return f'Contas a pagar · compra #{self.purchase_id}'
+        return self.document_label
+
+
+class ExpenseCancellation(PayableRecord):
+    plan = models.OneToOneField(PayablePlan, on_delete=models.PROTECT, related_name='cancellation')
+    request_id = models.UUIDField(unique=True)
+    digest = models.CharField(max_length=64)
+    reason = models.CharField(max_length=255)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class PayableInstallment(PayableRecord):
@@ -88,13 +136,13 @@ class PayablePayment(PayableRecord):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Pagamento a fornecedor'
-        verbose_name_plural = 'Pagamentos a fornecedores'
+        verbose_name = 'Pagamento de conta a pagar'
+        verbose_name_plural = 'Pagamentos de contas a pagar'
         ordering = ['-pk']
         constraints = [models.CheckConstraint(condition=(models.Q(amount__gt=0, reversal_of__isnull=True) | models.Q(amount__lt=0, reversal_of__isnull=False)), name='payable_payment_sign_valid')]
 
     def clean(self):
-        store_id = self.installment.plan.purchase.store_id
+        store_id = self.installment.plan.store_id
         if self.account.store_id != store_id or self.method.store_id != store_id:
             raise ValidationError('A conta e a forma devem pertencer à unidade do título.')
         if not self.reason.strip():
