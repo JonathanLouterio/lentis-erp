@@ -97,10 +97,10 @@ class QuotePermissionTests(TestCase):
         self.assertEqual(self.action('reject',reason='Teste').status_code,403)
         self.assertEqual(self.action('convert').status_code,403);self.no_effects()
 
-    def test_reject_requires_specific_right_and_reason(self):
+    def test_reject_requires_specific_right_and_category(self):
         self.grant('reject')
         self.assertEqual(self.action('reject').status_code,400)
-        r=self.action('reject',reason='Cliente desistiu');self.assertEqual(r.status_code,200)
+        r=self.action('reject',loss_category='price',reason='Cliente desistiu');self.assertEqual(r.status_code,200)
         self.assertTrue(Quote.objects.filter(pk=self.quote.pk).exists())
         self.assertEqual(QuoteEvent.objects.get().reason,'Cliente desistiu')
         self.assertEqual(self.client.delete(self.url(f'{self.quote.pk}/')).status_code,405)
@@ -179,7 +179,7 @@ class QuotePermissionTests(TestCase):
         self.state('sent');sent=self.client.get(self.url(f'{self.quote.pk}/')).data['actions']
         self.assertTrue(sent['accept']);self.assertFalse(sent['send'])
         self.state('accepted');self.assertTrue(self.client.get(self.url(f'{self.quote.pk}/')).data['actions']['convert'])
-        self.action('reject',reason='Recusado');r=self.client.get(self.url(f'{self.quote.pk}/'))
+        self.action('reject',loss_category='price');r=self.client.get(self.url(f'{self.quote.pk}/'))
         for key in ['change','send','accept','reject','convert']:self.assertFalse(r.data['actions'][key])
         self.assertTrue(r.data['actions']['print'])
         self.assertEqual(self.write(self.payload(expected_version=r.data['version']),self.quote).status_code,400)
@@ -373,3 +373,58 @@ class QuotePermissionTests(TestCase):
         self.assertIsNone(accepted.data['next_contact_on'])
         self.assertFalse(accepted.data['actions']['followup'])
         self.assertEqual(self.client.get(self.url() + '&followup=due').data['count'], 0)
+
+    def test_loss_requires_known_category_and_other_requires_description(self):
+        self.grant('view', 'reject')
+        self.state('sent')
+        for fields in ({'reason':'Descrição sem categoria'}, {'loss_category':'inventado'}, {'loss_category':'other','reason':'   '}):
+            self.assertEqual(self.action('reject', **fields).status_code, 400)
+        self.assertFalse(self.quote.events.exists())
+        response = self.action('reject', loss_category='other', reason='Cliente adiou a compra')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['loss_category'], 'other')
+        self.assertEqual(response.data['events'][-1]['reason'], 'Cliente adiou a compra')
+        self.assertEqual(response.data['events'][-1]['loss_category'], 'other')
+        self.assertEqual(response.data['status'], 'rejected')
+        self.assertEqual(self.action('reject', loss_category='price').status_code, 400)
+        self.no_effects()
+
+    def test_loss_summary_covers_all_pages_categories_and_only_selected_store(self):
+        self.grant('view', 'reject')
+        self.assertEqual(self.action('reject', loss_category='price').status_code, 200)
+        deadline = Quote.objects.create(store=self.store, customer=self.customer, created_by=self.user, valid_until=business_today())
+        self.assertEqual(self.action('reject', deadline, loss_category='deadline').status_code, 200)
+        legacy = Quote.objects.create(store=self.store, created_by=self.user, valid_until=business_today(), status='rejected')
+        QuoteEvent.objects.create(quote=legacy, action='reject', reason='Registro antigo', created_by=self.user, version=1)
+        foreign = Quote.objects.create(store=self.other, created_by=self.user, valid_until=business_today(), status='rejected')
+        QuoteEvent.objects.create(quote=foreign, action='reject', loss_category='price', created_by=self.user, version=1)
+        url = self.url() + '&status=rejected&page_size=1'
+        all_losses = self.client.get(url)
+        self.assertEqual(all_losses.status_code, 200, all_losses.data)
+        self.assertEqual(all_losses.data['count'], 3)
+        self.assertEqual(len(all_losses.data['results']), 1)
+        counts = {item['category']:item['count'] for item in all_losses.data['loss_summary']}
+        self.assertEqual(counts, {'price':1, 'deadline':1, 'no_response':0, 'other':0, '':1})
+        for category, quote in [('price', self.quote), ('deadline', deadline), ('uncategorized', legacy)]:
+            filtered = self.client.get(url + '&loss=' + category).data
+            self.assertEqual([item['id'] for item in filtered['results']], [quote.pk])
+            self.assertEqual(filtered['loss_summary'], all_losses.data['loss_summary'])
+        detail = self.client.get(self.url(f'{legacy.pk}/')).data
+        self.assertEqual(detail['loss_category'], '')
+        self.assertEqual(detail['events'][-1]['reason'], 'Registro antigo')
+        self.assertEqual(self.client.get(self.url() + '&loss=price').status_code, 400)
+        self.assertEqual(self.client.get(url + '&loss=invalid').status_code, 400)
+
+    def test_no_response_closes_followup_and_replay_does_not_duplicate_loss(self):
+        self.grant('view', 'reject', 'followup')
+        self.state('sent')
+        scheduled = self.action('followup', kind='schedule', next_contact_on=str(business_today()))
+        self.assertEqual(scheduled.status_code, 200, scheduled.data)
+        payload = {'request_id':str(uuid.uuid4()), 'expected_version':scheduled.data['version'], 'loss_category':'no_response'}
+        url = self.url(f'{self.quote.pk}/reject/')
+        first = self.client.post(url, payload, format='json')
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertIsNone(first.data['next_contact_on'])
+        self.assertEqual(self.client.get(self.url()+'&followup=due').data['count'], 0)
+        self.assertEqual(self.client.post(url, payload, format='json').status_code, 200)
+        self.assertEqual(self.quote.events.filter(action='reject').count(), 1)

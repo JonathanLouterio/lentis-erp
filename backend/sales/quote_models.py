@@ -122,12 +122,20 @@ class QuoteItem(models.Model):
             return super().delete(*args, **kwargs)
 
 
+class QuoteLossCategory(models.TextChoices):
+    PRICE = 'price', 'Preço'
+    DEADLINE = 'deadline', 'Prazo'
+    NO_RESPONSE = 'no_response', 'Sem resposta'
+    OTHER = 'other', 'Outro'
+
+
 class QuoteEvent(ImmutableRecord):
     quote = models.ForeignKey(Quote, on_delete=models.PROTECT, related_name='events')
     action = models.CharField(max_length=20)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     reason = models.CharField(max_length=255, blank=True)
     next_contact_on = models.DateField(null=True, blank=True, editable=False)
+    loss_category = models.CharField(max_length=12, choices=QuoteLossCategory.choices, blank=True, default='', editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     version = models.PositiveIntegerField()
     class Meta:

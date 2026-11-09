@@ -5,22 +5,29 @@ from .quote_permissions import QuoteActionPermission
 import hashlib
 import json
 from django.shortcuts import get_object_or_404
-from django.db.models import OuterRef, Subquery
+from django.db.models import Count, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from .models import Quote, QuoteEvent
-from .quote_models import FOLLOWUP_EVENTS, quote_today
-from .quote_serializers import QuoteSerializer, QuoteWriteSerializer, QuoteActionSerializer, QuoteFollowupSerializer
+from .quote_models import FOLLOWUP_EVENTS, QuoteLossCategory, quote_today
+from .quote_serializers import (
+    QuoteActionSerializer, QuoteFollowupSerializer, QuoteRejectSerializer, QuoteSerializer, QuoteWriteSerializer,
+)
 from .quote_services import operate_quote
 from .views import SalesBaseView, SalesPagination, model_errors
 
 
 def quote_queryset(store):
     schedule = QuoteEvent.objects.filter(quote_id=OuterRef('pk'), action__in=FOLLOWUP_EVENTS).order_by('-version','-pk')
+    loss = QuoteEvent.objects.filter(quote_id=OuterRef('pk'), action='reject').order_by('-version','-pk')
     return Quote.objects.filter(store=store).select_related('customer','created_by').prefetch_related(
         'items','events__created_by',
-    ).annotate(next_contact_on=Subquery(schedule.values('next_contact_on')[:1]))
+    ).annotate(
+        next_contact_on=Subquery(schedule.values('next_contact_on')[:1]),
+        loss_category=Coalesce(Subquery(loss.values('loss_category')[:1]), Value('')),
+    )
 
 
 @method_decorator(never_cache,name="dispatch")
@@ -33,7 +40,7 @@ class QuoteBaseView(SalesBaseView):
         request_id = serializers.UUIDField().run_validation(request.data.get('request_id'))
         digest = hashlib.sha256(json.dumps({'action': action, 'quote_id': quote_id, 'body': request.data}, sort_keys=True, ensure_ascii=False, separators=(',',':')).encode('utf-8')).hexdigest()
         def validated():
-            cls = {'save': QuoteWriteSerializer, 'followup': QuoteFollowupSerializer}.get(action, QuoteActionSerializer)
+            cls = {'save': QuoteWriteSerializer, 'followup': QuoteFollowupSerializer, 'reject': QuoteRejectSerializer}.get(action, QuoteActionSerializer)
             return self.write_serializer(cls, request.data, store).validated_data
         with model_errors():
             quote = operate_quote(user=request.user, store=store, quote_id=quote_id, action=action, request_id=request_id, digest=digest, validated_values=validated)
@@ -58,9 +65,23 @@ class QuotesView(QuoteBaseView):
                                        next_contact_on__lte=today).order_by('next_contact_on','pk')
         elif followup is not None:
             raise ValidationError({'followup': 'Filtro de retorno inválido.'})
+        loss_filter = request.query_params.get('loss')
+        if loss_filter is not None and (state != Quote.Status.REJECTED or followup is not None
+                                        or loss_filter not in ('uncategorized', *QuoteLossCategory.values)):
+            raise ValidationError({'loss': 'Selecione uma categoria válida na lista de orçamentos recusados.'})
+        summary = None
+        if state == Quote.Status.REJECTED and followup is None:
+            counts = {row['loss_category']: row['count'] for row in queryset.order_by().values('loss_category').annotate(count=Count('pk'))}
+            summary = [{'category': category, 'count': counts.get(category, 0)}
+                       for category in (*QuoteLossCategory.values, '')]
+            if loss_filter is not None:
+                queryset = queryset.filter(loss_category='' if loss_filter == 'uncategorized' else loss_filter)
         pagination = SalesPagination()
         rows = pagination.paginate_queryset(queryset, request, view=self)
-        return pagination.get_paginated_response(QuoteSerializer(rows, many=True,context={"request":request}).data)
+        response = pagination.get_paginated_response(QuoteSerializer(rows, many=True, context={"request":request}).data)
+        if summary is not None:
+            response.data['loss_summary'] = summary
+        return response
     def post(self, request): return self.operate(request, 'save')
 
 

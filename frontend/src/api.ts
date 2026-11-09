@@ -594,6 +594,9 @@ export function getDashboard(storeId: number, period: DashboardPeriod): Promise<
 }
 
 export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted'
+export type QuoteLossCategory = 'price'|'deadline'|'no_response'|'other'
+export type QuoteLossFilter = QuoteLossCategory|'uncategorized'
+export type QuotePage = CashPage<Quote> & {loss_summary?:{category:QuoteLossCategory|'';count:number}[]}
 export type Quote = {
   actions: QuoteActions;
   id: number; store: number; customer: number | null; customer_name: string | null; creator_username: string
@@ -602,17 +605,20 @@ export type Quote = {
   subtotal: string; total: string
   last_contact: { created_at:string; creator_username:string } | null
   next_contact_on: string | null
+  loss_category: QuoteLossCategory | ''
   items: { id: number; product: number; product_name: string; product_code: string; quantity: string; unit_price: string; discount_amount: string; subtotal: string; total: string }[]
-  events: { id: number; action: string; creator_username: string; reason: string; created_at: string; version: number; next_contact_on:string|null }[]
+  events: { id: number; action: string; creator_username: string; reason: string; created_at: string; version: number; next_contact_on:string|null; loss_category:QuoteLossCategory|'' }[]
 }
 export type QuotePayload = { request_id: string; expected_version?: number; customer_id: number | null; valid_until: string; notes: string; discount_amount: string; items: SaleItemPayload[] }
 export type QuoteAttempt =
   | { action: 'save'; quoteId: number | null; payload: QuotePayload }
-  | { action: 'send' | 'accept' | 'reject' | 'convert'; quoteId: number; payload: { request_id: string; expected_version: number; reason: string } }
+  | { action: 'send' | 'accept' | 'convert'; quoteId: number; payload: { request_id: string; expected_version: number; reason: string } }
+  | { action: 'reject'; quoteId: number; payload: {request_id:string;expected_version:number;loss_category:QuoteLossCategory;reason:string} }
   | { action: 'followup'; quoteId: number; payload: { request_id:string; expected_version:number; kind:'contact'|'schedule'; next_contact_on:string|null; reason:string } }
-export function getQuotes(storeId: number, page = 1, status = 'all', dueOnly = false): Promise<CashPage<Quote>> {
+export function getQuotes(storeId: number, page = 1, status = 'all', dueOnly = false, loss?:QuoteLossFilter): Promise<QuotePage> {
   const query = new URLSearchParams({store_id:String(storeId),page:String(page),status})
   if(dueOnly)query.set('followup','due')
+  if(loss)query.set('loss',loss)
   return request(`/api/me/quotes/?${query}`)
 }
 export function getQuote(storeId: number, id: number): Promise<Quote> { return request(`/api/me/quotes/${id}/?store_id=${storeId}`) }

@@ -7,3 +7,11 @@
 .erp-quote-followup dt { color:var(--erp-muted); font-size:.8125rem; }
 .erp-quote-followup dd { margin:.25rem 0 0; font-weight:600; overflow-wrap:anywhere; }
 .erp-quote-followup fieldset { display:grid; gap:.75rem; border:0; padding:0; margin:0; min-width:0; }
+
+.erp-quote-loss-summary { margin-block:1rem; padding:.875rem; border:1px solid var(--erp-border); border-radius:.75rem; }
+.erp-quote-loss-summary h2 { margin:0; font-size:1rem; }
+.erp-quote-loss-summary p { margin:.4rem 0 .75rem; color:var(--erp-muted); }
+.erp-quote-loss-filters { display:flex; flex-wrap:wrap; gap:.5rem; }
+.erp-quote-loss-filters button[aria-pressed='true'] { border-color:var(--lentis-purple); outline:1px solid var(--lentis-purple); }
+.erp-quote-loss-filters strong { margin-left:.25rem; }
+.erp-quote-loss-form { display:grid; gap:.7rem; min-width:0; margin:0; padding:.7rem; border:1px solid var(--erp-border); border-radius:.65rem; }

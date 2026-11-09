@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from accounts.selectors import get_accessible_stores
 from .quote_permissions import require_quote_action
-from .quote_models import quote_today
+from .quote_models import QuoteLossCategory, quote_today
 from .models import Quote, QuoteItem, QuoteEvent, QuoteOperation, Sale, SaleItem
 
 
@@ -32,6 +32,7 @@ def operate_quote(*, user, store, quote_id, action, request_id, digest, validate
         if quote is not None and version != quote.version:
             raise ValidationError('Este orçamento foi atualizado por outra operação. Reabra-o antes de continuar.')
         next_contact_on = None
+        loss_category = ''
         if action == 'save':
             if quote and quote.status in ('converted', 'rejected'):
                 raise ValidationError('Um orçamento convertido ou recusado não pode ser substituído.')
@@ -62,7 +63,11 @@ def operate_quote(*, user, store, quote_id, action, request_id, digest, validate
                 event = values['kind']
             elif action == 'reject':
                 if quote.status not in ('draft','sent','accepted'): raise ValidationError('Esta proposta não pode ser recusada nesta situação.')
-                if not reason: raise ValidationError({'reason': 'Informe o motivo da recusa.'})
+                loss_category = values.get('loss_category')
+                if loss_category not in QuoteLossCategory.values:
+                    raise ValidationError({'loss_category': 'Selecione uma categoria de perda.'})
+                if loss_category == QuoteLossCategory.OTHER and not reason:
+                    raise ValidationError({'reason': 'Descreva o motivo ao selecionar Outro.'})
                 quote.status = 'rejected'
             elif action in ('send','accept','convert'):
                 if quote.is_expired: raise ValidationError('O orçamento venceu. Edite a validade e confirme a proposta novamente.')
@@ -86,6 +91,6 @@ def operate_quote(*, user, store, quote_id, action, request_id, digest, validate
             if action != 'followup':
                 event = action
         QuoteEvent.objects.create(quote=quote, action=event, created_by=user, reason=reason, version=quote.version,
-                                  next_contact_on=next_contact_on)
+                                  next_contact_on=next_contact_on, loss_category=loss_category)
         QuoteOperation.objects.create(request_id=request_id, quote=quote, created_by=user, digest=digest)
         return quote

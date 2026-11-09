@@ -49,7 +49,7 @@ class QuotePrintTests(TestCase):
     def test_expired_and_recused_labels_are_explicit(self):
         quote = self.write(self.payload(valid_until=str(timezone.localdate()-timedelta(days=2))))
         self.assertIn('VALIDADE VENCIDA',self.print_quote(quote).content.decode())
-        rejected = self.action(quote,'reject',reason='Sem interesse')
+        rejected = self.action(quote,'reject',loss_category='other',reason='Sem interesse')
         self.assertIn('ORÇAMENTO RECUSADO',self.print_quote(rejected).content.decode())
 
     def test_converted_document_does_not_claim_payment_received(self):
