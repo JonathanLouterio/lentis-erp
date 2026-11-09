@@ -7,6 +7,7 @@ import { brl, dateTime, decimal, decimalText, displayDate, failure, money, payme
 import SalePrescriptionPanel from './SalePrescriptionPanel'
 import type { SalePrescriptionSelection } from '../api'
 import FormDialog from './FormDialog'
+import CompactRecordList from './CompactRecordList'
 import './CommercialWindows.css'
 import PaymentPlanBuilder from './PaymentPlanBuilder'
 import type { PaymentPlanRow } from './PaymentPlanBuilder'
@@ -20,6 +21,13 @@ const emptyOptions: SalePaymentOptions = { methods: [], accounts: [], can_receiv
 const emptyPage: SalesPage = { count: 0, next: null, previous: null, results: [] }
 const immediate = ['cash', 'pix', 'transfer']
 const credit = ['credit', 'store_credit', 'boleto']
+
+function hasPendingDiscount(sale:Sale) {
+  return sale.discount_requests?.some(request=>request.state==='pending' && request.current)
+}
+function SaleListStatus({sale}:{sale:Sale}) {
+  return <span className={`erp-sale-badge is-${sale.status}`}>{sale.status_label}</span>
+}
 
 export default function Sales({ startNew = false, initialSaleId, store, userId, onSavingChange, onDirtyChange, onServiceOrder }: Props) {
   const completionHintId = useId()
@@ -328,7 +336,22 @@ export default function Sales({ startNew = false, initialSaleId, store, userId, 
     {catalogError && <div className="erp-card"><p className="erp-alert">{catalogError}</p><button className="erp-secondary-button" disabled={blocked} onClick={() => setReload((value) => value + 1)}>Recarregar cadastros</button></div>}
     {!access.view ? <div className="erp-card"><p>Consulta de vendas restrita. Use Nova venda se autorizado.</p></div> : <div className="erp-card erp-sales-list">
       <div className="erp-sales-toolbar"><label>Situação<select aria-label="Situação" value={status} disabled={blocked} onChange={(event) => { setStatus(event.target.value as SaleStatus | ''); setPage(1) }}><option value="">Todas</option><option value="draft">Rascunhos</option><option value="completed">Finalizadas</option><option value="cancelled">Canceladas</option></select></label><span>{sales.count} vendas</span><button className="erp-secondary-button" disabled={blocked || loading} onClick={() => setReload((value) => value + 1)}>Atualizar lista</button></div>
-      {loading ? <p role="status">Carregando vendas…</p> : !sales.results.length ? <p>Nenhuma venda encontrada.</p> : <div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Venda</th><th>Data</th><th>Cliente</th><th>Situação</th><th>Total</th><th>Ação</th></tr></thead><tbody>{sales.results.map((sale) => <tr key={sale.id}><td>#{sale.id}</td><td>{dateTime.format(new Date(sale.created_at))}</td><td>{sale.customer_name || 'Venda balcão'}</td><td><span className={`erp-sale-badge is-${sale.status}`}>{sale.status_label}</span>{sale.discount_requests?.some(request => request.state === "pending" && request.current) && <small className="erp-sales-item-name">Desconto aguardando autorização</small>}</td><td>{money.format(Number(sale.total))}</td><td><button className="erp-table-button" disabled={blocked} onClick={() => void openSale(sale.id)}>Abrir venda {sale.id}</button></td></tr>)}</tbody></table></div>}
+      {loading ? <p role="status">Carregando vendas…</p> : !sales.results.length ? <p>Nenhuma venda encontrada.</p> : <>
+        <div className="erp-customer-table-wrap erp-record-list-desktop"><table className="erp-customer-table">
+          <thead><tr><th>Venda</th><th>Data</th><th>Cliente</th><th>Situação</th><th>Total</th><th>Ação</th></tr></thead>
+          <tbody>{sales.results.map(sale=><tr key={sale.id}>
+            <td>#{sale.id}</td><td>{dateTime.format(new Date(sale.created_at))}</td><td>{sale.customer_name || 'Venda balcão'}</td>
+            <td><SaleListStatus sale={sale}/>{hasPendingDiscount(sale)&&<small className="erp-sales-item-name">Desconto aguardando autorização</small>}</td>
+            <td>{money.format(Number(sale.total))}</td><td><button type="button" className="erp-table-button" disabled={blocked} onClick={()=>void openSale(sale.id)}>Abrir venda {sale.id}</button></td>
+          </tr>)}</tbody>
+        </table></div>
+        <CompactRecordList label="Vendas" recordName="Venda" action="Abrir venda" disabled={blocked} onOpen={id=>void openSale(id)}
+          records={sales.results.map(sale=>({
+            id:sale.id, customer:sale.customer_name || 'Venda balcão', status:<SaleListStatus sale={sale}/>,
+            fields:[{label:'Total',value:money.format(Number(sale.total))}],
+            note:hasPendingDiscount(sale)?'Desconto aguardando autorização':undefined,
+          }))}/>
+      </>}
       <div className="erp-sales-pagination"><button className="erp-secondary-button" disabled={blocked || loading || !sales.previous} onClick={() => setPage((value) => value - 1)}>Anterior</button><span>Página {page}</span><button className="erp-secondary-button" disabled={blocked || loading || !sales.next} onClick={() => setPage((value) => value + 1)}>Próxima</button></div>
     </div>}
     {editor && <FormDialog wide notice={error || success || catalogError} sectionLabel="COMERCIAL · VENDAS"

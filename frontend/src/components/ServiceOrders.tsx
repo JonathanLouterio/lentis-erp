@@ -6,6 +6,7 @@ import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPa
 import { dateTime, displayDate, failure, today } from './saleMoney'
 import './ServiceOrders.css'
 import FormDialog from './FormDialog'
+import CompactRecordList from './CompactRecordList'
 import ServiceOrderPickup from './ServiceOrderPickup'
 import './OperationsWindows.css'
 import { useOrderAccess } from '../hooks/useOrderAccess'
@@ -24,6 +25,17 @@ const boardCards:{key:keyof ServiceOrderSummary;title:string;description:string;
 ]
 const blank=()=>({promised_on:today(),laboratory:'',frame_description:'',lens_description:'',notes:''})
 const empty:ServiceOrderPage={count:0,next:null,previous:null,results:[],can_create:false}
+
+function OrderBadges({o}:{o:ServiceOrder}){
+  return <>
+    <span className={`os-stage is-${o.status}`}>{o.status_label}</span>
+    {o.overdue&&<span className="os-stage is-overdue">Atrasada</span>}
+    {o.status==='ready'&&o.sale_status==='completed'&&<span className={`os-stage is-${o.pickup_notified?'ready':'awaiting_pickup_notice'}`}>
+      {o.pickup_reminded?'Lembrete registrado':o.pickup_notified?'Cliente avisado':'Aguardando aviso'}
+    </span>}
+    {o.pickup_reminder_due&&<span className="os-stage is-pickup_reminder_due">Lembrete pendente</span>}
+  </>
+}
 
 export default function ServiceOrders({store,userId,initialSaleId,initialQueue,onSavingChange,onDirtyChange}:Props){
   const storageKey=`lentis.os.${userId}.${store.id}`
@@ -105,23 +117,24 @@ export default function ServiceOrders({store,userId,initialSaleId,initialQueue,o
     </div>
     <div className="erp-card os-list" id="os-queue" aria-busy={loading}>
       <h2>Fila de atendimento <small>({result.count})</small></h2>
-      {loading?<p role="status">Carregando…</p>:result.results.length===0?<p>Nenhuma OS neste filtro.</p>:result.results.map(o=>
-        <button type="button" className={`os-row${selected?.id===o.id?' is-selected':''}`} disabled={locked} key={o.id} onClick={()=>void open(o.id)}>
-          <span className="os-row-info">
-            <strong>OS #{o.id} · {o.customer_name}</strong>
-            <small>Venda #{o.sale_id} · Previsão {displayDate(o.promised_on)}</small>
-            {o.laboratory&&<small>Laboratório: {o.laboratory}</small>}
-          </span>
-          <span className="os-row-badges">
-            <span className={`os-stage is-${o.status}`}>{o.status_label}</span>
-            {o.overdue&&<span className="os-stage is-overdue">Atrasada</span>}
-            {o.status==='ready'&&o.sale_status==='completed'&&<span className={`os-stage is-${o.pickup_notified?'ready':'awaiting_pickup_notice'}`}>
-              {o.pickup_reminded?'Lembrete registrado':o.pickup_notified?'Cliente avisado':'Aguardando aviso'}
-            </span>}
-            {o.pickup_reminder_due&&<span className="os-stage is-pickup_reminder_due">Lembrete pendente</span>}
-          </span>
-          {o.sale_status==='cancelled'&&<small className="os-late os-row-alert">Venda cancelada: confira e cancele a OS.</small>}
-        </button>)}
+      {loading?<p role="status">Carregando…</p>:!result.results.length?<p>Nenhuma OS neste filtro.</p>:<>
+        <div className="erp-record-list-desktop">{result.results.map(o=>
+          <button type="button" className={`os-row${selected?.id===o.id?' is-selected':''}`} disabled={locked} key={o.id} onClick={()=>void open(o.id)}>
+            <span className="os-row-info">
+              <strong>OS #{o.id} · {o.customer_name}</strong>
+              <small>Venda #{o.sale_id} · Previsão {displayDate(o.promised_on)}</small>
+              {o.laboratory&&<small>Laboratório: {o.laboratory}</small>}
+            </span>
+            <span className="os-row-badges"><OrderBadges o={o}/></span>
+            {o.sale_status==='cancelled'&&<small className="os-late os-row-alert">Venda cancelada: confira e cancele a OS.</small>}
+          </button>)}</div>
+        <CompactRecordList label="Ordens de serviço" recordName="OS" action="Abrir OS" disabled={locked}
+          selectedId={selected?.id} onOpen={id=>void open(id)} records={result.results.map(o=>({
+            id:o.id, customer:o.customer_name || 'Cliente não informado', status:<OrderBadges o={o}/>,
+            fields:[{label:'Previsão de entrega',value:displayDate(o.promised_on)}],
+            note:o.sale_status==='cancelled'?<span className="os-late">Venda cancelada: confira e cancele a OS.</span>:undefined,
+          }))}/>
+      </>}
       <div className="os-pagination"><button type="button" disabled={locked||loading||page===1} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={locked||loading||!result.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div>
     </div>
     {(creating || selected || pending) && <FormDialog wide

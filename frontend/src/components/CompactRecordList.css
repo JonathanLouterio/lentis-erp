@@ -1,0 +1,20 @@
+.erp-compact-record-list { display:none; }
+@media (max-width:800px) {
+  .erp-layout.erp-layout .erp-record-list-desktop { display:none; }
+  .erp-compact-record-list { display:grid; gap:.65rem; min-width:0; list-style:none; padding:0; margin:0; }
+  .erp-compact-record-list > li {
+    display:grid; min-width:0; gap:.65rem; padding:.8rem;
+    border:1px solid var(--erp-border); border-radius:.75rem; background:var(--erp-surface);
+  }
+  .erp-compact-record-list > li.is-selected { border-color:var(--lentis-purple, #7753b3); }
+  .erp-compact-record-heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:.4rem .8rem; }
+  .erp-compact-record-person { min-width:0; flex:1 1 9rem; }
+  .erp-compact-record-person > span { display:block; margin-bottom:.25rem; color:var(--erp-muted); font-size:.75rem; }
+  .erp-compact-record-person > strong { display:block; font-size:1rem; line-height:1.3; overflow-wrap:anywhere; }
+  .erp-compact-record-status { display:flex; flex-wrap:wrap; align-items:flex-start; gap:.3rem; min-width:0; max-width:100%; }
+  .erp-compact-record-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr)); gap:.4rem .6rem; margin:0; }
+  .erp-compact-record-fields dt,.erp-compact-record-note { color:var(--erp-muted); font-size:.8rem; line-height:1.35; }
+  .erp-compact-record-fields dd { margin:.2rem 0 0; font-size:.9rem; font-weight:650; overflow-wrap:anywhere; }
+  .erp-compact-record-note { overflow-wrap:anywhere; }
+  .erp-layout.erp-layout .erp-compact-record-action { width:100%; min-height:44px; }
+}

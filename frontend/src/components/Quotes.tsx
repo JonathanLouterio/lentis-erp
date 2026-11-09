@@ -1,4 +1,5 @@
 import FormDialog from './FormDialog'
+import CompactRecordList from './CompactRecordList'
 import './CommercialWindows.css'
 import { useQuoteAccess } from '../hooks/useQuoteAccess'
 import { useEffect, useState } from 'react'
@@ -170,7 +171,28 @@ export default function Quotes({ store, userId, initialDueOnly=false, onSavingCh
         })}
       </div>
     </section>}
-    {loading?<p role="status">Carregando orçamentos…</p>:!rows.results.length?<p>{dueOnly?'Nenhum retorno para hoje ou em atraso.':'Nenhum orçamento encontrado.'}</p>:<div className="erp-customer-table-wrap"><table className="erp-customer-table"><thead><tr><th>Orçamento</th><th>Cliente</th><th>Situação</th><th>Validade</th><th>Total</th><th>Ação</th></tr></thead><tbody>{rows.results.map(quote=><tr key={quote.id}><td>#{quote.id}</td><td>{quote.customer_name || 'Cliente não identificado'}{quote.next_contact_on&&<small className="erp-sales-item-name">Retorno: {displayDate(quote.next_contact_on)}</small>}</td><td>{quote.status_label}{quote.status==='rejected'&&<small className="erp-sales-item-name">{lossLabels[quote.loss_category]}</small>}{quote.is_expired && <small className="erp-sales-item-name">Validade vencida</small>}</td><td>{displayDate(quote.valid_until)}</td><td>{brl(decimal(quote.total) ?? 0n)}</td><td><button className="erp-table-button" disabled={blocked} onClick={()=>void open(quote.id)}>Abrir orçamento {quote.id}</button></td></tr>)}</tbody></table></div>}<div className="erp-sales-pagination"><button className="erp-secondary-button" disabled={blocked || !rows.previous} onClick={()=>setPage(value=>value-1)}>Anterior</button><span>Página {page} · {rows.count} orçamentos</span><button className="erp-secondary-button" disabled={blocked || !rows.next} onClick={()=>setPage(value=>value+1)}>Próxima</button></div></div>}
+    {loading?<p role="status">Carregando orçamentos…</p>:!rows.results.length?<p>{dueOnly?'Nenhum retorno para hoje ou em atraso.':'Nenhum orçamento encontrado.'}</p>:<>
+      <div className="erp-customer-table-wrap erp-record-list-desktop"><table className="erp-customer-table">
+        <thead><tr><th>Orçamento</th><th>Cliente</th><th>Situação</th><th>Validade</th><th>Total</th><th>Ação</th></tr></thead>
+        <tbody>{rows.results.map(quote=><tr key={quote.id}>
+          <td>#{quote.id}</td><td>{quote.customer_name || 'Cliente não identificado'}{quote.next_contact_on&&<small className="erp-sales-item-name">Retorno: {displayDate(quote.next_contact_on)}</small>}</td>
+          <td>{quote.status_label}{quote.status==='rejected'&&<small className="erp-sales-item-name">{lossLabels[quote.loss_category]}</small>}{quote.is_expired&&<small className="erp-sales-item-name">Validade vencida</small>}</td>
+          <td>{displayDate(quote.valid_until)}</td><td>{brl(decimal(quote.total) ?? 0n)}</td>
+          <td><button type="button" className="erp-table-button" disabled={blocked} onClick={()=>void open(quote.id)}>Abrir orçamento {quote.id}</button></td>
+        </tr>)}</tbody>
+      </table></div>
+      <CompactRecordList label="Orçamentos" recordName="Orçamento" action="Abrir orçamento" disabled={blocked} onOpen={id=>void open(id)}
+        records={rows.results.map(quote=>({
+          id:quote.id, customer:quote.customer_name || 'Cliente não identificado',
+          status:<span className={`erp-sale-badge is-${quote.status==='rejected'?'cancelled':['accepted','converted'].includes(quote.status)?'completed':'draft'}`}>{quote.status_label}</span>,
+          fields:[
+            {label:'Total',value:brl(decimal(quote.total) ?? 0n)}, {label:'Validade',value:displayDate(quote.valid_until)},
+            ...(quote.next_contact_on?[{label:'Próximo retorno',value:displayDate(quote.next_contact_on)}]:[]),
+          ],
+          note:quote.status==='rejected'?`Motivo: ${lossLabels[quote.loss_category]}`:quote.is_expired?'Validade vencida':undefined,
+        }))}/>
+    </>}
+    <div className="erp-sales-pagination"><button className="erp-secondary-button" disabled={blocked || !rows.previous} onClick={()=>setPage(value=>value-1)}>Anterior</button><span>Página {page} · {rows.count} orçamentos</span><button className="erp-secondary-button" disabled={blocked || !rows.next} onClick={()=>setPage(value=>value+1)}>Próxima</button></div></div>}
     {editor && <FormDialog wide notice={error || success || catalogError} sectionLabel="COMERCIAL · ORÇAMENTOS" title={selected?`Orçamento #${selected.id} · ${selected.status_label}`:'Novo orçamento'} subtitle={store.name} busy={busy || !!pending} dirty={unsaved} onClose={closeEditor} actions={<>{mayWrite && !closed && <button className="erp-action-button" disabled={blocked || followupOpen || rejecting || !valid || (!!selected && !dirty)} onClick={save}>{busy?'Salvando…':'Salvar orçamento'}</button>}{access?.send && selected?.actions?.send && <button className="erp-secondary-button" disabled={blocked || followupOpen || rejecting || dirty || !lines.length || expired} onClick={()=>transition('send')}>Preparar proposta</button>}{access?.accept && selected?.actions?.accept && <button className="erp-action-button" disabled={blocked || followupOpen || rejecting || dirty || expired} onClick={()=>transition('accept')}>Registrar aceite</button>}{access?.convert && selected?.actions?.convert && <button className="erp-action-button" disabled={blocked || followupOpen || rejecting || dirty || expired} onClick={()=>transition('convert')}>Converter em venda</button>}</>}>
     {success && <p className="erp-sales-success" role="status">{success}</p>}{error && <p className="erp-alert" role="alert">{error}</p>}
     {pending && <div className="erp-card" role="alert"><h2>Conferir o último envio</h2><p>Repita o mesmo envio para recuperar o resultado sem duplicar o orçamento ou a venda.</p><button className="erp-action-button" disabled={busy} onClick={()=>void persist(pending)}>Repetir envio com segurança</button></div>}
