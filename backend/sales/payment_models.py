@@ -193,10 +193,15 @@ class Receivable(ImmutableRecord):
         return self.entries.aggregate(value=models.Sum('amount'))['value'] or Decimal('0.00')
 
     @property
+    def card_fee_amount(self):
+        return self.entries.aggregate(value=models.Sum('card_fee'))['value'] or Decimal('0.00')
+
+    @property
     def remaining_amount(self):
         if self.payment.sale.status == 'cancelled':
             return Decimal('0.00')
-        return self.amount - self.paid_amount
+        settled = self.entries.aggregate(value=models.Sum(models.F('amount') + models.F('card_fee')))['value']
+        return self.amount - (settled or Decimal('0.00'))
 
     @property
     def status(self):
@@ -216,6 +221,7 @@ class FinancialEntry(ImmutableRecord):
     account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='entries', verbose_name='Conta')
     method = models.ForeignKey(PaymentMethod, on_delete=models.PROTECT, verbose_name='Forma de recebimento')
     amount = models.DecimalField('Valor lançado', max_digits=18, decimal_places=2)
+    card_fee = models.DecimalField('Taxa da operadora', max_digits=18, decimal_places=2, default=Decimal('0.00'))
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name='Registrado por')
     created_at = models.DateTimeField('Registrado em', auto_now_add=True)
     reason = models.CharField('Descrição', max_length=255)
@@ -226,7 +232,10 @@ class FinancialEntry(ImmutableRecord):
         ordering = ['-created_at', '-pk']
         verbose_name = 'Lançamento de recebimento'
         verbose_name_plural = 'Lançamentos de recebimento'
-        constraints = [models.CheckConstraint(condition=(models.Q(amount__gt=0, reversal_of__isnull=True) | models.Q(amount__lt=0, reversal_of__isnull=False)), name='financial_entry_sign_valid')]
+        constraints = [
+            models.CheckConstraint(condition=(models.Q(amount__gt=0, reversal_of__isnull=True) | models.Q(amount__lt=0, reversal_of__isnull=False)), name='financial_entry_sign_valid'),
+            models.CheckConstraint(condition=(models.Q(amount__gt=0, card_fee__gte=0) | models.Q(amount__lt=0, card_fee__lte=0)), name='financial_entry_card_fee_sign_valid'),
+        ]
 
     def clean(self):
         super().clean()
@@ -235,10 +244,24 @@ class FinancialEntry(ImmutableRecord):
             raise ValidationError('A conta e a forma de recebimento devem pertencer à unidade da venda.')
         if self.reversal_of_id:
             original = self.reversal_of
-            if original.reversal_of_id or original.amount != -self.amount or original.account_id != self.account_id or original.receivable_id != self.receivable_id or original.method_id != self.method_id:
+            if original.reversal_of_id or (original.amount, original.card_fee, original.account_id, original.receivable_id, original.method_id) != (
+                -self.amount, -self.card_fee, self.account_id, self.receivable_id, self.method_id,
+            ):
                 raise ValidationError('O estorno deve corresponder exatamente ao lançamento original.')
-        elif self.amount <= 0 or self.amount > self.receivable.remaining_amount:
+            return
+        remaining = self.receivable.remaining_amount
+        if self.amount <= 0 or self.amount > remaining:
             raise ValidationError('O recebimento deve ser positivo e não ultrapassar o saldo da parcela.')
+        if self.card_fee:
+            if self.card_fee < 0:
+                raise ValidationError({'card_fee': 'Informe uma taxa igual ou maior que zero.'})
+            if self.receivable.debtor != Receivable.Debtor.OPERATOR or self.receivable.payment.kind not in ('credit', 'debit'):
+                raise ValidationError({'card_fee': 'Taxas só podem ser registradas em repasses de cartão.'})
+            if self.account.cash_box or self.method.kind not in ('pix', 'transfer'):
+                raise ValidationError({'card_fee': 'Use uma conta bancária e selecione Pix ou transferência para registrar o repasse.'})
+            if self.amount + self.card_fee != remaining:
+                raise ValidationError({'card_fee': 'O valor líquido mais a taxa deve quitar o saldo da parcela.'})
+
 
 
 class CheckoutRequest(ImmutableRecord):

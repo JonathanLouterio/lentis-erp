@@ -68,7 +68,7 @@ def reverse_sale_financials(sale, user, reason):
         if not FinancialEntry.objects.filter(reversal_of=entry).exists():
             FinancialEntry.objects.create(
                 receivable=entry.receivable, account=entry.account, method=entry.method,
-                amount=-entry.amount, created_by=user, reversal_of=entry,
+                amount=-entry.amount, card_fee=-entry.card_fee, created_by=user, reversal_of=entry,
                 reason=f'Cancelamento da venda #{sale.pk}: {reason}'[:255],
             )
 
@@ -149,7 +149,7 @@ def checkout(*, user, store, request_id, payload_digest, validated_values):
         return sale
 
 
-def receive_installment(*, user, store, receivable_id, account, method, amount, request_id):
+def receive_installment(*, user, store, receivable_id, account, method, amount, request_id, card_fee=Decimal('0.00')):
     with transaction.atomic():
         user = get_user_model().objects.select_for_update(no_key=True).get(pk=user.pk)
         user = require_finance(user, 'receive_receivable')
@@ -162,7 +162,7 @@ def receive_installment(*, user, store, receivable_id, account, method, amount, 
         receivable = Receivable.objects.select_for_update().select_related('payment__sale').get(pk=candidate.pk)
         previous = FinancialEntry.objects.filter(request_id=request_id).first()
         if previous:
-            if (previous.receivable_id, previous.account_id, previous.method_id, previous.amount, previous.created_by_id) != (receivable.pk, account.pk, method.pk, amount, user.pk):
+            if (previous.receivable_id, previous.account_id, previous.method_id, previous.amount, previous.card_fee, previous.created_by_id) != (receivable.pk, account.pk, method.pk, amount, card_fee, user.pk):
                 raise ValidationError({'request_id': 'O identificador já foi usado em outro recebimento.'})
             return receivable
         if sale.status != Sale.Status.COMPLETED:
@@ -174,7 +174,7 @@ def receive_installment(*, user, store, receivable_id, account, method, amount, 
         if not amount.is_finite() or amount <= 0 or amount != amount.quantize(Decimal('0.01')):
             raise ValidationError({'amount': 'Informe um valor positivo com até duas casas decimais.'})
         FinancialEntry.objects.create(
-            receivable=receivable, account=account, method=method, amount=amount,
+            receivable=receivable, account=account, method=method, amount=amount, card_fee=card_fee,
             created_by=user, request_id=request_id, reason=f'Recebimento da parcela {receivable.number}; venda #{sale.pk}.',
         )
         return receivable

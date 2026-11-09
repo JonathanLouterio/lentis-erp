@@ -99,7 +99,7 @@ class DashboardView(SalesBaseView):
         # Estado atual das parcelas: exclui vendas canceladas e conta o saldo
         # parcial, sem multiplicar os valores pela quantidade de recebimentos.
         pending = Receivable.objects.filter(payment__sale__store=store, payment__sale__status='completed').annotate(
-            remaining=ExpressionWrapper(F('amount') - Coalesce(Sum('entries__amount'), Value(ZERO), output_field=MONEY), output_field=MONEY),
+            remaining=ExpressionWrapper(F('amount') - Coalesce(Sum(F('entries__amount') + F('entries__card_fee')), Value(ZERO), output_field=MONEY), output_field=MONEY),
         ).filter(remaining__gt=0)
         def balance(query):
             result = query.aggregate(count=Count('pk'), amount=Sum('remaining'))

@@ -12,7 +12,7 @@ Levantamento inicial em 09/10/2026, com referências na documentação oficial d
 | VND-01 | Rascunho não movimenta estoque nem lança recebimentos. Conclusão registra estoque e financeiro em uma operação. Cancelamento preserva a venda e gera movimentos inversos. | Implementada no fluxo atual. | [Bling: transições com lançamento e estorno][bling-transicoes]. |
 | VND-02 | Limitar descontos por perfil/unidade e exigir autorização quando exceder o limite. Registrar solicitante, aprovador, motivo e valores autorizados. | Implementada neste pacote. Limite por perfil/unidade, justificativa, aprovação ou recusa por outra pessoa autorizada e histórico imutável. Sem configuração, permanece o limite de 100% para preservar o comportamento anterior. | [TOTVS: política e autorização de desconto][totvs-desconto]. |
 | FIN-01 | Aceitar recebimento parcial e manter separado o valor já recebido do saldo em aberto. Guardar conta, meio de recebimento, data e operador. | Implementada no fluxo de recebimentos. | [Omie: baixa parcial de receitas][omie-parcial]. |
-| FIN-02 | Separar forma de pagamento acordada na venda, conta de destino e meio usado no recebimento. Diferenciar dívida do cliente de valor a receber da operadora do cartão. | Implementada no checkout atual; conciliação automática e taxas de cartão são futuras. | Decisão do Lentis. |
+| FIN-02 | Separar forma de pagamento acordada na venda, conta de destino e meio usado no recebimento. Diferenciar dívida do cliente de valor a receber da operadora do cartão. | Implementada; a taxa do repasse pode ser registrada na baixa. A conciliação automática é futura. | Decisão do Lentis. |
 | FIN-03 | Montar entrada e saldo parcelado por venda, com intervalos e vencimentos próprios e fechamento exato dos centavos. | Implementada: entrada opcional, saldo em 1 a 12 parcelas, intervalos em meses ou dias, limite por forma/unidade e conferência calculada no servidor. Modelos reutilizáveis de condições são uma evolução futura. | [Omie: opções personalizadas de parcelas][omie-parcelas]. |
 | FIN-04 | Controlar dinheiro físico por conta/unidade, com abertura, recebimentos em dinheiro, suprimentos, retiradas e fechamento com contagem e justificativa da diferença. | Implementada nesta etapa; responsável pela abertura e operador de cada movimento ficam registrados. | Decisão do Lentis. |
 | PAINEL-01 | Mostrar vendas, recebimentos, dívida atual, caixa físico e estoque por unidade, com filtros e alertas identificados pelo período ou pela situação atual. | Implementada no dashboard operacional; os cálculos e atalhos respeitam a unidade autorizada. | Decisão do Lentis. |
@@ -249,6 +249,12 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - Compra confirmada é somente leitura e não pode ser cancelada nesta etapa. Apenas rascunhos podem ser cancelados, com motivo; não há exclusão física. Devoluções e estornos de compras terão fluxo próprio posteriormente.
 - Histórico registra operação, versão, usuário, data e motivo, sem fotografia completa dos campos de cada edição de rascunho. Admin é somente consulta, limitado às unidades autorizadas.
 - Referência/data são registros manuais. Não há importação de XML, validação de NF-e, cálculo fiscal, frete, desconto, recebimento parcial, pagamentos ou geração de contas a pagar nesta entrega. A integração financeira é a próxima etapa do bloco.
+
+## Repasse de cartão com taxa
+
+- Em **Gestão → Financeiro**, abra **Receber** numa parcela da operadora. Informe o líquido depositado e, se houver, a taxa que a operadora descontou. Com taxa, a soma deve quitar o saldo da parcela; sem taxa, recebimentos parciais seguem disponíveis.
+- A baixa com taxa exige conta bancária da unidade e recebimento por Pix ou transferência. O saldo da conta e o relatório de movimentos consideram somente o líquido. A taxa fica registrada no histórico e nos relatórios, sem lançar uma segunda saída da conta.
+- Cancelar a venda estorna o líquido e a taxa. O mesmo identificador de operação só pode ser repetido com os mesmos valores. O sistema não estima taxas nem consulta extrato da operadora.
 
 ## Contas a pagar das compras
 

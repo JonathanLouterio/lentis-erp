@@ -158,6 +158,45 @@ class PaymentCheckoutTests(TestCase):
         self.assertFalse(FinancialEntry.objects.exists())
         self.assertEqual(self.account.balance, Decimal('0'))
 
+    def test_card_fee_quits_the_installment_with_only_net_deposited(self):
+        sale = self.send(self.data(kind='credit', confirmed=False)).data
+        receivable = Receivable.objects.get()
+        request_id = str(uuid4())
+        body = dict(amount='680', card_fee='20', request_id=request_id)
+        first = self.receive(receivable, **body).data
+        self.assertEqual((first['paid_amount'], first['card_fee_amount'], first['remaining_amount'], first['status']),
+                         ('680.00', '20.00', '0.00', 'paid'))
+        self.assertEqual(self.receive(receivable, **body).data['entries'], first['entries'])
+        self.receive(receivable, **{**body, 'card_fee': '19'}, expected=400)
+        self.assertEqual(FinancialEntry.objects.count(), 1)
+        self.assertEqual(self.account.balance, Decimal('680.00'))
+        url = f'/api/me/receivables/?store_id={self.store.pk}&status='
+        self.assertEqual(self.client.get(url+'pending').data['count'], 0)
+        self.assertEqual(self.client.get(url+'paid').data['count'], 1)
+        cancel = self.client.post(f'/api/me/sales/{sale["id"]}/cancel/?store_id={self.store.pk}', {'reason': 'Devolução'}, format='json')
+        self.assertEqual(cancel.status_code, 200, cancel.data)
+        reversal = FinancialEntry.objects.get(reversal_of__isnull=False)
+        self.assertEqual((reversal.amount, reversal.card_fee), (Decimal('-680'), Decimal('-20')))
+        self.assertEqual(self.account.balance, Decimal('0.00'))
+
+    def test_card_fee_rejects_unexplained_differences_and_physical_cash(self):
+        self.send(self.data(kind='debit', confirmed=False))
+        receivable = Receivable.objects.get()
+        cash = FinancialAccount.objects.create(store=self.store, code='cash', name='Caixa físico')
+        self.receive(receivable, amount='680', card_fee='19', expected=400)
+        self.receive(receivable, amount='680', card_fee='21', expected=400)
+        self.receive(receivable, amount='680', card_fee='20', account_id=cash.pk, expected=400)
+        self.receive(receivable, amount='680', card_fee='20', method_id=self.methods['cash'].pk, expected=400)
+        self.receive(receivable, amount='680', card_fee='-20', expected=400)
+        self.assertFalse(FinancialEntry.objects.exists())
+        self.assertEqual(self.receive(receivable, amount='100').data['remaining_amount'], '600.00')
+        self.assertEqual(self.receive(receivable, amount='580', card_fee='20').data['status'], 'paid')
+
+    def test_customer_debt_does_not_accept_card_fee(self):
+        self.send(self.data(kind='boleto', confirmed=False))
+        self.receive(Receivable.objects.get(), amount='680', card_fee='20', expected=400)
+        self.assertFalse(FinancialEntry.objects.exists())
+
     def test_card_cannot_be_falsely_confirmed(self):
         self.send(self.data(kind='credit', confirmed=True), expected=400)
         self.assertFalse(Sale.objects.exists())

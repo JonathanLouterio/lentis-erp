@@ -151,6 +151,26 @@ class ReportsTests(TestCase):
         self.assertEqual(sums['original'],'700.00');self.assertEqual(sums['paid'],'75.00');self.assertEqual(sums['remaining'],'625.00')
         sums=self.summary(self.report('receivables',debtor='operator'));self.assertEqual(sums['remaining'],'700.00')
 
+    def test_card_fee_is_separate_from_the_bank_movement_and_closes_the_receivable(self):
+        self.grant_all()
+        self.grant(codes=['view_dashboard'])
+        self.sale(kind='credit', confirmed=False)
+        item = Receivable.objects.get()
+        payload = {'request_id': str(uuid4()), 'account_id': self.account.pk, 'method_id': self.methods['transfer'].pk,
+                   'amount': '680.00', 'card_fee': '20.00'}
+        with patch('django.utils.timezone.now',return_value=NOW):
+            response = self.client.post(f'/api/me/receivables/{item.pk}/receive/?store_id={self.store.pk}', payload, format='json')
+            self.assertEqual(response.status_code, 200, response.data)
+            dashboard = self.client.get('/api/me/dashboard/', {'store_id': self.store.pk, 'preset': 'today'})
+        self.assertEqual(dashboard.status_code, 200, dashboard.data)
+        self.assertEqual(dashboard.data['receivables']['operator']['amount'], '0.00')
+        report = self.report('receivables', status='paid', debtor='operator')
+        row = report.data['results'][0]
+        self.assertEqual((row['paid'], row['card_fee'], row['remaining']), ('680.00', '20.00', '0.00'))
+        moves = self.report('movements')
+        self.assertEqual(self.summary(moves)['net'], '680.00')
+        self.assertEqual([(r['amount'], r['card_fee']) for r in moves.data['results']], [('680.00', '20.00')])
+
     def test_payable_due_date_filter_uses_current_balance_after_later_payment(self):
         plan=self.purchase_plan();self.payout(plan)
         result=self.report('payables',start='2026-10-01',end='2026-10-01')
@@ -252,7 +272,7 @@ class ReportsTests(TestCase):
         plan=self.purchase_plan(name=name);self.payout(plan)
         response=self.report('movements',export='csv')
         rows=list(csv.reader(io.StringIO(response.content.decode('utf-8-sig')),delimiter=';'))
-        self.assertEqual(rows[1][7],"'"+name.strip());self.assertEqual(rows[1][-2],'-10,00')
+        self.assertEqual(rows[1][7],"'"+name.strip());self.assertEqual(rows[1][rows[0].index('Valor assinado')],'-10,00')
 
     def test_csv_limit_rejects_instead_of_silent_truncation(self):
         self.grant_all();self.sale();self.sale()

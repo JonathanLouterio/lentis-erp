@@ -67,6 +67,7 @@ class ReceiptWriteSerializer(serializers.Serializer):
     method_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
     account_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
     amount = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal("0.01"))
+    card_fee = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal('0.00'), default=Decimal('0.00'))
     request_id = serializers.UUIDField()
     validate_method_id = PaymentWriteSerializer.validate_method_id
     validate_account_id = PaymentWriteSerializer.validate_account_id
@@ -100,7 +101,7 @@ class EntrySerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='created_by.username', read_only=True)
     class Meta:
         model = FinancialEntry
-        fields = ['id', 'account', 'account_name', 'method_name', 'amount', 'created_at', 'creator_username', 'reason', 'reversal_of']
+        fields = ['id', 'account', 'account_name', 'method_name', 'amount', 'card_fee', 'created_at', 'creator_username', 'reason', 'reversal_of']
 
 
 class ReceivableSerializer(serializers.ModelSerializer):
@@ -109,13 +110,14 @@ class ReceivableSerializer(serializers.ModelSerializer):
     account_name = serializers.CharField(source='payment.account.name', read_only=True)
     installment_count = serializers.IntegerField(source='payment.installment_count', read_only=True)
     paid_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
+    card_fee_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     remaining_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     status = serializers.CharField(read_only=True)
     can_receive = serializers.SerializerMethodField()
     entries = EntrySerializer(many=True, read_only=True)
     class Meta:
         model = Receivable
-        fields = ['id', 'sale_id', 'number', 'installment_count', 'due_date', 'amount', 'paid_amount', 'remaining_amount', 'status', 'debtor', 'customer_name', 'method_name', 'account_name', 'can_receive', 'entries']
+        fields = ['id', 'sale_id', 'number', 'installment_count', 'due_date', 'amount', 'paid_amount', 'card_fee_amount', 'remaining_amount', 'status', 'debtor', 'customer_name', 'method_name', 'account_name', 'can_receive', 'entries']
 
     def get_can_receive(self, obj):
         from organizations.access_permissions import fresh_actor
