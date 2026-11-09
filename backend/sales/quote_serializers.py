@@ -1,6 +1,7 @@
 from decimal import Decimal
 from rest_framework import serializers
 from .models import Quote, QuoteItem, QuoteEvent
+from .quote_models import QuoteLossCategory
 from .serializers import SaleCreateSerializer, SaleItemWriteSerializer
 
 
@@ -27,6 +28,16 @@ class QuoteActionSerializer(serializers.Serializer):
         return values
 
 
+class QuoteRejectSerializer(QuoteActionSerializer):
+    loss_category = serializers.ChoiceField(choices=QuoteLossCategory.choices)
+
+    def validate(self, values):
+        values = super().validate(values)
+        if values['loss_category'] == QuoteLossCategory.OTHER and not values['reason']:
+            raise serializers.ValidationError({'reason': 'Descreva o motivo ao selecionar Outro.'})
+        return values
+
+
 class QuoteFollowupSerializer(QuoteActionSerializer):
     kind = serializers.ChoiceField(choices=('contact', 'schedule'))
     next_contact_on = serializers.DateField(allow_null=True)
@@ -50,13 +61,14 @@ class QuoteEventSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='created_by.username', read_only=True)
     class Meta:
         model = QuoteEvent
-        fields = ['id','action','creator_username','reason','created_at','version','next_contact_on']
+        fields = ['id','action','creator_username','reason','created_at','version','next_contact_on','loss_category']
 
 
 class QuoteSerializer(serializers.ModelSerializer):
     actions=serializers.SerializerMethodField()
     last_contact=serializers.SerializerMethodField()
     next_contact_on=serializers.SerializerMethodField()
+    loss_category=serializers.CharField(read_only=True, allow_null=True)
 
     def get_last_contact(self,obj):
         for event in reversed(list(obj.events.all())):
@@ -85,4 +97,4 @@ class QuoteSerializer(serializers.ModelSerializer):
     events = QuoteEventSerializer(many=True, read_only=True)
     class Meta:
         model = Quote
-        fields = ['id','store','customer','customer_name','creator_username','status','status_label','is_expired','valid_until','notes','discount_amount','version','sale','created_at','updated_at','subtotal','total','items','events','actions','last_contact','next_contact_on']
+        fields = ['id','store','customer','customer_name','creator_username','status','status_label','is_expired','valid_until','notes','discount_amount','version','sale','created_at','updated_at','subtotal','total','items','events','actions','last_contact','next_contact_on','loss_category']

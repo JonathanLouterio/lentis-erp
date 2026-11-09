@@ -113,7 +113,7 @@ class QuoteAPITests(TestCase):
     def test_recusal_requires_reason_and_makes_proposal_read_only(self):
         quote = self.write()
         self.action(quote, 'reject', expected=400)
-        rejected = self.action(quote, 'reject', reason='Cliente desistiu')
+        rejected = self.action(quote, 'reject', loss_category='other', reason='Cliente desistiu')
         self.write(self.payload(expected_version=rejected['version']), rejected, expected=400)
         self.action(rejected, 'convert', expected=400)
         self.assertEqual(Quote.objects.get().status, 'rejected')
