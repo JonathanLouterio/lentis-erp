@@ -736,7 +736,7 @@ export type PayablePermissions = {can_create:boolean;can_create_expense:boolean;
 export type PayablePlan = PayablePermissions & {id:number;purchase_id:number|null;source:'purchase'|'expense';supplier_name:string;category:string;category_label:string;description:string;payee:string;cancellation?:{reason:string;created_at:string;creator_username:string}|null;reference:string;total:string;paid:string;remaining:string;status:'pending'|'partial'|'paid'|'cancelled';overdue:boolean;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;creator_username:string;created_at:string;installments?:PayableInstallment[]}
 export type PayablesPage = CashPage<PayablePlan> & PayablePermissions
 export type PayableOptions = PayablePermissions & {expense_categories:{value:string;label:string}[];accounts:{id:number;name:string;cash_box:boolean;balance?:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
-export type ExpenseInput = {category:string;description:string;payee:string;reference:string;total:string;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number}
+export type ExpenseInput = {category:string;description:string;payee:string;reference:string;total:string;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;payment?:{account_id:number;method_id:number;paid_on:string}}
 export type PayableSource = 'all'|'purchase'|'expense'
 export type PayableAttempt =
   | {kind:'expense';payload:ExpenseInput & {request_id:string}}

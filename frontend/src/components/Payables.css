@@ -32,3 +32,5 @@
 .payable-cancel{margin-top:18px}
 .payable-refresh+.payable-refresh{margin-inline-start:10px}
 @media(max-width:580px){.payable-heading-actions button{min-height:44px}.payable-toolbar label{max-width:100%}}
+
+.payable-page fieldset.payable-expense-payment{border-top:1px solid var(--erp-border);padding-top:12px}

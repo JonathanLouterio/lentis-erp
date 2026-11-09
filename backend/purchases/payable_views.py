@@ -26,12 +26,19 @@ class PlanInput(InstallmentTerms):
     purchase_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
 
 
+class ExpensePaymentInput(serializers.Serializer):
+    account_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
+    method_id = serializers.IntegerField(min_value=1, max_value=9223372036854775807)
+    paid_on = serializers.DateField()
+
+
 class ExpenseInput(InstallmentTerms):
     category = serializers.ChoiceField(choices=PayablePlan.ExpenseCategory.choices)
     description = serializers.CharField(max_length=160)
     payee = serializers.CharField(max_length=140, required=False, allow_blank=True, default='')
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default='')
     total = serializers.DecimalField(max_digits=18, decimal_places=2, min_value=Decimal('0.01'))
+    payment = ExpensePaymentInput(required=False)
 
 
 class PaymentInput(serializers.Serializer):
