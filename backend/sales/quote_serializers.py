@@ -27,6 +27,17 @@ class QuoteActionSerializer(serializers.Serializer):
         return values
 
 
+class QuoteFollowupSerializer(QuoteActionSerializer):
+    kind = serializers.ChoiceField(choices=('contact', 'schedule'))
+    next_contact_on = serializers.DateField(allow_null=True)
+
+    def validate(self, values):
+        values = super().validate(values)
+        if values['kind'] == 'schedule' and values['next_contact_on'] is None:
+            raise serializers.ValidationError({'next_contact_on': 'Informe a data do retorno.'})
+        return values
+
+
 class QuoteItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
     total = serializers.DecimalField(max_digits=28, decimal_places=2, read_only=True)
@@ -39,11 +50,25 @@ class QuoteEventSerializer(serializers.ModelSerializer):
     creator_username = serializers.CharField(source='created_by.username', read_only=True)
     class Meta:
         model = QuoteEvent
-        fields = ['id','action','creator_username','reason','created_at','version']
+        fields = ['id','action','creator_username','reason','created_at','version','next_contact_on']
 
 
 class QuoteSerializer(serializers.ModelSerializer):
     actions=serializers.SerializerMethodField()
+    last_contact=serializers.SerializerMethodField()
+    next_contact_on=serializers.SerializerMethodField()
+
+    def get_last_contact(self,obj):
+        for event in reversed(list(obj.events.all())):
+            if event.action == 'updated':
+                break
+            if event.action == 'contact':
+                return {'created_at': event.created_at, 'creator_username': event.created_by.username}
+        return None
+
+    def get_next_contact_on(self,obj):
+        return obj.next_contact_on if obj.can_followup else None
+
     def get_actions(self,obj):
         from organizations.access_permissions import fresh_actor
         from .quote_permissions import available_quote_actions
@@ -60,4 +85,4 @@ class QuoteSerializer(serializers.ModelSerializer):
     events = QuoteEventSerializer(many=True, read_only=True)
     class Meta:
         model = Quote
-        fields = ['id','store','customer','customer_name','creator_username','status','status_label','is_expired','valid_until','notes','discount_amount','version','sale','created_at','updated_at','subtotal','total','items','events','actions']
+        fields = ['id','store','customer','customer_name','creator_username','status','status_label','is_expired','valid_until','notes','discount_amount','version','sale','created_at','updated_at','subtotal','total','items','events','actions','last_contact','next_contact_on']

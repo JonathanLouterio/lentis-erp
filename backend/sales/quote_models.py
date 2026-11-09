@@ -8,6 +8,13 @@ from django.utils import timezone
 from .payment_models import ImmutableRecord
 
 
+def quote_today():
+    return timezone.localdate(timezone=ZoneInfo('America/Sao_Paulo'))
+
+
+FOLLOWUP_EVENTS = ('contact', 'schedule', 'updated')
+
+
 class Quote(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Rascunho'
@@ -27,7 +34,7 @@ class Quote(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        permissions = [('send_quote','Pode preparar proposta de orçamento'), ('accept_quote','Pode registrar aceite de orçamento'), ('reject_quote','Pode recusar orçamento'), ('print_quote','Pode imprimir orçamento'), ('convert_quote','Pode converter orçamento em venda')]
+        permissions = [('send_quote','Pode preparar proposta de orçamento'), ('accept_quote','Pode registrar aceite de orçamento'), ('reject_quote','Pode recusar orçamento'), ('print_quote','Pode imprimir orçamento'), ('convert_quote','Pode converter orçamento em venda'), ('followup_quote', 'Pode registrar acompanhamento de orçamento')]
         verbose_name = 'Orçamento'
         verbose_name_plural = 'Orçamentos'
         ordering = ['-created_at', '-pk']
@@ -37,7 +44,13 @@ class Quote(models.Model):
         ]
     @property
     def is_expired(self):
-        return self.status not in ('converted', 'rejected') and self.valid_until < timezone.localdate(timezone=ZoneInfo('America/Sao_Paulo'))
+        return self.status not in ('converted', 'rejected') and self.valid_until < quote_today()
+    @property
+    def can_followup(self):
+        return bool(
+            self.status == self.Status.SENT and self.customer_id and self.customer.is_active
+            and self.customer.store_id == self.store_id
+        )
     @property
     def subtotal(self):
         return sum((item.subtotal for item in self.items.all()), Decimal('0'))
@@ -114,6 +127,7 @@ class QuoteEvent(ImmutableRecord):
     action = models.CharField(max_length=20)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     reason = models.CharField(max_length=255, blank=True)
+    next_contact_on = models.DateField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     version = models.PositiveIntegerField()
     class Meta:

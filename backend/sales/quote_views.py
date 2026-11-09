@@ -5,19 +5,22 @@ from .quote_permissions import QuoteActionPermission
 import hashlib
 import json
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from zoneinfo import ZoneInfo
+from django.db.models import OuterRef, Subquery
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
-from .models import Quote
-from .quote_serializers import QuoteSerializer, QuoteWriteSerializer, QuoteActionSerializer
+from .models import Quote, QuoteEvent
+from .quote_models import FOLLOWUP_EVENTS, quote_today
+from .quote_serializers import QuoteSerializer, QuoteWriteSerializer, QuoteActionSerializer, QuoteFollowupSerializer
 from .quote_services import operate_quote
 from .views import SalesBaseView, SalesPagination, model_errors
 
 
 def quote_queryset(store):
-    return Quote.objects.filter(store=store).select_related('customer','created_by').prefetch_related('items','events__created_by')
+    schedule = QuoteEvent.objects.filter(quote_id=OuterRef('pk'), action__in=FOLLOWUP_EVENTS).order_by('-version','-pk')
+    return Quote.objects.filter(store=store).select_related('customer','created_by').prefetch_related(
+        'items','events__created_by',
+    ).annotate(next_contact_on=Subquery(schedule.values('next_contact_on')[:1]))
 
 
 @method_decorator(never_cache,name="dispatch")
@@ -30,7 +33,8 @@ class QuoteBaseView(SalesBaseView):
         request_id = serializers.UUIDField().run_validation(request.data.get('request_id'))
         digest = hashlib.sha256(json.dumps({'action': action, 'quote_id': quote_id, 'body': request.data}, sort_keys=True, ensure_ascii=False, separators=(',',':')).encode('utf-8')).hexdigest()
         def validated():
-            return self.write_serializer(QuoteWriteSerializer if action == 'save' else QuoteActionSerializer, request.data, store).validated_data
+            cls = {'save': QuoteWriteSerializer, 'followup': QuoteFollowupSerializer}.get(action, QuoteActionSerializer)
+            return self.write_serializer(cls, request.data, store).validated_data
         with model_errors():
             quote = operate_quote(user=request.user, store=store, quote_id=quote_id, action=action, request_id=request_id, digest=digest, validated_values=validated)
         return Response(QuoteSerializer(quote_queryset(store).get(pk=quote.pk),context={"request":request}).data)
@@ -42,11 +46,18 @@ class QuotesView(QuoteBaseView):
     def get(self, request):
         store = self._selected_store()
         queryset = quote_queryset(store)
+        today = quote_today()
         state = request.query_params.get('status', 'all')
         if state == 'expired':
-            queryset = queryset.filter(valid_until__lt=timezone.localdate(timezone=ZoneInfo('America/Sao_Paulo'))).exclude(status__in=['converted','rejected'])
+            queryset = queryset.filter(valid_until__lt=today).exclude(status__in=['converted','rejected'])
         elif state in Quote.Status.values: queryset = queryset.filter(status=state)
         elif state != 'all': raise ValidationError({'status': 'Selecione uma situação válida.'})
+        followup = request.query_params.get('followup')
+        if followup == 'due':
+            queryset = queryset.filter(status=Quote.Status.SENT, customer__is_active=True, customer__store=store,
+                                       next_contact_on__lte=today).order_by('next_contact_on','pk')
+        elif followup is not None:
+            raise ValidationError({'followup': 'Filtro de retorno inválido.'})
         pagination = SalesPagination()
         rows = pagination.paginate_queryset(queryset, request, view=self)
         return pagination.get_paginated_response(QuoteSerializer(rows, many=True,context={"request":request}).data)
@@ -65,5 +76,5 @@ class QuoteTransitionView(QuoteBaseView):
     quote_actions={"POST":"transition"}
 
     def post(self, request, quote_id, action):
-        if action not in ('send','accept','reject','convert'): raise ValidationError('Operação inválida.')
+        if action not in ('send','accept','reject','convert','followup'): raise ValidationError('Operação inválida.')
         return self.operate(request, action, quote_id)
