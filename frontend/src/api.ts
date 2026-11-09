@@ -573,7 +573,7 @@ export type DashboardPeriod = { preset: 'today' | '7days' | 'month' | 'custom'; 
 export type DashboardData = {
   store_id: number; generated_at: string; today: string; timezone: string
   period: { preset: string; start: string; end: string; previous_start: string; previous_end: string }
-  permissions: {sales:boolean;receipts:boolean;receivables:boolean;stock:boolean;cash:boolean}
+  permissions: {sales:boolean;receipts:boolean;receivables:boolean;stock:boolean;cash:boolean;orders:boolean;quotes:boolean}
   shortcuts:Record<InsightShortcut,boolean>
   sales: { count: number; total: string; ticket: string; previous_total: string; previous_count: number; variation: string | null } | null
   receipts: { gross: string; refunds: string; net: string } | null
@@ -584,6 +584,7 @@ export type DashboardData = {
   } | null
   stock: { low_count: number; negative_count: number; items: { id: number; name: string; code: string; quantity: string; minimum: string }[] } | null
   cash: { count: number; expected_cash: string; items: { id: number; account_name: string; owner: string; opened_at: string; expected_cash: string }[] } | null
+  attention: {orders:{overdue:number;ready:number}|null;quote_returns:number|null}
   chart: { date: string; sales_count: number|null; sales: string|null; received: string|null }[]
   recent_sales: { id: number; customer_name: string; completed_at: string; total: string }[]
 }
@@ -665,8 +666,9 @@ export type ServiceOrder = {
   events?:{version:number;action:string;from_status:string;to_status:string;reason:string;snapshot:Record<string,string>;creator_username:string;created_at:string}[]
 }
 export type PickupContactEvent = {created_at:string;creator_username:string}
-export type ServiceOrderPickupFilter = 'awaiting_pickup_notice'|'pickup_reminder_due'
-export type ServiceOrderSummary = Record<'active' | 'laboratory' | 'overdue' | 'ready' | 'delivered' | ServiceOrderPickupFilter, number>
+export type ServiceOrderPickupFilter = 'pickup_ready'|'awaiting_pickup_notice'|'pickup_reminder_due'
+export type ServiceOrderInitialQueue = 'overdue'|'pickup_ready'
+export type ServiceOrderSummary = Record<'active' | 'laboratory' | 'overdue' | 'ready' | 'delivered' | 'awaiting_pickup_notice' | 'pickup_reminder_due', number>
 export type ServiceOrderPage = CashPage<ServiceOrder> & {can_create:boolean;summary?:ServiceOrderSummary}
 export type ServiceOrderAttempt = {id:number|null; payload:{request_id:string;action:'create'|'update'|'advance'|'rework'|'cancel'|'notify_pickup'|'remind_pickup';sale_id?:number;expected_version?:number;promised_on?:string;laboratory?:string;frame_description?:string;lens_description?:string;notes?:string;reason?:string;confirmed?:boolean;target_status?:'laboratory'|'mounting'}}
 export function getServiceOrders(storeId:number,page=1,status='active',overdue=false,saleId?:number,board=false,pickupFilter?:ServiceOrderPickupFilter):Promise<ServiceOrderPage>{

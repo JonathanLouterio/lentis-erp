@@ -189,3 +189,62 @@ class DashboardTests(TestCase):
         self.assertLessEqual(len(result.data['recent_sales']), 5)
         self.assertLessEqual(len(result.data['receivables']['attention']), 5)
         self.assertEqual(before, (Sale.objects.count(), FinancialEntry.objects.count(), Receivable.objects.count()))
+
+    def test_operational_attention_matches_selected_units_queues_after_utc_midnight(self):
+        from datetime import date
+        from django.contrib.auth.models import Permission
+        from organizations.models import Customer
+        from .models import Quote, QuoteEvent, ServiceOrder
+
+        self.user.user_permissions.add(*Permission.objects.filter(codename__in=['view_serviceorder','view_quote']))
+        now = datetime(2026, 10, 14, 1, 0, tzinfo=utc.utc)
+        today = date(2026, 10, 13)
+        yesterday = today - timedelta(days=1)
+        tomorrow = today + timedelta(days=1)
+
+        def order(stage, deadline, store=self.store, sale_status='completed'):
+            sale = Sale.objects.create(store=store, created_by=self.user)
+            fields = {'status':sale_status, 'completed_at':now}
+            if sale_status=='cancelled':
+                fields.update(cancelled_at=now, cancellation_reason='Venda cancelada')
+            Sale.objects.filter(pk=sale.pk).update(**fields)
+            row = ServiceOrder(sale=sale, created_by=self.user, promised_on=deadline, status=stage)
+            row.save(_service=True)
+            return row.pk
+
+        overdue = order('laboratory', yesterday)
+        ready = order('ready', today)
+        order('ready', tomorrow, sale_status='cancelled')
+        order('delivered', yesterday)
+        order('cancelled', yesterday)
+        order('ready', yesterday, store=self.other)
+
+        def quote(next_date, *, store=self.store, status='sent', reset=False):
+            customer = self.customer if store==self.store else Customer.objects.create(store=store, name='Cliente filial')
+            row = Quote.objects.create(store=store, customer=customer, created_by=self.user, valid_until=today, status=status)
+            QuoteEvent.objects.create(quote=row, action='schedule', next_contact_on=next_date, version=1, created_by=self.user)
+            if reset:
+                QuoteEvent.objects.create(quote=row, action='updated', version=2, created_by=self.user)
+            return row.pk
+
+        old_quote = quote(yesterday)
+        due_quote = quote(today)
+        quote(tomorrow)
+        quote(today, status='accepted')
+        quote(today, reset=True)
+        quote(today, store=self.other)
+
+        with patch('django.utils.timezone.now', return_value=now):
+            data = self.client.get('/api/me/dashboard/', {
+                'store_id':self.store.pk, 'preset':'custom', 'start':'2026-01-01', 'end':'2026-01-02',
+            }).data
+            self.assertEqual(data['today'], today.isoformat())
+            self.assertEqual(data['attention'], {'orders':{'overdue':1,'ready':1},'quote_returns':2})
+            queue = f'/api/me/service-orders/?store_id={self.store.pk}'
+            late = self.client.get(queue + '&status=active&overdue=1&summary=1').data
+            pickup = self.client.get(queue + '&status=ready&pickup_ready=1').data
+            self.assertEqual(late['summary']['ready'], 1)
+            self.assertEqual([row['id'] for row in late['results']], [overdue])
+            self.assertEqual([row['id'] for row in pickup['results']], [ready])
+            returns = self.client.get(f'/api/me/quotes/?store_id={self.store.pk}&followup=due').data
+            self.assertEqual([row['id'] for row in returns['results']], [old_quote,due_quote])

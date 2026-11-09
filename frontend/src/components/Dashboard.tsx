@@ -5,7 +5,7 @@ import { useInsightAccess } from '../hooks/useInsightAccess'
 import { brl, displayDate, failure, signedDecimal } from './saleMoney'
 import './Dashboard.css'
 
-export type DashboardAction = 'new-sale'|'new-customer'|'receivables'|'stock'|'cash'|'sale'
+export type DashboardAction = 'new-sale'|'new-customer'|'receivables'|'stock'|'cash'|'sale'|'orders-overdue'|'orders-pickup'|'quote-returns'
 type Props={store:AccessibleStore;firstName:string;onAction:(action:DashboardAction,id?:number)=>void}
 const amount=(value:string|null)=>value===null?'Acesso restrito':brl(signedDecimal(value)??0n)
 
@@ -54,6 +54,8 @@ export default function Dashboard({store,firstName,onAction}:Props){
   const receivables=sections?.receivables?data?.receivables:null
   const stock=sections?.stock?data?.stock:null
   const cash=sections?.cash?data?.cash:null
+  const orders=sections?.orders?data?.attention?.orders:null
+  const quoteReturns=sections?.quotes?data?.attention?.quote_returns:null
   function selectPeriod(value:DashboardPeriod['preset']){setPicker(value);if(value!=='custom')setPeriod({preset:value})}
   return <section className="lentis-dashboard" aria-busy={loading||rights.loading}>
     <header className="lentis-dashboard-heading"><div><span className="erp-kicker">VISÃO GERAL</span><h1>Olá, {firstName}!</h1><p>Acompanhe a operação de <strong>{store.name}</strong>.</p></div>{rights.access?.dashboard&&<div className="lentis-period"><label>Período<select aria-label="Período do dashboard" value={picker} onChange={e=>selectPeriod(e.target.value as DashboardPeriod['preset'])}><option value="today">Hoje</option><option value="7days">Últimos 7 dias</option><option value="month">Mês até hoje</option><option value="custom">Personalizado</option></select></label><button className="erp-secondary-button" disabled={loading} onClick={()=>setReload(v=>v+1)}>Atualizar painel</button></div>}</header>
@@ -70,8 +72,19 @@ export default function Dashboard({store,firstName,onAction}:Props){
         {receipts&&<article className="erp-card lentis-kpi"><span>Recebido líquido no período</span><strong>{amount(receipts.net)}</strong><small>Recebido {amount(receipts.gross)} · Estornado {amount(receipts.refunds)}</small></article>}
         {receivables&&<article className="erp-card lentis-kpi"><span>A receber do cliente agora</span><strong>{amount(receivables.customer.amount)}</strong><small>{receivables.customer.count} parcela(s) em aberto</small></article>}
       </div>
-      <div className="lentis-dashboard-main">{(sales||receipts)&&<section className="erp-card"><SalesChart rows={data.chart} sales={!!sales} receipts={!!receipts}/>{sales&&<p className="lentis-muted">Período anterior: {displayDate(data.period.previous_start)} a {displayDate(data.period.previous_end)} · Vendas {amount(sales.previous_total)}. A comparação usa a mesma quantidade de dias.</p>}</section>}
-        {(receivables||stock)&&<section className="erp-card lentis-attention"><h2>Atenção hoje</h2>{receivables&&<><button onClick={()=>onAction('receivables')}><span>Parcelas vencidas do cliente<small>{receivables.overdue.count} parcela(s)</small></span><strong>{amount(receivables.overdue.amount)}</strong></button><button onClick={()=>onAction('receivables')}><span>Vencimentos de hoje<small>{receivables.due_today.count} parcela(s)</small></span><strong>{amount(receivables.due_today.amount)}</strong></button></>}{stock&&<><button disabled={!shortcuts?.stock} onClick={()=>onAction('stock')}><span>Produtos com estoque negativo</span><strong>{stock.negative_count}</strong></button><button disabled={!shortcuts?.stock} onClick={()=>onAction('stock')}><span>No estoque mínimo ou abaixo</span><strong>{stock.low_count}</strong></button></>}<p className="lentis-muted">Alertas e saldos mostram a situação atual, independentemente do período do gráfico.</p></section>}
+      <div className="lentis-dashboard-main">
+        {(orders||quoteReturns!=null||receivables||stock)&&<section className="erp-card lentis-attention" aria-labelledby="lentis-attention-title">
+          <h2 id="lentis-attention-title">Atenção hoje</h2>
+          {orders&&<>
+            <button type="button" className={orders.overdue?'is-warning':undefined} onClick={()=>onAction('orders-overdue')}><span>OS atrasadas<small>Previsão de entrega vencida</small></span><strong>{orders.overdue}</strong></button>
+            <button type="button" onClick={()=>onAction('orders-pickup')}><span>Retiradas pendentes<small>Pedidos prontos para retirada</small></span><strong>{orders.ready}</strong></button>
+          </>}
+          {quoteReturns!=null&&<button type="button" onClick={()=>onAction('quote-returns')}><span>Orçamentos para retornar<small>Retornos de hoje e atrasados</small></span><strong>{quoteReturns}</strong></button>}
+          {receivables&&<><button onClick={()=>onAction('receivables')}><span>Parcelas vencidas do cliente<small>{receivables.overdue.count} parcela(s)</small></span><strong>{amount(receivables.overdue.amount)}</strong></button><button onClick={()=>onAction('receivables')}><span>Vencimentos de hoje<small>{receivables.due_today.count} parcela(s)</small></span><strong>{amount(receivables.due_today.amount)}</strong></button></>}
+          {stock&&<><button disabled={!shortcuts?.stock} onClick={()=>onAction('stock')}><span>Produtos com estoque negativo</span><strong>{stock.negative_count}</strong></button><button disabled={!shortcuts?.stock} onClick={()=>onAction('stock')}><span>No estoque mínimo ou abaixo</span><strong>{stock.low_count}</strong></button></>}
+          <p className="lentis-muted">Alertas e saldos mostram a situação atual, independentemente do período do gráfico.</p>
+        </section>}
+        {(sales||receipts)&&<section className="erp-card"><SalesChart rows={data.chart} sales={!!sales} receipts={!!receipts}/>{sales&&<p className="lentis-muted">Período anterior: {displayDate(data.period.previous_start)} a {displayDate(data.period.previous_end)} · Vendas {amount(sales.previous_total)}. A comparação usa a mesma quantidade de dias.</p>}</section>}
       </div>
       <div className="lentis-dashboard-secondary">
         {cash&&<section className="erp-card"><div className="lentis-panel-heading"><h2>Caixa físico</h2><button className="erp-table-button" onClick={()=>onAction('cash')}>Ver caixa</button></div><strong className="lentis-section-total">{amount(cash.expected_cash)}</strong><p>{cash.count} caixa(s) aberto(s).</p>{cash.items.map(item=><div className="lentis-mini-row" key={item.id}><span>{item.account_name}<small>Responsável: {item.owner} · #{item.id}</small></span><strong>{amount(item.expected_cash)}</strong></div>)}</section>}

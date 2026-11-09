@@ -11,7 +11,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from .models import Quote, QuoteEvent
-from .quote_models import FOLLOWUP_EVENTS, QuoteLossCategory, quote_today
+from .quote_models import QuoteLossCategory, quote_today
+from .queue_queries import due_quotes, with_quote_schedule
 from .quote_serializers import (
     QuoteActionSerializer, QuoteFollowupSerializer, QuoteRejectSerializer, QuoteSerializer, QuoteWriteSerializer,
 )
@@ -20,12 +21,11 @@ from .views import SalesBaseView, SalesPagination, model_errors
 
 
 def quote_queryset(store):
-    schedule = QuoteEvent.objects.filter(quote_id=OuterRef('pk'), action__in=FOLLOWUP_EVENTS).order_by('-version','-pk')
     loss = QuoteEvent.objects.filter(quote_id=OuterRef('pk'), action='reject').order_by('-version','-pk')
-    return Quote.objects.filter(store=store).select_related('customer','created_by').prefetch_related(
+    base = Quote.objects.filter(store=store).select_related('customer','created_by').prefetch_related(
         'items','events__created_by',
-    ).annotate(
-        next_contact_on=Subquery(schedule.values('next_contact_on')[:1]),
+    )
+    return with_quote_schedule(base).annotate(
         loss_category=Coalesce(Subquery(loss.values('loss_category')[:1]), Value('')),
     )
 
@@ -61,8 +61,7 @@ class QuotesView(QuoteBaseView):
         elif state != 'all': raise ValidationError({'status': 'Selecione uma situação válida.'})
         followup = request.query_params.get('followup')
         if followup == 'due':
-            queryset = queryset.filter(status=Quote.Status.SENT, customer__is_active=True, customer__store=store,
-                                       next_contact_on__lte=today).order_by('next_contact_on','pk')
+            queryset = due_quotes(queryset, store, today).order_by('next_contact_on','pk')
         elif followup is not None:
             raise ValidationError({'followup': 'Filtro de retorno inválido.'})
         loss_filter = request.query_params.get('loss')

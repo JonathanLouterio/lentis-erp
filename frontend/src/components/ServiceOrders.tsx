@@ -2,7 +2,7 @@ import { useClinicalAccess } from '../hooks/useClinicalAccess'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, getOrderSales, getServiceOrder, getServiceOrders, submitServiceOrder } from '../api'
-import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPage, ServiceOrderPickupFilter, ServiceOrderSummary } from '../api'
+import type { AccessibleStore, ServiceOrder, ServiceOrderAttempt, ServiceOrderPage, ServiceOrderInitialQueue, ServiceOrderPickupFilter, ServiceOrderSummary } from '../api'
 import { dateTime, displayDate, failure, today } from './saleMoney'
 import './ServiceOrders.css'
 import FormDialog from './FormDialog'
@@ -10,14 +10,14 @@ import ServiceOrderPickup from './ServiceOrderPickup'
 import './OperationsWindows.css'
 import { useOrderAccess } from '../hooks/useOrderAccess'
 
-type Props = {store:AccessibleStore;userId:number;initialSaleId?:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
+type Props = {store:AccessibleStore;userId:number;initialSaleId?:number;initialQueue?:ServiceOrderInitialQueue;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
 const labels:Record<string,string>={open:'Aberta',laboratory:'No laboratório',mounting:'Em montagem',checking:'Em conferência',ready:'Pronta para entrega',delivered:'Entregue',cancelled:'Cancelada'}
 const actions:Record<string,string>={create:'Abertura',update:'Alteração',advance:'Avanço de etapa',rework:'Retrabalho',cancel:'Cancelamento',notify_pickup:'Cliente avisado sobre a retirada',remind_pickup:'Lembrete de retirada registrado'}
 const boardCards:{key:keyof ServiceOrderSummary;title:string;description:string;status:string;overdue:boolean;pickupFilter?:ServiceOrderPickupFilter}[] = [
   {key:'active', title:'Em andamento', description:'Todas as etapas em aberto', status:'active', overdue:false},
   {key:'laboratory', title:'No laboratório', description:'Aguardando produção externa', status:'laboratory', overdue:false},
   {key:'overdue', title:'Atrasadas', description:'Previsão de entrega vencida', status:'active', overdue:true},
-  {key:'ready', title:'Prontas para retirada', description:'Aguardando entrega ao cliente', status:'ready', overdue:false},
+  {key:'ready', title:'Prontas para retirada', description:'Aguardando entrega ao cliente', status:'ready', overdue:false, pickupFilter:'pickup_ready'},
   {key:'awaiting_pickup_notice', title:'Aguardando aviso', description:'Pedidos prontos sem contato registrado', status:'ready', overdue:false, pickupFilter:'awaiting_pickup_notice'},
   {key:'pickup_reminder_due', title:'Lembretes pendentes', description:'Pedidos prontos há 72 h ou mais desde o aviso', status:'ready', overdue:false, pickupFilter:'pickup_reminder_due'},
   {key:'delivered', title:'Entregues', description:'Histórico da unidade', status:'delivered', overdue:false},
@@ -25,14 +25,14 @@ const boardCards:{key:keyof ServiceOrderSummary;title:string;description:string;
 const blank=()=>({promised_on:today(),laboratory:'',frame_description:'',lens_description:'',notes:''})
 const empty:ServiceOrderPage={count:0,next:null,previous:null,results:[],can_create:false}
 
-export default function ServiceOrders({store,userId,initialSaleId,onSavingChange,onDirtyChange}:Props){
+export default function ServiceOrders({store,userId,initialSaleId,initialQueue,onSavingChange,onDirtyChange}:Props){
   const storageKey=`lentis.os.${userId}.${store.id}`
   const [pending,setPending]=useState<ServiceOrderAttempt|null>(()=>{try{return JSON.parse(sessionStorage.getItem(storageKey)||'null') as ServiceOrderAttempt|null}catch{return null}})
   const [result,setResult]=useState(empty)
   const [page,setPage]=useState(1)
-  const [status,setStatus]=useState('active')
-  const [overdue,setOverdue]=useState(false)
-  const [pickupFilter,setPickupFilter]=useState<ServiceOrderPickupFilter>()
+  const [status,setStatus]=useState(initialQueue==='pickup_ready'?'ready':'active')
+  const [overdue,setOverdue]=useState(initialQueue==='overdue')
+  const [pickupFilter,setPickupFilter]=useState<ServiceOrderPickupFilter|undefined>(initialQueue==='pickup_ready'?initialQueue:undefined)
   const [reload,setReload]=useState(0)
   const [selected,setSelected]=useState<ServiceOrder|null>(null)
   const [cancelReview,setCancelReview]=useState(false)

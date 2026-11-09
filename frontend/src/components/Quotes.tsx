@@ -8,19 +8,19 @@ import { brl, dateTime, decimal, decimalText, displayDate, failure, today } from
 import './Sales.css'
 import './Quotes.css'
 
-type Props = { store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void; onOpenSale: (id: number) => void }
+type Props = { store: AccessibleStore; userId: number; initialDueOnly?:boolean; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void; onOpenSale: (id: number) => void }
 type Line = { productId: number; name: string; code: string; quantity: string; price: string; discount: string }
 const events: Record<string,string> = { created: 'Orçamento criado', updated: 'Proposta revisada', send: 'Proposta pronta', accept: 'Aceite registrado', reject: 'Perda registrada', convert: 'Convertido em venda', contact: 'Contato registrado', schedule: 'Retorno agendado' }
 const lossLabels:Record<QuoteLossCategory|'',string>={price:'Preço',deadline:'Prazo',no_response:'Sem resposta',other:'Outro','':'Sem categoria'}
 const lossCategories:QuoteLossCategory[]=['price','deadline','no_response','other']
 function defaultValidity() { const date = new Date(); date.setDate(date.getDate() + 15); return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}` }
 
-export default function Quotes({ store, userId, onSavingChange, onDirtyChange, onOpenSale }: Props) {
+export default function Quotes({ store, userId, initialDueOnly=false, onSavingChange, onDirtyChange, onOpenSale }: Props) {
   const storageKey = `lentis.quote.${userId}.${store.id}`
   const [rows, setRows] = useState<QuotePage>({ count: 0, results: [], next: null, previous: null })
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('all')
-  const [dueOnly,setDueOnly] = useState(false)
+  const [dueOnly,setDueOnly] = useState(initialDueOnly)
   const [lossFilter,setLossFilter] = useState<QuoteLossFilter>()
   const [lossCategory,setLossCategory] = useState<QuoteLossCategory|''>('')
   const [reload, setReload] = useState(0)

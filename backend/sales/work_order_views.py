@@ -11,6 +11,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from .views import SalesBaseView, SalesPagination, model_errors
 from .work_order_models import ServiceOrder
+from .queue_queries import ACTIVE_ORDERS, READY_FOR_PICKUP, order_today, overdue_orders
 from .work_order_permissions import OrderActionPermission, order_capabilities, available_order_actions
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
@@ -98,7 +99,7 @@ def output(order, user, detail=False, *, today=None, reminder_cutoff=None):
         'status':order.status,'status_label':order.get_status_display(),'version':order.version,
         'promised_on':order.promised_on,'laboratory':order.laboratory,'frame_description':order.frame_description,
         'lens_description':order.lens_description,'notes':order.notes,'created_at':order.created_at,'updated_at':order.updated_at,
-        'overdue':order.status not in ('delivered','cancelled') and order.promised_on < (today or timezone.localdate()),
+        'overdue':order.status not in ('delivered','cancelled') and order.promised_on < (today or order_today()),
         'has_prescription':bool(order.prescription_record_id),'next_status':NEXT.get(order.status),
         'actions':actions,'can_change':actions['update'],'pickup_notified':pickup_notified,
         'pickup_reminder_due':reminder_due,'pickup_reminded':latest_action == 'remind_pickup'}
@@ -137,20 +138,18 @@ class OrdersView(SalesBaseView):
             latest_pickup_action=Coalesce(Subquery(pickup_events.values('action')[:1]), Value('')),
             latest_pickup_at=Subquery(pickup_events.values('created_at')[:1]),
         )
-        ready_for_pickup = Q(status=ServiceOrder.Status.READY, sale__status='completed')
-        awaiting_pickup_notice = ready_for_pickup & ~Q(latest_pickup_action__in=PICKUP_CONTACT_ACTIONS)
-        pickup_reminder_due = ready_for_pickup & Q(
+        awaiting_pickup_notice = READY_FOR_PICKUP & ~Q(latest_pickup_action__in=PICKUP_CONTACT_ACTIONS)
+        pickup_reminder_due = READY_FOR_PICKUP & Q(
             latest_pickup_action='notify_pickup', latest_pickup_at__lte=reminder_cutoff,
         )
         qs = base
         state = request.query_params.get('status', 'all')
         if state not in ['all', 'active', *ServiceOrder.Status.values]:
             raise ValidationError('Situação de OS inválida.')
-        active = ~Q(status__in=[ServiceOrder.Status.DELIVERED, ServiceOrder.Status.CANCELLED])
-        today = timezone.localdate()
-        overdue = active & Q(promised_on__lt=today)
+        today = order_today()
+        overdue = overdue_orders(today)
         if state == 'active':
-            qs = qs.filter(active)
+            qs = qs.filter(ACTIVE_ORDERS)
         elif state != 'all':
             qs = qs.filter(status=state)
         sale = request.query_params.get('sale_id')
@@ -164,6 +163,8 @@ class OrdersView(SalesBaseView):
             qs = qs.filter(sale_id=sale)
         if request.query_params.get('overdue') == '1':
             qs = qs.filter(overdue)
+        if request.query_params.get('pickup_ready') == '1':
+            qs = qs.filter(READY_FOR_PICKUP)
         if request.query_params.get('awaiting_pickup_notice') == '1':
             qs = qs.filter(awaiting_pickup_notice)
         if request.query_params.get('pickup_reminder_due') == '1':
@@ -180,10 +181,10 @@ class OrdersView(SalesBaseView):
         response.data['can_create'] = request.user.has_perm('sales.add_serviceorder')
         if request.query_params.get('summary') == '1':
             response.data['summary'] = base.aggregate(
-                active=Count('pk', filter=active),
+                active=Count('pk', filter=ACTIVE_ORDERS),
                 laboratory=Count('pk', filter=Q(status=ServiceOrder.Status.LAB)),
                 overdue=Count('pk', filter=overdue),
-                ready=Count('pk', filter=Q(status=ServiceOrder.Status.READY)),
+                ready=Count('pk', filter=READY_FOR_PICKUP),
                 delivered=Count('pk', filter=Q(status=ServiceOrder.Status.DELIVERED)),
                 awaiting_pickup_notice=Count('pk', filter=awaiting_pickup_notice),
                 pickup_reminder_due=Count('pk', filter=pickup_reminder_due),

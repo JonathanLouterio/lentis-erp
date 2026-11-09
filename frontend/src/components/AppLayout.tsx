@@ -15,7 +15,7 @@ import type { SaleAccess } from '../api'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
-import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ThemePreference } from '../api'
+import type { AccessibleStore, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ServiceOrderInitialQueue, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
 import StockMovements from './StockMovements'
 import Sales from './Sales'
@@ -119,6 +119,8 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
   const [payablePurchaseId, setPayablePurchaseId] = useState<number | undefined>(undefined)
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null)
   const [orderSaleId, setOrderSaleId] = useState<number | undefined>(undefined)
+  const [orderQueue,setOrderQueue] = useState<ServiceOrderInitialQueue>()
+  const [quoteDueOnly,setQuoteDueOnly] = useState(false)
   const [salesStartNew, setSalesStartNew] = useState(false)
   const [dashboardSaleId, setDashboardSaleId] = useState<number | undefined>(undefined)
   const [stores, setStores] = useState<AccessibleStore[]>([])
@@ -480,11 +482,21 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     setMenuOpen(false)
     if (nextPage === 'Contas a pagar') setPayablePurchaseId(undefined)
     if (nextPage === 'Vendas') { setSalesStartNew(false); setDashboardSaleId(undefined) }
-    if (nextPage === 'Ordens de serviço') setOrderSaleId(undefined)
+    if (nextPage === 'Ordens de serviço') { setOrderSaleId(undefined); setOrderQueue(undefined) }
+    if (nextPage === 'Orçamentos') setQuoteDueOnly(false)
     setPage(nextPage)
   }
 
   function dashboardAction(action: DashboardAction, id?: number) {
+    if (action === 'orders-overdue' || action === 'orders-pickup') {
+      if (!leaveSaleAllowed()) return
+      setOrderSaleId(undefined); setOrderQueue(action === 'orders-overdue'?'overdue':'pickup_ready')
+      setOpenGroup('Operação'); setPage('Ordens de serviço'); return
+    }
+    if (action === 'quote-returns') {
+      if (!leaveSaleAllowed()) return
+      setQuoteDueOnly(true); setOpenGroup('Comercial'); setPage('Orçamentos'); return
+    }
     if (action === 'stock') { openStock(id ? String(id) : ''); return }
     if (action === 'new-customer') { setOpenGroup('Cadastros'); setPage('Clientes'); openNewCustomer(); return }
     if (action === 'receivables') { setOpenGroup('Gestão'); changePage('Financeiro'); return }
@@ -502,6 +514,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     setStockProductId('')
     setSalesStartNew(false); setDashboardSaleId(undefined)
     setPayablePurchaseId(undefined)
+    setOrderSaleId(undefined); setOrderQueue(undefined); setQuoteDueOnly(false)
     setSelectedStoreId(storeId)
   }
 
@@ -625,13 +638,13 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
           ) : !catalogMenuVisible(page) ? (
             <section className="erp-card"><h1>Acesso não permitido</h1><p>Solicite ao administrador as permissões para este módulo nesta unidade.</p><button type="button" className="erp-action-button" onClick={() => setCatalogRetry(value => value + 1)}>Atualizar acessos</button></section>
           ) : page === 'Vendas' ? (
-            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} onServiceOrder={orderRights.access?.actions.view ? (id) => { if (!leaveSaleAllowed()) return; setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') } : undefined} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Sales key={`${selectedStore.id}.${dashboardSaleId ?? (salesStartNew ? 'new' : 'list')}`} startNew={salesStartNew} initialSaleId={dashboardSaleId} onServiceOrder={orderRights.access?.actions.view ? (id) => { if (!leaveSaleAllowed()) return; setOrderSaleId(id); setOrderQueue(undefined); setPage('Ordens de serviço'); setOpenGroup('Operação') } : undefined} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Ordens de serviço' ? (
-            <ServiceOrders initialSaleId={orderSaleId} key={`${selectedStore.id}.${orderSaleId ?? "list"}`} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <ServiceOrders initialSaleId={orderSaleId} initialQueue={orderQueue} key={`${selectedStore.id}.${orderSaleId ?? orderQueue ?? "list"}`} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Receitas' ? (
             <Prescriptions key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Orçamentos' ? (
-            <Quotes key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onOpenSale={id => dashboardAction('sale', id)} />
+            <Quotes key={`${selectedStore.id}.${quoteDueOnly}`} initialDueOnly={quoteDueOnly} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onOpenSale={id => dashboardAction('sale', id)} />
           ) : page === 'Caixa' ? (
             <CashRegister key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Financeiro' ? (
@@ -704,7 +717,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
               </div> : <div className="erp-card"><p>Você não tem permissão para consultar a lista de produtos. O cadastro de novos registros depende da permissão de cadastrar.</p></div>}
             </section>
           ) : page === 'Histórico do cliente' && historyCustomerId ? (
-            <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
+            <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setOrderQueue(undefined); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
           ) : page === 'Compras' ? (
             <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={purchaseRights.access?.payables.view ? id => { if (leaveSaleAllowed()) { setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } } : undefined} />
           ) : page === 'Relatórios' ? (
