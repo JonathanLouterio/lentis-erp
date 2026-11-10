@@ -53,8 +53,9 @@ def receivable_query(store, values, today):
     if values.get('sale_id'): query = query.filter(payment__sale_id=values['sale_id'])
     if values.get('method', 'all') != 'all': query = query.filter(payment__kind=values['method'])
     # Só há um relacionamento de valores no SUM; os demais filtros são da própria parcela/venda.
-    query = query.annotate(report_paid=Coalesce(Sum('entries__amount'), Value(ZERO), output_field=MONEY))
-    query = query.annotate(report_remaining=ExpressionWrapper(F('amount')-F('report_paid'), output_field=MONEY))
+    query = query.annotate(report_paid=Coalesce(Sum('entries__amount'), Value(ZERO), output_field=MONEY),
+        report_card_fee=Coalesce(Sum('entries__card_fee'), Value(ZERO), output_field=MONEY))
+    query = query.annotate(report_remaining=ExpressionWrapper(F('amount')-F('report_paid')-F('report_card_fee'), output_field=MONEY))
     state = values['status']
     if state == 'pending': query = query.filter(report_remaining__gt=0)
     elif state == 'paid': query = query.filter(report_remaining=0)
@@ -72,19 +73,19 @@ def prepare_receivables(store, values, today):
     query = receivable_query(store, values, today)
     risk = risk_conditions(today, values.get('warning_days',7))
     sums = query.aggregate(
-        count=Count('pk'), original=Sum('amount'), paid=Sum('report_paid'),
+        count=Count('pk'), original=Sum('amount'), paid=Sum('report_paid'), card_fee=Sum('report_card_fee'),
         remaining=Sum('report_remaining'), overdue=Sum('report_remaining', filter=Q(due_date__lt=today, report_remaining__gt=0)),
         soon=Sum('report_remaining',filter=risk['soon']), within=Sum('report_remaining',filter=risk['within']),
         critical=Sum('report_remaining',filter=risk['critical']),
     )
     summary = [metric('count','Parcelas no filtro',sums['count'],'integer'), metric('original','Valor original',sums['original']),
-        metric('paid','Recebido líquido',sums['paid']), metric('remaining','Saldo em aberto',sums['remaining']),
+        metric('paid','Recebido líquido',sums['paid']), metric('card_fee','Taxas de cartão',sums['card_fee']), metric('remaining','Saldo em aberto',sums['remaining']),
         metric('within','Dentro do prazo',sums['within']), metric('soon','A vencer',sums['soon']),
         metric('overdue','Total vencido',sums['overdue']), metric('critical','Acima de 90 dias',sums['critical'])]
     columns = [col('unit','Unidade'), col('id','Parcela'), col('document','Venda'), col('number','Número','integer'),
         col('party','Cliente registrado'), col('debtor','Responsável'), col('method','Forma de pagamento'),
         col('due_date','Vencimento','date'), col('amount','Valor original','money'), col('paid','Recebido líquido','money'),
-        col('remaining','Saldo atual','money'), col('status','Recebimento'), col('risk_label','Prazo'),
+        col('card_fee','Taxa de cartão','money'), col('remaining','Saldo atual','money'), col('status','Recebimento'), col('risk_label','Prazo'),
         col('days_overdue','Dias em atraso','integer'), col('aging_label','Faixa de atraso')]
     return query, columns, summary
 
@@ -102,7 +103,7 @@ def aging_summary(query, today):
 
 def decorate_row(row, obj, today, warning_days):
     risk, days, age = classify(obj.due_date, obj.report_remaining, today, warning_days)
-    row.update(method=obj.payment.method_name, risk=risk, tone=RISK_TONES[risk], risk_label=RISK_LABELS[risk],
+    row.update(method=obj.payment.method_name, card_fee=money(obj.report_card_fee), risk=risk, tone=RISK_TONES[risk], risk_label=RISK_LABELS[risk],
         days_overdue=str(days), aging_label=AGE_LABELS.get(age,''),
         status='Quitada' if obj.report_remaining<=0 else 'Paga parcialmente' if obj.report_paid>0 else 'Em aberto')
     return row

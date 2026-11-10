@@ -65,7 +65,7 @@ class EntryAdmin(FinanceSystemAdminMixin, ReadOnlyFinancialAdmin):
     def has_change_permission(self,request,obj=None): return False
     def has_delete_permission(self,request,obj=None): return False
 
-    list_display = ['id', 'receivable', 'account', 'amount', 'created_by', 'created_at', 'reversal_of']
+    list_display = ['id', 'receivable', 'account', 'amount', 'card_fee', 'created_by', 'created_at', 'reversal_of']
     list_filter = ['account__store', 'account']
 
 

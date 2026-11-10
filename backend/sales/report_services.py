@@ -111,7 +111,7 @@ def prepare_report(store, values, now, today, lower, upper):
         columns += [col('id','Venda'),col('date','Finalizada em (São Paulo)','datetime'),col('party','Cliente'),col('author','Usuário da venda'),col('amount','Total da venda','money')]
     elif kind=='movements':
         query, summary=movement_rows(store,values,now,lower,upper)
-        columns += [col('id','Lançamento'),col('date','Registrado em (São Paulo)','datetime'),col('paid_on','Data do pagamento / recebimento','date'),col('direction','Direção'),col('type','Tipo'),col('document','Documento'),col('party','Cliente / fornecedor / operadora'),col('account','Conta'),col('method','Forma'),col('author','Registrado por'),col('amount','Valor assinado','money'),col('reason','Referência / motivo')]
+        columns += [col('id','Lançamento'),col('date','Registrado em (São Paulo)','datetime'),col('paid_on','Data do pagamento / recebimento','date'),col('direction','Direção'),col('type','Tipo'),col('document','Documento'),col('party','Cliente / fornecedor / operadora'),col('account','Conta'),col('method','Forma'),col('author','Registrado por'),col('amount','Valor assinado','money'),col('reason','Referência / motivo'),col('card_fee','Taxa de cartão','money')]
     else:
         if kind=='receivables':
             query=Receivable.objects.filter(payment__sale__store=store,payment__sale__status='completed')
@@ -138,7 +138,7 @@ def movement_rows(store,values,now,lower,upper):
     receipts=receipts.annotate(**common,r_id=Concat(Value('REC-'),Cast('pk',CharField())),r_paid_on=TruncDate('created_at',tzinfo=BUSINESS_TZ),r_type=Case(When(amount__gt=0,then=Value('Recebimento de cliente / operadora')),default=Value('Estorno de recebimento')),
         r_document=Concat(Value('Venda #'),Cast('receivable__payment__sale_id',CharField())),
         r_party=Case(When(receivable__debtor='operator',then=Concat(Value('Operadora · '),F('receivable__payment__method_name'))),default=Coalesce(NullIf('receivable__customer_name',Value('')),Value('Venda balcão')),output_field=CharField()),
-        r_account=F('account__name'),r_method=F('method__name'),r_amount=ExpressionWrapper(F('amount'),output_field=MONEY))
+        r_account=F('account__name'),r_method=F('method__name'),r_amount=ExpressionWrapper(F('amount'),output_field=MONEY),r_card_fee=F('card_fee'))
     payouts=payouts.annotate(**common,r_id=Concat(Value('PAG-'),Cast('pk',CharField())),r_paid_on=F('paid_on'),r_type=Case(When(installment__plan__expense_store__isnull=False, amount__gt=0, then=Value('Pagamento de despesa')),
             When(installment__plan__expense_store__isnull=False, then=Value('Estorno de despesa')),
             When(amount__gt=0,then=Value('Pagamento a fornecedor')),default=Value('Estorno de pagamento a fornecedor')),
@@ -146,7 +146,7 @@ def movement_rows(store,values,now,lower,upper):
             default=Concat(Value('Compra #'),Cast('installment__plan__purchase_id',CharField())),output_field=CharField()),
         r_party=Coalesce(NullIf(KeyTextTransform('name','installment__plan__purchase__supplier_snapshot'),Value('')),F('installment__plan__purchase__supplier__name'),
             NullIf('installment__plan__expense_payee',Value('')),F('installment__plan__expense_description'),output_field=CharField()),
-        r_account=F('account_name'),r_method=F('method_name'),r_amount=ExpressionWrapper(-F('amount'),output_field=MONEY))
+        r_account=F('account_name'),r_method=F('method_name'),r_amount=ExpressionWrapper(-F('amount'),output_field=MONEY),r_card_fee=Value(ZERO,output_field=MONEY))
     if values['direction']!='all':
         condition={'r_amount__gt':0} if values['direction']=='in' else {'r_amount__lt':0}
         receipts=receipts.filter(**condition);payouts=payouts.filter(**condition)
@@ -155,7 +155,7 @@ def movement_rows(store,values,now,lower,upper):
     incoming=(a['incoming'] or ZERO)+(b['incoming'] or ZERO)
     outgoing=-((a['outgoing'] or ZERO)+(b['outgoing'] or ZERO))
     summary=[metric('count','Lançamentos',a['count']+b['count'],'integer'),metric('incoming','Entradas registradas',incoming),metric('outgoing','Saídas registradas',outgoing),metric('net','Variação líquida registrada',incoming-outgoing)]
-    fields=['r_id','r_date','r_paid_on','r_type','r_document','r_party','r_account','r_method','r_author','r_amount','r_reason']
+    fields=['r_id','r_date','r_paid_on','r_type','r_document','r_party','r_account','r_method','r_author','r_amount','r_card_fee','r_reason']
     query=receipts.order_by().values(*fields).union(payouts.order_by().values(*fields),all=True).order_by('-r_date','r_id')
     return query,summary
 
@@ -165,7 +165,7 @@ def serialize_row(obj,kind,store,today,warning_days=7):
     if kind=='sales':
         row.update(id=f'#{obj.pk}',date=obj.completed_at.isoformat(),party=obj.customer.name if obj.customer_id else 'Venda balcão',author=obj.created_by.username,amount=money(obj.dashboard_total))
     elif kind=='movements':
-        row.update(id=obj['r_id'],date=obj['r_date'].isoformat(),paid_on=obj['r_paid_on'].isoformat(),type=obj['r_type'],document=obj['r_document'],party=obj['r_party'],account=obj['r_account'],method=obj['r_method'],author=obj['r_author'],amount=money(obj['r_amount']),direction='Entrada' if obj['r_amount']>0 else 'Saída',reason=obj['r_reason'])
+        row.update(id=obj['r_id'],date=obj['r_date'].isoformat(),paid_on=obj['r_paid_on'].isoformat(),type=obj['r_type'],document=obj['r_document'],party=obj['r_party'],account=obj['r_account'],method=obj['r_method'],author=obj['r_author'],amount=money(obj['r_amount']),card_fee=money(obj['r_card_fee']),direction='Entrada' if obj['r_amount']>0 else 'Saída',reason=obj['r_reason'])
     else:
         remaining=obj.report_remaining;paid=obj.report_paid
         row.update(id=f'#{obj.pk}',number=str(obj.number),due_date=obj.due_date.isoformat(),amount=money(obj.amount),paid=money(paid),remaining=money(remaining),status='Quitada' if remaining==0 else 'Vencida' if obj.due_date<today else 'Paga parcialmente' if paid>0 else 'Em aberto')

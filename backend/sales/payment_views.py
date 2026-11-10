@@ -73,7 +73,7 @@ class ReceivablesView(SalesBaseView):
         queryset = Receivable.objects.filter(payment__sale__store=store).select_related(
             'payment__sale', 'payment__account',
         ).prefetch_related('entries__account', 'entries__method', 'entries__created_by').annotate(
-            received=Coalesce(Sum('entries__amount'), Value(0), output_field=DecimalField(max_digits=28, decimal_places=2)),
+            received=Coalesce(Sum(F('entries__amount') + F('entries__card_fee')), Value(0), output_field=DecimalField(max_digits=28, decimal_places=2)),
         )
         state = request.query_params.get('status', 'pending')
         if state == 'pending':

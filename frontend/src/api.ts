@@ -469,12 +469,12 @@ export type PaymentMethod = { id: number; name: string; code: string; kind: Paym
 export type FinancialAccount = { id: number; name: string; code: string; balance?: string; cash_box: boolean; cash_control_enabled: boolean; cash_is_open: boolean }
 export type PaymentOptions = { can_view_balances?: boolean; methods: PaymentMethod[]; accounts: FinancialAccount[]; can_receive: boolean; allow_negative_stock: boolean; discount_limit_percentage: string; discount_policy_configured: boolean; can_approve_discount: boolean; discount_role: string }
 export type FinancialEntry = {
-  id: number; account: number; account_name: string; method_name: string; amount: string
+  id: number; account: number; account_name: string; method_name: string; amount: string; card_fee: string
   created_at: string; creator_username: string; reason: string; reversal_of: number | null
 }
 export type Receivable = {
   id: number; sale_id: number; number: number; installment_count: number; due_date: string
-  amount: string; paid_amount: string; remaining_amount: string; status: 'pending' | 'partial' | 'paid' | 'cancelled'
+  amount: string; paid_amount: string; card_fee_amount: string; remaining_amount: string; status: 'pending' | 'partial' | 'paid' | 'cancelled'
   debtor: 'customer' | 'operator'; customer_name: string; method_name: string; account_name: string
   can_receive: boolean; entries: FinancialEntry[]
 }
@@ -507,7 +507,7 @@ export function getReceivables(storeId: number, page = 1, status = 'pending', de
   return request(`/api/me/receivables/?${query}`)
 }
 export async function receiveInstallment(storeId: number, receivableId: number, data: {
-  request_id: string; account_id: number; method_id: number; amount: string
+  request_id: string; account_id: number; method_id: number; amount: string; card_fee?: string
 }): Promise<Receivable> {
   const token = await getCsrfToken()
   return request(`/api/me/receivables/${receivableId}/receive/?store_id=${storeId}`, {
