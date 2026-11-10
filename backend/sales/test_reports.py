@@ -11,7 +11,7 @@ from accounts.models import StoreMembership
 from organizations.models import Supplier, StockMovement
 from purchases import tests as purchase_tests
 from purchases.models import PayablePlan, PayablePayment
-from purchases.payable_services import create_expense, generate_plan, pay_installment, reverse_payment
+from purchases.payable_services import cancel_expense, create_expense, generate_plan, pay_installment, reverse_payment
 from . import test_payments as sale_fixtures
 from .models import CashPosting, FinancialAccount, FinancialEntry, PaymentMethod, Receivable, Sale
 from .cash_services import open_cash, move_cash
@@ -151,10 +151,10 @@ class ReportsTests(TestCase):
         self.assertEqual(sums['original'],'700.00');self.assertEqual(sums['paid'],'75.00');self.assertEqual(sums['remaining'],'625.00')
         sums=self.summary(self.report('receivables',debtor='operator'));self.assertEqual(sums['remaining'],'700.00')
 
-    def operating_expense(self, category, *, store=None):
+    def operating_expense(self, category, *, store=None, due=date(2026, 11, 30)):
         return create_expense(user=self.user, store=store or self.store, values={
             'request_id': uuid4(), 'category': category, 'description': category, 'payee': '', 'reference': '',
-            'total': Decimal('100.00'), 'installment_count': 1, 'first_due_date': date(2026, 11, 30),
+            'total': Decimal('100.00'), 'installment_count': 1, 'first_due_date': due,
             'interval_unit': 'months', 'interval_count': 1,
         })
 
@@ -213,6 +213,59 @@ class ReportsTests(TestCase):
         options = self.client.get('/api/me/reports/options/', {'store_id':self.store.pk}).data
         self.assertIn('rent', [item['value'] for item in options['expense_categories']])
         self.assertIn('expenses', [item['key'] for item in options['reports']])
+
+    def test_agenda_groups_open_balances_without_counting_settled_or_cancelled_titles(self):
+        self.grant_all()
+        self.grant(app='purchases', codes=['add_operating_expense', 'cancel_operating_expense'])
+        customer_sale = self.sale(kind='boleto', confirmed=False)
+        self.sale(kind='credit', confirmed=False)
+        settled_sale = self.sale(kind='credit', confirmed=False)
+
+        def receive(sale_id, amount, fee='0'):
+            parcel = Receivable.objects.get(payment__sale_id=sale_id)
+            body = {'request_id':str(uuid4()), 'account_id':self.account.pk, 'method_id':self.methods['pix'].pk,
+                    'amount':amount, 'card_fee':fee}
+            response = self.client.post(f'/api/me/receivables/{parcel.pk}/receive/?store_id={self.store.pk}', body, format='json')
+            self.assertEqual(response.status_code, 200, response.data)
+
+        receive(customer_sale['id'], '100.00')
+        receive(customer_sale['id'], '30.00')
+        receive(settled_sale['id'], '680.00', '20.00')
+
+        purchase = self.purchase_plan()
+        self.payout(purchase)
+        expense = self.operating_expense('rent', due=date(2026, 10, 1))
+        payment = self.payout(expense, '20.00')
+        with patch('django.utils.timezone.now', return_value=NOW):
+            reverse_payment(user=self.user, store=self.store, payment_id=payment.pk, values={'request_id':uuid4(),'reason':'Correção'})
+        self.payout(expense, '30.00')
+        cancelled = self.operating_expense('water', due=date(2026, 10, 1))
+        cancel_expense(user=self.user, store=self.store, plan_id=cancelled.pk, values={'request_id':uuid4(),'reason':'Duplicado'})
+
+        result = self.report('agenda', page_size=1)
+        self.assertEqual(result.data['count'], 2)
+        self.assertEqual(self.summary(result), {'incoming':'1270.00','outgoing':'160.01','net':'1109.99'})
+        day = result.data['results'][0]
+        self.assertEqual((day['due_date'], day['customer'], day['operator'], day['purchases'], day['expenses'], day['net']),
+                         ('2026-10-01','570.00','700.00','40.01','70.00','1159.99'))
+        self.assertEqual(self.report('agenda', page_size=1, page=2).data['results'][0]['net'], '-50.00')
+        export = self.report('agenda', page_size=1, export='csv')
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig')), delimiter=';'))
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[2][rows[0].index('Diferença prevista')], '-50,00')
+
+    def test_agenda_needs_both_permissions_and_defaults_to_thirty_days(self):
+        self.grant(codes=['view_reports','view_receivable'])
+        self.report('agenda', expected=403)
+        self.grant(app='purchases', codes=['view_payableplan'])
+        self.user.user_permissions.remove(Permission.objects.get(content_type__app_label='sales', codename='view_receivable'))
+        self.report('agenda', expected=403)
+        self.grant(codes=['view_receivable'])
+        with patch('django.utils.timezone.now', return_value=NOW):
+            response = self.client.get('/api/me/reports/', {'store_id':self.store.pk,'report':'agenda'})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual((response.data['filters']['start'], response.data['filters']['end']), ('2026-10-19','2026-11-17'))
+        self.assertEqual(self.summary(response), {'incoming':'0.00','outgoing':'0.00','net':'0.00'})
 
     def test_card_fee_is_separate_from_the_bank_movement_and_closes_the_receivable(self):
         self.grant_all()

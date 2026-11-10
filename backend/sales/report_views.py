@@ -59,11 +59,13 @@ class ReportsView(InsightReadView):
             return print_receivables(query, columns, summary, values, store, now, today, MAX_PRINT_ROWS, aging_summary(query,today))
         if values.get('export')=='csv':
             limit_message=f'A exportação permite até {MAX_EXPORT_ROWS} linhas. Reduza o período ou refine os filtros; nenhum arquivo parcial foi gerado.'
-            if query.count()>MAX_EXPORT_ROWS:
+            count = len(query) if isinstance(query,list) else query.count()
+            if count>MAX_EXPORT_ROWS:
                 raise ValidationError(limit_message)
             stream=io.StringIO(newline='');writer=csv.writer(stream,delimiter=';',lineterminator='\r\n')
             writer.writerow([c['label'] for c in columns])
-            for index,obj in enumerate(query.iterator(chunk_size=1000)):
+            records = iter(query) if isinstance(query,list) else query.iterator(chunk_size=1000)
+            for index,obj in enumerate(records):
                 if index>=MAX_EXPORT_ROWS:
                     raise ValidationError(limit_message)
                 row=serialize_row(obj,kind,store,today,values['warning_days'])
