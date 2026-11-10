@@ -50,7 +50,7 @@ class PayablePlan(PayableRecord):
         verbose_name = 'Conta a pagar'
         verbose_name_plural = 'Contas a pagar'
         ordering = ['-pk']
-        permissions = [('pay_payable', 'Registrar pagamento de conta a pagar'), ('reverse_payable', 'Estornar pagamento de conta a pagar'), ('add_operating_expense', 'Lançar despesa operacional'), ('cancel_operating_expense', 'Cancelar despesa operacional')]
+        permissions = [('pay_payable', 'Registrar pagamento de conta a pagar'), ('reverse_payable', 'Estornar pagamento de conta a pagar'), ('add_operating_expense', 'Lançar despesa operacional'), ('cancel_operating_expense', 'Cancelar despesa operacional'), ('manage_expense_templates', 'Gerenciar modelos de despesas')]
         constraints = [
             models.CheckConstraint(condition=(
                 models.Q(purchase__isnull=False, expense_store__isnull=True, expense_category='', expense_description='', expense_payee='', expense_reference='') |
@@ -86,6 +86,32 @@ class PayablePlan(PayableRecord):
 
     def __str__(self):
         return self.document_label
+
+
+class ExpenseTemplate(models.Model):
+    store = models.ForeignKey('organizations.Store', on_delete=models.PROTECT, related_name='+')
+    name = models.CharField('Nome do modelo', max_length=100)
+    category = models.CharField(max_length=20, choices=PayablePlan.ExpenseCategory.choices)
+    description = models.CharField(max_length=160)
+    payee = models.CharField(max_length=140, blank=True, default='')
+    suggested_amount = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    due_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    active = models.BooleanField(default=True)
+    version = models.PositiveIntegerField(default=1)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Modelo de despesa'
+        verbose_name_plural = 'Modelos de despesas'
+        ordering = ['name', 'pk']
+        constraints = [
+            models.UniqueConstraint(models.functions.Lower('name'), 'store', name='unique_expense_template_name_store'),
+            models.CheckConstraint(condition=models.Q(due_day__isnull=True) | models.Q(due_day__range=(1, 31)), name='expense_template_due_day_valid'),
+            models.CheckConstraint(condition=models.Q(suggested_amount__isnull=True) | models.Q(suggested_amount__gt=0), name='expense_template_amount_positive'),
+        ]
 
 
 class ExpenseCancellation(PayableRecord):

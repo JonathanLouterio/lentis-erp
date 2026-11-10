@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import type { ExpenseInput, PayableOptions } from '../api'
+import { ExpenseTemplatePicker } from './ExpenseTemplates'
+import type { ExpenseInput, ExpenseTemplate, PayableOptions } from '../api'
 import { decimal, decimalText, displayDate, paymentSchedule, today } from './saleMoney'
 
 type Props = {
+  storeId: number
   options: PayableOptions
   canPay: boolean
   disabled: boolean
@@ -10,7 +12,7 @@ type Props = {
   onSubmit: (values: ExpenseInput) => void
 }
 
-export default function ExpenseForm({options, canPay, disabled, onChange, onSubmit}: Props) {
+export default function ExpenseForm({storeId, options, canPay, disabled, onChange, onSubmit}: Props) {
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
   const [payee, setPayee] = useState('')
@@ -32,6 +34,14 @@ export default function ExpenseForm({options, canPay, disabled, onChange, onSubm
     !!paidOn && paidOn <= today() && (method.kind !== 'cash' || paidOn === today())
   const valid = options.expense_categories.some(option => option.value === category) && !!description.trim() &&
     total !== null && total > 0n && (alreadyPaid ? validPayment : preview.length > 0)
+  function applyTemplate(template: ExpenseTemplate) {
+    setCategory(template.category);setDescription(template.description);setPayee(template.payee)
+    setAmount(template.suggested_amount?.replace('.', ',') ?? '')
+    const [year, month] = today().split('-')
+    const lastDay = new Date(Number(year), Number(month), 0).getDate()
+    setFirstDue(template.due_day ? `${year}-${month}-${String(Math.min(template.due_day,lastDay)).padStart(2,'0')}` : '')
+    onChange()
+  }
   return <form className="erp-finance-form" onChange={onChange} onSubmit={event => {
     event.preventDefault()
     if (!disabled && valid && total !== null) onSubmit({
@@ -42,6 +52,7 @@ export default function ExpenseForm({options, canPay, disabled, onChange, onSubm
     })
   }}>
     <p>Lance uma conta em aberto ou registre de uma vez uma despesa que já foi paga.</p>
+    <ExpenseTemplatePicker storeId={storeId} disabled={disabled} onApply={applyTemplate} />
     <fieldset disabled={disabled}>
       <legend>Dados da despesa</legend>
       <label>Categoria<select required value={category} onChange={event => setCategory(event.target.value)}>

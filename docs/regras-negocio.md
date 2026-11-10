@@ -282,6 +282,13 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - **Lançar despesa operacional** e **Cancelar despesa operacional** exigem consulta de contas a pagar e vínculo com a unidade. São independentes dos direitos de compras. O lançamento não concede direito a pagar ou estornar.
 - Contas a pagar e Movimentações registradas incluem despesas. Contas mensais de valor variável são lançadas conforme chegam; o plano parcelado não cria recorrências automáticas.
 
+## Modelos de despesas da unidade
+
+- Em **Gestão → Contas a pagar → Modelos de despesas**, cadastre nome, categoria, descrição e, se quiser, favorecido, valor sugerido e dia do vencimento. Modelos pertencem à unidade e nomes não se repetem nela.
+- Em **Nova despesa**, selecione um modelo ativo e clique em **Usar modelo**. Confira os campos preenchidos e informe os dados que faltam. O vencimento sugerido usa o mês atual, limitado ao último dia do mês; valor e vencimento sem sugestão ficam em branco. A referência do documento é específica de cada lançamento.
+- Modelos não geram títulos nem baixas automaticamente. Alterar ou arquivar um modelo não altera despesas já lançadas. Modelos arquivados deixam de aparecer em Nova despesa e podem ser reativados.
+- Gerenciar exige permissão de consulta a Contas a pagar, **Gerenciar modelos de despesas** e vínculo ativo com a unidade. Quem pode lançar despesas pode consultar e aplicar os modelos ativos da unidade.
+
 ## Relatórios gerenciais
 
 - Consultas e exportações são somente leitura e usam a unidade selecionada, o vínculo ativo e permissões explícitas. O indicador staff não libera relatórios. Nenhuma ação gera, recebe, paga, estorna ou altera estoque.

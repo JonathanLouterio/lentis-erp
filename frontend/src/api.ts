@@ -736,6 +736,20 @@ export type PayablePermissions = {can_create:boolean;can_create_expense:boolean;
 export type PayablePlan = PayablePermissions & {id:number;purchase_id:number|null;source:'purchase'|'expense';supplier_name:string;category:string;category_label:string;description:string;payee:string;cancellation?:{reason:string;created_at:string;creator_username:string}|null;reference:string;total:string;paid:string;remaining:string;status:'pending'|'partial'|'paid'|'cancelled';overdue:boolean;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;creator_username:string;created_at:string;installments?:PayableInstallment[]}
 export type PayablesPage = CashPage<PayablePlan> & PayablePermissions
 export type PayableOptions = PayablePermissions & {expense_categories:{value:string;label:string}[];accounts:{id:number;name:string;cash_box:boolean;balance?:string}[];methods:{id:number;name:string;kind:'cash'|'pix'|'transfer'|'debit'}[]}
+export type ExpenseTemplateInput = {name:string;category:string;description:string;payee:string;suggested_amount:string|null;due_day:number|null}
+export type ExpenseTemplate = ExpenseTemplateInput & {id:number;category_label:string;active:boolean;version:number}
+export type ExpenseTemplatePage = CashPage<ExpenseTemplate>
+export function getExpenseTemplates(storeId:number,page=1,includeArchived=false,search=''):Promise<ExpenseTemplatePage>{
+  const query=new URLSearchParams({store_id:String(storeId),page:String(page),status:includeArchived?'all':'active',search})
+  return request(`/api/me/payables/expense-templates/?${query}`)
+}
+export async function saveExpenseTemplate(storeId:number,values:ExpenseTemplateInput,existing?:{id:number;active:boolean;version:number}):Promise<ExpenseTemplate>{
+  const token=await getCsrfToken()
+  return request(`/api/me/payables/expense-templates/${existing?`${existing.id}/`:''}?store_id=${storeId}`,{
+    method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},
+    body:JSON.stringify(existing?{...values,active:existing.active,version:existing.version}:values),
+  })
+}
 export type ExpenseInput = {category:string;description:string;payee:string;reference:string;total:string;installment_count:number;first_due_date:string;interval_unit:'months'|'days';interval_count:number;payment?:{account_id:number;method_id:number;paid_on:string}}
 export type PayableSource = 'all'|'purchase'|'expense'
 export type PayableAttempt =
@@ -870,7 +884,7 @@ export function getOrderAccess(storeId:number):Promise<OrderAccess>{return reque
 export function getOrderSales(storeId:number,page:number):Promise<{results:{id:number;customer_name:string}[];next:string|null}>{return request(`/api/me/service-orders/sales/?store_id=${storeId}&page=${page}`)}
 
 export type PurchaseActions={view:boolean;create:boolean;update:boolean;receive:boolean;cancel:boolean;update_cost:boolean}
-export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{view:boolean;generate:boolean;pay:boolean;reverse:boolean;expense:boolean;cancel_expense:boolean}}
+export type PurchaseAccess={store_id:number;purchases:PurchaseActions;payables:{view:boolean;generate:boolean;pay:boolean;reverse:boolean;expense:boolean;cancel_expense:boolean;manage_templates:boolean}}
 export type PurchaseOptions={results:{id:number;name:string;document:string}[];next:string|null;products:{id:number;internal_code:string;name:string;cost_price:string;thumbnail_url:string|null}[]}
 export function getPurchaseAccess(storeId:number):Promise<PurchaseAccess>{return request(`/api/me/purchases/access/?store_id=${storeId}`)}
 export function getPurchaseOptions(storeId:number,page:number):Promise<PurchaseOptions>{return request(`/api/me/purchases/options/?store_id=${storeId}&page=${page}`)}

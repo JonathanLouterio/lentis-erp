@@ -15,6 +15,7 @@ def payable_capabilities(user):
     view=bool(user and user.is_active and user.has_perm('purchases.view_payableplan'))
     return {'view':view,'generate':bool(view and user.has_perm('purchases.add_payableplan') and user.has_perm('purchases.view_purchase')),
         'expense':bool(view and user.has_perm('purchases.add_operating_expense')),'cancel_expense':bool(view and user.has_perm('purchases.cancel_operating_expense')),
+        'manage_templates':bool(view and user.has_perm('purchases.manage_expense_templates')),
         'pay':bool(view and user.has_perm('purchases.pay_payable')),'reverse':bool(view and user.has_perm('purchases.reverse_payable'))}
 
 def require_purchase(user,action,update_cost=False):

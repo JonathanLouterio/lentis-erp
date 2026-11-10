@@ -5,9 +5,12 @@ from .views import PurchasesView, PurchaseDetailView
 app_name='purchases'
 urlpatterns=[path('me/purchases/access/',PurchaseAccessView.as_view()),path('me/purchases/options/',PurchaseOptionsView.as_view()),path('me/purchases/',PurchasesView.as_view(),name='purchases'),path('me/purchases/<int:purchase_id>/',PurchaseDetailView.as_view(),name='purchase-detail')]
 
+from .expense_template_views import ExpenseTemplatesView, ExpenseTemplateDetailView
 from .payable_views import ExpenseCancelView, ExpenseCreateView, PayablesView, PayableDetailView, PayableOptionsView, PayablePaymentView, PayableReversalView
 urlpatterns += [
     path('me/payables/', PayablesView.as_view(), name='payables'),
+    path('me/payables/expense-templates/', ExpenseTemplatesView.as_view(), name='expense-templates'),
+    path('me/payables/expense-templates/<int:template_id>/', ExpenseTemplateDetailView.as_view(), name='expense-template-detail'),
     path('me/payables/expenses/', ExpenseCreateView.as_view(), name='expense-create'),
     path('me/payables/expenses/<int:plan_id>/cancel/', ExpenseCancelView.as_view(), name='expense-cancel'),
     path('me/payables/options/', PayableOptionsView.as_view(), name='payable-options'),
