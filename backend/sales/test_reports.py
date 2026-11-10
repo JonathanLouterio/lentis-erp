@@ -11,9 +11,9 @@ from accounts.models import StoreMembership
 from organizations.models import Supplier, StockMovement
 from purchases import tests as purchase_tests
 from purchases.models import PayablePlan, PayablePayment
-from purchases.payable_services import generate_plan, pay_installment, reverse_payment
+from purchases.payable_services import create_expense, generate_plan, pay_installment, reverse_payment
 from . import test_payments as sale_fixtures
-from .models import CashPosting, FinancialAccount, FinancialEntry, Receivable, Sale
+from .models import CashPosting, FinancialAccount, FinancialEntry, PaymentMethod, Receivable, Sale
 from .cash_services import open_cash, move_cash
 
 NOW=datetime(2026,10,19,15,tzinfo=utc.utc)
@@ -150,6 +150,69 @@ class ReportsTests(TestCase):
         sums=self.summary(self.report('receivables',debtor='customer'))
         self.assertEqual(sums['original'],'700.00');self.assertEqual(sums['paid'],'75.00');self.assertEqual(sums['remaining'],'625.00')
         sums=self.summary(self.report('receivables',debtor='operator'));self.assertEqual(sums['remaining'],'700.00')
+
+    def operating_expense(self, category, *, store=None):
+        return create_expense(user=self.user, store=store or self.store, values={
+            'request_id': uuid4(), 'category': category, 'description': category, 'payee': '', 'reference': '',
+            'total': Decimal('100.00'), 'installment_count': 1, 'first_due_date': date(2026, 11, 30),
+            'interval_unit': 'months', 'interval_count': 1,
+        })
+
+    def test_expense_report_groups_actual_payments_by_category_and_exports_totals(self):
+        self.grant_all()
+        self.grant(app='purchases', codes=['add_operating_expense'])
+        rent = self.operating_expense('rent')
+        self.payout(rent, '40.00')
+        self.payout(rent, '10.00')
+        transport = self.operating_expense('transport')
+        payment = self.payout(transport, '30.00')
+        with patch('django.utils.timezone.now', return_value=NOW):
+            reverse_payment(user=self.user, store=self.store, payment_id=payment.pk, values={'request_id': uuid4(), 'reason': 'Correção'})
+        self.operating_expense('water')
+        self.payout(self.purchase_plan())
+        # Uma saída registrada depois do dia do pagamento entra no dia informado.
+        result = self.report('expenses', start='2026-10-18', end='2026-10-19')
+        self.assertEqual(self.summary(result), {'paid': '80.00', 'reversed': '30.00', 'net': '50.00'})
+        self.assertEqual([(r['id'], r['count'], r['net']) for r in result.data['results']],
+                         [('rent', '2', '50.00'), ('transport', '1', '0.00')])
+        only_rent = self.report('expenses', start='2026-10-18', end='2026-10-18', category='rent')
+        self.assertEqual(only_rent.data['filters']['category'], 'rent')
+        self.assertEqual(self.summary(only_rent), {'paid':'50.00','reversed':'0.00','net':'50.00'})
+        csv_result = self.report('expenses', category='rent', export='csv')
+        rows = list(csv.reader(io.StringIO(csv_result.content.decode('utf-8-sig')), delimiter=';'))
+        self.assertEqual(rows[1][rows[0].index('Categoria')], 'Aluguel')
+        self.assertEqual(rows[1][rows[0].index('Saída líquida')], '50,00')
+        self.assertEqual(len(rows), 2)
+
+    def test_expense_report_uses_reversal_date_and_does_not_read_another_unit(self):
+        self.grant_all()
+        self.grant(app='purchases', codes=['add_operating_expense'])
+        plan = self.operating_expense('internet')
+        payment = self.payout(plan, '30.00')
+        StoreMembership.objects.create(user=self.user, store=self.other, role='seller')
+        other = self.operating_expense('internet', store=self.other)
+        method = PaymentMethod.objects.create(store=self.other, code='pix', name='Pix', kind='pix')
+        with patch('django.utils.timezone.now', return_value=NOW):
+            pay_installment(user=self.user, store=self.other, installment_id=other.installments.first().pk, values={
+                'request_id':uuid4(), 'account_id':self.other_account.pk, 'method_id':method.pk, 'amount':Decimal('15.00'),
+                'paid_on':date(2026,10,19), 'reason':'Outra unidade',
+            })
+            reverse_payment(user=self.user, store=self.store, payment_id=payment.pk, values={'request_id':uuid4(),'reason':'Correção'})
+        result = self.report('expenses', start='2026-10-19', end='2026-10-19')
+        self.assertEqual(self.summary(result), {'paid':'0.00','reversed':'30.00','net':'-30.00'})
+        self.assertEqual(result.data['results'][0]['count'], '0')
+
+    def test_expense_report_requires_payables_and_export_permission(self):
+        self.user.user_permissions.remove(Permission.objects.get(content_type__app_label='sales', codename='export_reports'))
+        self.grant(codes=['view_reports'])
+        self.report('expenses', expected=403)
+        self.grant(app='purchases', codes=['view_payableplan'])
+        self.report('expenses', category='invalid', expected=400)
+        self.report('expenses', export='csv', expected=403)
+        self.report('expenses')
+        options = self.client.get('/api/me/reports/options/', {'store_id':self.store.pk}).data
+        self.assertIn('rent', [item['value'] for item in options['expense_categories']])
+        self.assertIn('expenses', [item['key'] for item in options['reports']])
 
     def test_card_fee_is_separate_from_the_bank_movement_and_closes_the_receivable(self):
         self.grant_all()

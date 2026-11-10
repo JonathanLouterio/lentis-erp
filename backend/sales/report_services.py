@@ -15,6 +15,8 @@ REPORTS = {
     'movements': {'title': 'Movimentações registradas', 'permissions': ('sales.view_financialentry', 'purchases.view_payableplan'), 'basis': 'Data de registro', 'description': 'Recebimentos, pagamentos de compras e despesas e seus estornos pela data de registro em São Paulo. A data informada do pagamento aparece em outra coluna. Não inclui abertura, suprimento ou retirada manual de caixa, nem representa lucro ou extrato bancário.'},
     'receivables': {'title': 'Contas a receber', 'permissions': ('sales.view_receivable',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas com vencimento no período e situação atual, incluindo recebimentos posteriores ao período. Não é um saldo histórico na data final. Vendas canceladas são excluídas. O responsável distingue cliente e operadora de cartão.'},
     'payables': {'title': 'Contas a pagar', 'permissions': ('purchases.view_payableplan',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas de compras e despesas com vencimento no período e situação atual, incluindo pagamentos posteriores ao período. Não é um saldo histórico na data final. Despesas canceladas são excluídas.'},
+    'expenses': {'title': 'Despesas por categoria', 'permissions': ('purchases.view_payableplan',), 'basis': 'Data do pagamento ou estorno',
+        'description': 'Despesas operacionais da unidade com pagamento ou estorno no período. Compras de estoque e valores ainda em aberto não entram. Estornos entram na data em que foram registrados.'},
 }
 
 
@@ -35,6 +37,7 @@ class ReportInput(serializers.Serializer):
     method = serializers.ChoiceField(choices=['all','cash','pix','transfer','credit','debit','boleto','store_credit'], default='all')
     risk = serializers.ChoiceField(choices=['all','within','soon','overdue','critical','paid'], default='all')
     aging = serializers.ChoiceField(choices=['all','1_30','31_60','61_90','over_90'], default='all')
+    category = serializers.ChoiceField(choices=['all', *PayablePlan.ExpenseCategory.values], default='all')
     warning_days = serializers.IntegerField(min_value=1, max_value=90, default=7)
 
 
@@ -97,9 +100,34 @@ def installment_rows(queryset, values, today, incoming):
     return query
 
 
+def expense_rows(store, values, now):
+    payments = PayablePayment.objects.filter(
+        installment__plan__expense_store=store, paid_on__range=(values['start'], values['end']),
+        created_at__lte=now,
+    )
+    if values['category'] != 'all':
+        payments = payments.filter(installment__plan__expense_category=values['category'])
+    amounts = {
+        'paid': Sum('amount', filter=Q(amount__gt=0)),
+        'reversed': Sum(-F('amount'), filter=Q(amount__lt=0)),
+        'net': Sum('amount'),
+    }
+    sums = payments.aggregate(**amounts)
+    query = payments.order_by().values(category=F('installment__plan__expense_category')).annotate(
+        **amounts, count=Count('pk', filter=Q(amount__gt=0)),
+    ).order_by('-net', 'category')
+    columns = [col('unit', 'Unidade'), col('category', 'Categoria'), col('count', 'Pagamentos', 'integer'),
+        col('paid', 'Valor pago', 'money'), col('reversed', 'Estornos', 'money'), col('net', 'Saída líquida', 'money')]
+    summary = [metric('paid', 'Valor pago', sums['paid']), metric('reversed', 'Estornos', sums['reversed']),
+        metric('net', 'Saída líquida', sums['net'])]
+    return query, columns, summary
+
+
 def prepare_report(store, values, now, today, lower, upper):
     """Retorna QuerySet paginável e resumo dos mesmos filtros, sem gravar dados."""
     kind=values['report']
+    if kind=='expenses':
+        return expense_rows(store,values,now)
     if kind=='receivables':
         from .receivable_report import prepare_receivables
         return prepare_receivables(store,values,today)
@@ -164,6 +192,10 @@ def serialize_row(obj,kind,store,today,warning_days=7):
     row={'unit':f'{store.code} — {store.name}'}
     if kind=='sales':
         row.update(id=f'#{obj.pk}',date=obj.completed_at.isoformat(),party=obj.customer.name if obj.customer_id else 'Venda balcão',author=obj.created_by.username,amount=money(obj.dashboard_total))
+    elif kind=='expenses':
+        category = obj['category']
+        row.update(id=category, category=PayablePlan.ExpenseCategory(category).label, count=str(obj['count']),
+                   paid=money(obj['paid']), reversed=money(obj['reversed']), net=money(obj['net']))
     elif kind=='movements':
         row.update(id=obj['r_id'],date=obj['r_date'].isoformat(),paid_on=obj['r_paid_on'].isoformat(),type=obj['r_type'],document=obj['r_document'],party=obj['r_party'],account=obj['r_account'],method=obj['r_method'],author=obj['r_author'],amount=money(obj['r_amount']),card_fee=money(obj['r_card_fee']),direction='Entrada' if obj['r_amount']>0 else 'Saída',reason=obj['r_reason'])
     else:

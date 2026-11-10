@@ -282,6 +282,12 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - **Lançar despesa operacional** e **Cancelar despesa operacional** exigem consulta de contas a pagar e vínculo com a unidade. São independentes dos direitos de compras. O lançamento não concede direito a pagar ou estornar.
 - Contas a pagar e Movimentações registradas incluem despesas. Contas mensais de valor variável são lançadas conforme chegam; o plano parcelado não cria recorrências automáticas.
 
+## Relatório de despesas por categoria
+
+- **Gestão → Relatórios → Despesas por categoria** agrupa os pagamentos de despesas operacionais da unidade pela data de pagamento informada, com filtro de período e categoria. Estornos entram na própria data de registro, inclusive se o pagamento original for de outro período.
+- Cada categoria mostra a quantidade de pagamentos, o valor pago, os estornos e a saída líquida (pago menos estornado). Compras de estoque, taxas de cartão e parcelas ainda em aberto não entram. Se os estornos superarem as saídas do período, o valor líquido pode ser negativo.
+- A consulta exige **Relatórios** e **Contas a pagar**; o CSV exige também a permissão de exportar. O relatório não altera títulos nem movimenta contas.
+
 ## Modelos de despesas da unidade
 
 - Em **Gestão → Contas a pagar → Modelos de despesas**, cadastre nome, categoria, descrição e, se quiser, favorecido, valor sugerido e dia do vencimento. Modelos pertencem à unidade e nomes não se repetem nela.
