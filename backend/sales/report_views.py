@@ -2,6 +2,7 @@ import csv
 import io
 from datetime import datetime
 from django.http import HttpResponse
+from purchases.models import PayablePlan
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -38,7 +39,8 @@ class ReportOptionsView(InsightReadView):
         store=self._selected_store();now=timezone.now();today=timezone.localtime(now,BUSINESS_TZ).date()
         reports=available_reports(request.user)
         accounts=FinancialAccount.objects.filter(store=store) if any(r['key']=='movements' for r in reports) else []
-        return Response({'can_export':request.user.has_perm('sales.export_reports'),'reports':reports,'accounts':[{'id':a.pk,'name':a.name,'is_active':a.is_active} for a in accounts],'timezone':str(BUSINESS_TZ),'start':today.replace(day=1).isoformat(),'end':today.isoformat(),'max_export_rows':MAX_EXPORT_ROWS,'max_print_rows':MAX_PRINT_ROWS},headers={'Cache-Control':'no-store, private'})
+        categories = [{'value': value, 'label': label} for value, label in PayablePlan.ExpenseCategory.choices] if any(r['key']=='expenses' for r in reports) else []
+        return Response({'expense_categories':categories,'can_export':request.user.has_perm('sales.export_reports'),'reports':reports,'accounts':[{'id':a.pk,'name':a.name,'is_active':a.is_active} for a in accounts],'timezone':str(BUSINESS_TZ),'start':today.replace(day=1).isoformat(),'end':today.isoformat(),'max_export_rows':MAX_EXPORT_ROWS,'max_print_rows':MAX_PRINT_ROWS},headers={'Cache-Control':'no-store, private'})
 
 
 class ReportsView(InsightReadView):
@@ -79,5 +81,7 @@ class ReportsView(InsightReadView):
             from .receivable_report import aging_summary
             response.data['aging'] = aging_summary(query,today)
             response.data['filters'].update({key:values.get(key) for key in ['all_dates','customer','sale_id','method','risk','aging','warning_days']})
+        if kind=='expenses':
+            response.data['filters']['category'] = values['category']
         response['Cache-Control']='no-store, private'
         return response
