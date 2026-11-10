@@ -6,6 +6,7 @@ import { decimal, signedDecimal, decimalText, today, displayDate, dateTime, paym
 import './Payables.css'
 import FormDialog from './FormDialog'
 import ExpenseForm from './ExpenseForm'
+import ExpenseTemplates from './ExpenseTemplates'
 import './FinanceWindows.css'
 import { usePurchaseAccess } from '../hooks/usePurchaseAccess'
 
@@ -27,6 +28,7 @@ export default function Payables({store,userId,initialPurchaseId,onSavingChange,
   const [listSource,setListSource]=useState<PayableSource>('all')
   const [category,setCategory]=useState('')
   const [expense,setExpense]=useState(false)
+  const [templates,setTemplates]=useState(false)
   const [cancelling,setCancelling]=useState(false)
   const [reload,setReload]=useState(0)
   const [loading,setLoading]=useState(true)
@@ -88,7 +90,7 @@ export default function Payables({store,userId,initialPurchaseId,onSavingChange,
   const touch=()=>{setDirty(true);setConfirmed(false)}
   if(!caps?.view)return <section className="erp-card"><h1>Contas a pagar</h1><p>{rights.loading?'Conferindo acessos…':rights.error||'Solicite permissão para consultar contas a pagar.'}</p></section>
   return <section className="payable-page">
-    <header className="payable-heading"><div><span className="erp-kicker">GESTÃO · {store.name}</span><h1>Contas a pagar</h1><p>Acompanhe vencimentos e pagamentos de despesas e compras.</p></div><div className="payable-heading-actions">{caps.expense&&<button type="button" className="erp-action-button" disabled={locked||!options?.can_create_expense} onClick={newExpense}>Nova despesa</button>}<button type="button" className="erp-action-button" hidden={!caps.generate} disabled={locked||!options?.can_create} onClick={newPlan}>Gerar parcelas de compra</button></div></header>
+    <header className="payable-heading"><div><span className="erp-kicker">GESTÃO · {store.name}</span><h1>Contas a pagar</h1><p>Acompanhe vencimentos e pagamentos de despesas e compras.</p></div><div className="payable-heading-actions">{caps.manage_templates&&<button type="button" disabled={locked||!options} onClick={()=>{setDirty(false);setTemplates(true)}}>Modelos de despesas</button>}{caps.expense&&<button type="button" className="erp-action-button" disabled={locked||!options?.can_create_expense} onClick={newExpense}>Nova despesa</button>}<button type="button" className="erp-action-button" hidden={!caps.generate} disabled={locked||!options?.can_create} onClick={newPlan}>Gerar parcelas de compra</button></div></header>
     {error&&<p className="erp-alert" role="alert">{error}</p>}{success&&<p className="payable-success" role="status">{success}</p>}
 
     <div className="payable-toolbar"><label>Situação<select aria-label="Situação das contas a pagar" disabled={locked} value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option value="pending">Em aberto</option><option value="overdue">Vencidas</option><option value="paid">Quitadas</option><option value="cancelled">Canceladas</option><option value="all">Todas</option></select></label>
@@ -97,6 +99,8 @@ export default function Payables({store,userId,initialPurchaseId,onSavingChange,
     <button type="button" disabled={locked} onClick={()=>setReload(v=>v+1)}>Atualizar lista e contas</button></div>
     <div className="payable-grid"><aside className="erp-card payable-list"><h2>Títulos <small>({rows.count})</small></h2>{loading?<p role="status">Carregando…</p>:rows.results.length?rows.results.map(p=><button type="button" className={`payable-row${selected?.id===p.id?' is-selected':''}`} key={p.id} disabled={locked} onClick={()=>void open(p.id)}><strong>{titleName(p)}</strong><span>{documentName(p)} · {p.reference||'Sem referência'}</span><span className={p.overdue?'payable-overdue':''}>{p.overdue?'Há parcelas vencidas':labels[p.status]}</span><strong>Em aberto: {currency(p.remaining)}</strong><small>Total {currency(p.total)} · {p.installment_count} parcela(s)</small></button>):<p>Nenhum título neste filtro.</p>}<div className="payable-pagination"><button type="button" disabled={locked||!rows.previous} onClick={()=>setPage(v=>v-1)}>Anterior</button><span>Página {page}</span><button type="button" disabled={locked||!rows.next} onClick={()=>setPage(v=>v+1)}>Próxima</button></div></aside>
     </div>
+    {templates && options && <ExpenseTemplates storeId={store.id} storeName={store.name} categories={options.expense_categories}
+      busy={locked} onBusyChange={setBusy} onDirtyChange={setDirty} onClose={()=>{setTemplates(false);setDirty(false)}} />}
     {(expense || generator || selected || pending) && <FormDialog wide title={expense ? 'Nova despesa' : generator ? 'Gerar contas a pagar' : selected ? `Título #${selected.id} · ${titleName(selected)}` : 'Conferir envio pendente'}
       sectionLabel="FINANCEIRO · CONTAS A PAGAR" subtitle={store.name} busy={locked} dirty={(expense || generator || cancelling) && dirty} notice={error || success}
       onClose={()=>{setSelected(null);setExpense(false);setGenerator(false);setSource(null);resetForm();setError('');setSuccess('')}}
@@ -104,7 +108,7 @@ export default function Payables({store,userId,initialPurchaseId,onSavingChange,
     {error&&!installment&&!reversing&&<p className="erp-alert" role="alert">{error}</p>}{success&&<p className="payable-success" role="status">{success}</p>}
     {(!installment&&!reversing || installment&&!caps.pay || reversing&&!caps.reverse) && <>{pending&&<div className="erp-card payable-pending"><h2>{busy?'Registrando operação…':'Conferir envio pendente'}</h2><p>{busy?'Aguarde a confirmação do servidor.':'A conexão não confirmou o resultado. Repita este mesmo envio para recuperar a operação sem registrar outro pagamento.'}</p><button type="button" className="erp-action-button" disabled={busy||rights.loading||!caps[pending.kind]} onClick={()=>void send(pending)}>Conferir / repetir envio</button></div>}</>}
     {expense && options && <div hidden={!!pending}>
-      <ExpenseForm options={options} canPay={!!caps.pay} disabled={locked||rights.loading||!caps.expense||!options.can_create_expense} onChange={touch}
+      <ExpenseForm storeId={store.id} options={options} canPay={!!caps.pay} disabled={locked||rights.loading||!caps.expense||!options.can_create_expense} onChange={touch}
         onSubmit={values=>void send({kind:'expense',payload:{...values,request_id:crypto.randomUUID()}})} />
     </div>}
     {!pending && !expense && <div className="payable-main">

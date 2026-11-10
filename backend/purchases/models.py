@@ -131,4 +131,4 @@ class PurchaseOperation(ProtectedRecord):
     digest=models.CharField(max_length=64)
     created_at=models.DateTimeField(auto_now_add=True)
 
-from .payable_models import ExpenseCancellation, PayablePlan, PayableInstallment, PayablePayment  # noqa: E402,F401
+from .payable_models import ExpenseCancellation, ExpenseTemplate, PayablePlan, PayableInstallment, PayablePayment  # noqa: E402,F401

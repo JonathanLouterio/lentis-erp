@@ -34,3 +34,7 @@
 @media(max-width:580px){.payable-heading-actions button{min-height:44px}.payable-toolbar label{max-width:100%}}
 
 .payable-page fieldset.payable-expense-payment{border-top:1px solid var(--erp-border);padding-top:12px}
+
+.payable-page .payable-template-box{border:1px solid var(--erp-border);border-radius:10px;padding:12px}
+.payable-template-picker{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+@media(max-width:580px){.payable-template-picker{grid-template-columns:minmax(0,1fr)}}
