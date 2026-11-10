@@ -282,6 +282,12 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 - **Lançar despesa operacional** e **Cancelar despesa operacional** exigem consulta de contas a pagar e vínculo com a unidade. São independentes dos direitos de compras. O lançamento não concede direito a pagar ou estornar.
 - Contas a pagar e Movimentações registradas incluem despesas. Contas mensais de valor variável são lançadas conforme chegam; o plano parcelado não cria recorrências automáticas.
 
+## Agenda financeira por vencimento
+
+- **Gestão → Relatórios → Agenda financeira** abre nos próximos 30 dias, incluindo hoje. É possível escolher outro período, inclusive vencimentos passados que continuam em aberto.
+- A agenda agrupa por dia os saldos a receber de clientes, repasses de cartão, compras a pagar e despesas operacionais. Considera baixas parciais, estornos e taxas de cartão já registradas. Vendas e despesas canceladas e parcelas quitadas não entram.
+- A diferença prevista é entradas menos saídas do período ou do dia. Não soma saldo bancário nem caixa físico. A consulta exige permissão de relatórios, contas a receber e contas a pagar na unidade; o CSV também exige exportação.
+
 ## Relatório de despesas por categoria
 
 - **Gestão → Relatórios → Despesas por categoria** agrupa os pagamentos de despesas operacionais da unidade pela data de pagamento informada, com filtro de período e categoria. Estornos entram na própria data de registro, inclusive se o pagamento original for de outro período.

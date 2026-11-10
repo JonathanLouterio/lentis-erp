@@ -1,4 +1,6 @@
 """Relatórios de leitura; vendas, lançamentos e saldos têm bases distintas."""
+from datetime import timedelta
+
 from django.db.models import Case, When, Value, CharField, F, ExpressionWrapper, Count, Sum, Q
 from django.db.models.functions import Coalesce, Concat, Cast, NullIf, TruncDate
 from django.db.models.fields.json import KeyTextTransform
@@ -17,6 +19,10 @@ REPORTS = {
     'payables': {'title': 'Contas a pagar', 'permissions': ('purchases.view_payableplan',), 'basis': 'Vencimento · saldo atual', 'description': 'Parcelas de compras e despesas com vencimento no período e situação atual, incluindo pagamentos posteriores ao período. Não é um saldo histórico na data final. Despesas canceladas são excluídas.'},
     'expenses': {'title': 'Despesas por categoria', 'permissions': ('purchases.view_payableplan',), 'basis': 'Data do pagamento ou estorno',
         'description': 'Despesas operacionais da unidade com pagamento ou estorno no período. Compras de estoque e valores ainda em aberto não entram. Estornos entram na data em que foram registrados.'},
+    'agenda': {'title': 'Agenda financeira', 'permissions': ('sales.view_receivable', 'purchases.view_payableplan'),
+        'basis': 'Vencimento · saldo em aberto',
+        'description': 'Saldos ainda em aberto por data de vencimento. A diferença prevista é a soma das entradas menos as saídas do dia. '
+                       'Não inclui saldo em banco ou caixa e não garante que os pagamentos ocorrerão nas datas previstas.'},
 }
 
 
@@ -59,8 +65,12 @@ def parse_filters(request, store, now):
     today = timezone.localtime(now, BUSINESS_TZ).date()
     if ('start' in values) != ('end' in values):
         raise ValidationError('Informe as datas inicial e final juntas.')
-    start = values.get('start', today.replace(day=1))
-    end = values.get('end', today)
+    if values['report'] == 'agenda':
+        start = values.get('start', today)
+        end = values.get('end', today + timedelta(days=29))
+    else:
+        start = values.get('start', today.replace(day=1))
+        end = values.get('end', today)
     if values.get('all_dates'):
         start, end = today.replace(day=1), today
     if start > end or (end-start).days > 365:
@@ -126,6 +136,9 @@ def expense_rows(store, values, now):
 def prepare_report(store, values, now, today, lower, upper):
     """Retorna QuerySet paginável e resumo dos mesmos filtros, sem gravar dados."""
     kind=values['report']
+    if kind=='agenda':
+        from .finance_agenda import prepare_agenda
+        return prepare_agenda(store, values)
     if kind=='expenses':
         return expense_rows(store,values,now)
     if kind=='receivables':
@@ -192,6 +205,10 @@ def serialize_row(obj,kind,store,today,warning_days=7):
     row={'unit':f'{store.code} — {store.name}'}
     if kind=='sales':
         row.update(id=f'#{obj.pk}',date=obj.completed_at.isoformat(),party=obj.customer.name if obj.customer_id else 'Venda balcão',author=obj.created_by.username,amount=money(obj.dashboard_total))
+    elif kind=='agenda':
+        from .finance_agenda import GROUPS
+        day = obj['due_date'].isoformat()
+        row.update(id=day, due_date=day, **{key: money(obj[key]) for key in (*GROUPS, 'net')})
     elif kind=='expenses':
         category = obj['category']
         row.update(id=category, category=PayablePlan.ExpenseCategory(category).label, count=str(obj['count']),

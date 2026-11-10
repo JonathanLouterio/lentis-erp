@@ -763,7 +763,7 @@ export function getPayable(storeId:number,id:number):Promise<PayablePlan>{return
 export function getPayableOptions(storeId:number):Promise<PayableOptions>{return request(`/api/me/payables/options/?store_id=${storeId}`)}
 export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:attempt.kind==='expense'?'expenses/':attempt.kind==='cancel_expense'?`expenses/${attempt.planId}/cancel/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
 
-export type ReportKind='sales'|'movements'|'receivables'|'payables'|'expenses'
+export type ReportKind='sales'|'movements'|'receivables'|'payables'|'expenses'|'agenda'
 export type ReportFilters={category?:string;all_dates?:boolean;customer?:string;sale_id?:number|null;method?:string;risk?:string;aging?:string;warning_days?:number;report:ReportKind;start:string;end:string;status:'all'|'pending'|'paid'|'partial'|'overdue';debtor:'all'|'customer'|'operator';direction:'all'|'in'|'out';account_id?:number|null}
 export type ReportColumn={key:string;label:string;kind:'text'|'money'|'date'|'datetime'|'integer'}
 export type ReportData=CashPage<Record<string,string>> & {aging?:{key:string;label:string;count:number;amount:string;tone:string}[];title:string;description:string;basis:string;columns:ReportColumn[];summary:{key:string;label:string;value:string;kind:'money'|'integer'}[];filters:ReportFilters;generated_at:string;today:string;timezone:string;store_id:number}
