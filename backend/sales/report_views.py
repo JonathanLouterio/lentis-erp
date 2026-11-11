@@ -84,6 +84,9 @@ class ReportsView(InsightReadView):
             from .receivable_report import aging_summary
             response.data['aging'] = aging_summary(query,today)
             response.data['filters'].update({key:values.get(key) for key in ['all_dates','customer','sale_id','method','risk','aging','warning_days']})
+        if kind=='agenda':
+            from .finance_agenda import agenda_overdue_summary
+            response.data['agenda_overdue'] = agenda_overdue_summary(store, today)
         if kind=='expenses':
             response.data['filters']['category'] = values['category']
         response['Cache-Control']='no-store, private'
