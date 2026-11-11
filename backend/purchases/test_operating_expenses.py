@@ -1,5 +1,6 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as utc_timezone
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -186,20 +187,23 @@ class OperatingExpenseTests(TestCase):
             self.post('expenses/', {**self.data(), **invalid}, 400)
         self.assertFalse(PayablePlan.objects.exists())
 
-    def test_reports_include_expenses_and_keep_payments_after_cancellation(self):
+    @patch('django.utils.timezone.now', return_value=datetime(2026, 11, 11, 0, 8, tzinfo=utc_timezone.utc))
+    def test_reports_include_expenses_and_keep_payments_after_cancellation(self, _clock):
         self.grant('sales', 'view_reports', 'view_financialentry')
-        today = str(timezone.localdate())
+        # Após meia-noite em UTC, o registro ainda pertence ao dia anterior em São Paulo.
+        today = '2026-11-10'
         plan = self.post('expenses/', {**self.data(), 'first_due_date': today, 'installment_count': 1})
-        paid = self.post(f'installments/{plan["installments"][0]["id"]}/pay/', self.payment())
-        def report(kind):
+        paid = self.post(f'installments/{plan["installments"][0]["id"]}/pay/', {**self.payment(), 'paid_on': today})
+        def report(kind, day=today):
             response = self.client.get('/api/me/reports/', {'store_id': self.store.pk, 'report': kind,
-                'start': today, 'end': today, **({'status': 'all'} if kind == 'payables' else {})})
+                'start': day, 'end': day, **({'status': 'all'} if kind == 'payables' else {})})
             self.assertEqual(response.status_code, 200, response.data)
             return response.data['results']
         document = f'Despesa #{plan["id"]}'
         self.assertEqual([(r['document'], r['remaining'], r['category']) for r in report('payables')], [(document, '90.01', 'Financiamento')])
         self.assertEqual([(r['document'], r['type'], r['amount'], r['party']) for r in report('movements')],
                          [(document, 'Pagamento de despesa', '-10.00', 'Banco do contrato')])
+        self.assertEqual(report('movements', '2026-11-11'), [])
         payment = paid['installments'][0]['payments'][0]['id']
         self.post(f'payments/{payment}/reverse/', self.cancellation())
         self.post(f'expenses/{plan["id"]}/cancel/', self.cancellation())

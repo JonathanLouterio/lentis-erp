@@ -4,7 +4,8 @@ from datetime import datetime
 from django.http import HttpResponse
 from purchases.models import PayablePlan
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from .insight_permissions import InsightPermission
 from .models import FinancialAccount
@@ -86,4 +87,32 @@ class ReportsView(InsightReadView):
         if kind=='expenses':
             response.data['filters']['category'] = values['category']
         response['Cache-Control']='no-store, private'
+        return response
+
+
+class AgendaDayInput(serializers.Serializer):
+    date = serializers.DateField()
+
+
+class AgendaDayView(InsightReadView):
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request):
+        from .finance_agenda import agenda_day_rows
+        from .insight_permissions import report_allowed
+        from .dashboard_views import money
+
+        store = self._selected_store()
+        if not report_allowed(request.user, REPORTS['agenda']['permissions']):
+            raise PermissionDenied('Seu usuário precisa de acesso às contas a receber e a pagar para consultar a agenda.')
+        values = AgendaDayInput(data=request.query_params)
+        values.is_valid(raise_exception=True)
+        day = values.validated_data['date']
+        query, incoming, outgoing = agenda_day_rows(store, day)
+        pager = SalesPagination()
+        rows = pager.paginate_queryset(query, request, view=self)
+        output = [{**row, **{key: money(row[key]) for key in ('original','settled_amount','remaining_amount')}} for row in rows]
+        response = pager.get_paginated_response(output)
+        response.data.update(date=day.isoformat(), incoming=money(incoming), outgoing=money(outgoing),
+                             net=money(incoming-outgoing), store_id=store.pk)
         return response
