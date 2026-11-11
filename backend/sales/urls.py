@@ -69,8 +69,9 @@ urlpatterns = [
     path("me/sales/<int:sale_id>/cancel/", MySaleCancelView.as_view(), name="sale-cancel"),
 ]
 
-from .report_views import ReportsView, ReportOptionsView
+from .report_views import AgendaDayView, ReportsView, ReportOptionsView
 urlpatterns += [
+    path('me/reports/agenda-day/', AgendaDayView.as_view(), name='agenda-day'),
     path('me/reports/options/', ReportOptionsView.as_view(), name='report-options'),
     path('me/reports/', ReportsView.as_view(), name='reports'),
 ]

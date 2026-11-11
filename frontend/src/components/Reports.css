@@ -27,3 +27,14 @@
   .report-compact-cards dt{font-size:.8rem;color:var(--erp-muted)}
   .report-compact-cards dd{margin:.2rem 0 0;font-weight:600;overflow-wrap:anywhere}
 }
+
+.agenda-day-open{width:100%;min-height:44px;margin-top:12px}
+.agenda-day-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}
+.agenda-day-summary dt,.agenda-day-list dt{color:var(--erp-muted);font-size:.85rem}
+.agenda-day-summary dd,.agenda-day-list dd{margin:6px 0 0;font-weight:650;overflow-wrap:anywhere}
+.agenda-day-list{list-style:none;display:grid;gap:12px;padding:0;margin:20px 0}
+.agenda-day-list>li{padding:16px;border:1px solid var(--erp-border);border-radius:10px;min-width:0;overflow-wrap:anywhere}
+.agenda-day-heading{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.agenda-day-heading span{font-size:.85rem;color:var(--erp-muted)}
+.agenda-day-list dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:0}
+@media(max-width:600px){.agenda-day-summary,.agenda-day-list dl{grid-template-columns:minmax(0,1fr)}}

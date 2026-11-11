@@ -254,6 +254,50 @@ class ReportsTests(TestCase):
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[2][rows[0].index('Diferença prevista')], '-50,00')
 
+    def test_agenda_day_detail_is_paginated_scoped_and_matches_daily_totals(self):
+        self.grant_all()
+        self.grant(app='purchases', codes=['add_operating_expense'])
+        sale = self.sale(kind='credit', confirmed=False)
+        plan = self.operating_expense('rent', due=date(2026,10,1))
+        self.payout(plan, '30.00')
+        self.payout(plan, '10.00')
+        self.operating_expense('water', due=date(2026,10,2))
+        daily = self.report('agenda', start='2026-10-01', end='2026-10-01').data['results'][0]
+
+        def detail(**options):
+            response=self.client.get('/api/me/reports/agenda-day/', {'store_id':self.store.pk,'date':'2026-10-01', **options})
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response['Cache-Control'],'no-store, private')
+            return response.data
+
+        first=detail(page_size=1)
+        self.assertEqual(first['count'],2)
+        self.assertEqual((first['incoming'],first['outgoing'],first['net']),
+                         (daily['operator'],daily['expenses'],daily['net']))
+        row=first['results'][0]
+        self.assertEqual((row['direction'],row['group'],row['document'],row['remaining_amount']),
+                         ('Entrada','Repasse de cartão',f'Venda #{sale["id"]}','700.00'))
+        last=detail(page_size=1,page=2)
+        self.assertEqual((last['results'][0]['direction'],last['results'][0]['original'],last['results'][0]['settled_amount'],last['results'][0]['remaining_amount']),
+                         ('Saída','100.00','40.00','60.00'))
+        self.assertEqual(last['incoming'],first['incoming'])
+        self.assertEqual(PayablePayment.objects.count(),2)
+        StoreMembership.objects.create(user=self.user,store=self.other,role='seller')
+        other=detail(store_id=self.other.pk)
+        self.assertEqual((other['count'],other['incoming'],other['outgoing']), (0,'0.00','0.00'))
+
+    def test_agenda_day_requires_both_permissions_and_validates_date(self):
+        self.grant(codes=['view_reports','view_receivable'])
+        path='/api/me/reports/agenda-day/'
+        params={'store_id':self.store.pk,'date':'2026-10-01'}
+        self.assertEqual(self.client.get(path, params).status_code,403)
+        self.grant(app='purchases',codes=['view_payableplan'])
+        self.assertEqual(self.client.get(path, {**params,'date':'invalid'}).status_code,400)
+        self.assertEqual(self.client.get(path, {'store_id':self.store.pk}).status_code,400)
+        self.assertEqual(self.client.get(path, params).data['count'],0)
+        self.assertEqual(self.client.post(path+'?store_id='+str(self.store.pk),params,format='json').status_code,405)
+        self.assertEqual(self.client.get(path, {**params,'store_id':self.other.pk}).status_code,400)
+
     def test_agenda_needs_both_permissions_and_defaults_to_thirty_days(self):
         self.grant(codes=['view_reports','view_receivable'])
         self.report('agenda', expected=403)
