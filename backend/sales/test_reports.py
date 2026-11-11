@@ -245,6 +245,14 @@ class ReportsTests(TestCase):
         result = self.report('agenda', page_size=1)
         self.assertEqual(result.data['count'], 2)
         self.assertEqual(self.summary(result), {'incoming':'1270.00','outgoing':'160.01','net':'1109.99'})
+        overdue = {
+            'incoming': {'amount': '1270.00', 'count': 2},
+            'outgoing': {'amount': '160.01', 'count': 3},
+        }
+        self.assertEqual(result.data['agenda_overdue'], overdue)
+        empty_period = self.report('agenda', start='2026-10-19', end='2026-10-19')
+        self.assertEqual(empty_period.data['count'], 0)
+        self.assertEqual(empty_period.data['agenda_overdue'], overdue)
         day = result.data['results'][0]
         self.assertEqual((day['due_date'], day['customer'], day['operator'], day['purchases'], day['expenses'], day['net']),
                          ('2026-10-01','570.00','700.00','40.01','70.00','1159.99'))
@@ -253,6 +261,39 @@ class ReportsTests(TestCase):
         rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig')), delimiter=';'))
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[2][rows[0].index('Diferença prevista')], '-50,00')
+
+    def test_agenda_overdue_uses_sao_paulo_date_and_includes_older_balances_only_in_selected_store(self):
+        self.grant_all()
+        self.grant(app='purchases', codes=['add_operating_expense'])
+        StoreMembership.objects.create(user=self.user, store=self.other, role='seller')
+
+        self.sale(kind='credit', confirmed=False)
+        for due in ('2026-10-19', '2026-10-20'):
+            body = self.data(kind='credit', confirmed=False)
+            body['payments'][0]['first_due_date'] = due
+            with patch('django.utils.timezone.now', return_value=NOW):
+                response = self.client.post(self.url, body, format='json')
+            self.assertEqual(response.status_code, 200, response.data)
+
+        self.operating_expense('rent', due=date(2024, 1, 1))
+        self.operating_expense('water', due=date(2026, 10, 19))
+        self.operating_expense('transport', due=date(2026, 10, 20))
+        self.operating_expense('rent', store=self.other, due=date(2024, 1, 1))
+
+        with patch('django.utils.timezone.now', return_value=datetime(2026, 10, 20, 1, tzinfo=utc.utc)):
+            primary = self.client.get('/api/me/reports/', {'store_id':self.store.pk,'report':'agenda'})
+            secondary = self.client.get('/api/me/reports/', {'store_id':self.other.pk,'report':'agenda'})
+        self.assertEqual(primary.status_code, 200, primary.data)
+        self.assertEqual(secondary.status_code, 200, secondary.data)
+        self.assertEqual(primary.data['today'], '2026-10-19')
+        self.assertEqual(primary.data['agenda_overdue'], {
+            'incoming': {'amount': '700.00', 'count': 1},
+            'outgoing': {'amount': '100.00', 'count': 1},
+        })
+        self.assertEqual(secondary.data['agenda_overdue'], {
+            'incoming': {'amount': '0.00', 'count': 0},
+            'outgoing': {'amount': '100.00', 'count': 1},
+        })
 
     def test_agenda_day_detail_is_paginated_scoped_and_matches_daily_totals(self):
         self.grant_all()

@@ -1,13 +1,13 @@
 """Saldos em aberto por vencimento, sem confundir previsão com saldo bancário."""
 from collections import defaultdict
 
-from django.db.models import Case, CharField, F, Q, Subquery, OuterRef, Sum, Value, When
+from django.db.models import Case, CharField, Count, F, Q, Subquery, OuterRef, Sum, Value, When
 from django.db.models.functions import Cast, Coalesce, Concat, NullIf
 from django.db.models.fields.json import KeyTextTransform
 
 from purchases.models import PayableInstallment, PayablePayment, PayablePlan
 from .models import FinancialEntry, Receivable
-from .dashboard_views import MONEY, ZERO
+from .dashboard_views import MONEY, ZERO, money
 
 GROUPS = ('customer', 'operator', 'purchases', 'expenses')
 
@@ -18,20 +18,20 @@ def open_balances(query, settlements):
     return query.order_by().annotate(settled=settled).annotate(remaining=F('amount')-F('settled')).filter(remaining__gt=0)
 
 
-def agenda_sources(store, start, end):
+def agenda_sources(store, due_dates):
     receipts = FinancialEntry.objects.filter(receivable=OuterRef('pk')).order_by().values('receivable').annotate(
         total=Sum(F('amount') + F('card_fee')),
     ).values('total')
     incoming = open_balances(
-        Receivable.objects.filter(payment__sale__store=store, payment__sale__status='completed', due_date__range=(start,end)),
+        Receivable.objects.filter(due_dates, payment__sale__store=store, payment__sale__status='completed'),
         receipts,
     )
     payouts = PayablePayment.objects.filter(installment=OuterRef('pk')).order_by().values('installment').annotate(
         total=Sum('amount'),
     ).values('total')
     outgoing = open_balances(
-        PayableInstallment.objects.filter(PayablePlan.for_stores([store], 'plan__'),
-                                          plan__cancellation__isnull=True, due_date__range=(start,end)),
+        PayableInstallment.objects.filter(PayablePlan.for_stores([store], 'plan__'), due_dates,
+                                          plan__cancellation__isnull=True),
         payouts,
     )
     return incoming, outgoing
@@ -40,7 +40,7 @@ def agenda_sources(store, start, end):
 def prepare_agenda(store, values):
     from .report_services import col, metric
 
-    incoming, outgoing = agenda_sources(store, values['start'], values['end'])
+    incoming, outgoing = agenda_sources(store, Q(due_date__range=(values['start'], values['end'])))
     incoming = incoming.values('due_date').annotate(
         customer=Sum('remaining', filter=Q(debtor='customer')),
         operator=Sum('remaining', filter=Q(debtor='operator')),
@@ -75,8 +75,18 @@ def prepare_agenda(store, values):
     return rows, columns, summary
 
 
+def agenda_overdue_summary(store, today):
+    incoming, outgoing = agenda_sources(store, Q(due_date__lt=today))
+
+    def totals(query):
+        result = query.aggregate(amount=Sum('remaining'), count=Count('pk'))
+        return {'amount': money(result['amount'] or ZERO), 'count': result['count']}
+
+    return {'incoming': totals(incoming), 'outgoing': totals(outgoing)}
+
+
 def agenda_day_rows(store, day):
-    incoming, outgoing = agenda_sources(store, day, day)
+    incoming, outgoing = agenda_sources(store, Q(due_date=day))
     inbound_total = incoming.aggregate(total=Sum('remaining'))['total'] or ZERO
     outbound_total = outgoing.aggregate(total=Sum('remaining'))['total'] or ZERO
     fields = ['row_id','direction','group','document','party','number','original','settled_amount','remaining_amount','target_id','installment_id']

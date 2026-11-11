@@ -38,3 +38,5 @@
 .agenda-day-heading span{font-size:.85rem;color:var(--erp-muted)}
 .agenda-day-list dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:0}
 @media(max-width:600px){.agenda-day-summary,.agenda-day-list dl{grid-template-columns:minmax(0,1fr)}}
+
+.agenda-overdue>p{font-size:.85rem;color:var(--erp-muted,#64748b);margin:0 0 14px}

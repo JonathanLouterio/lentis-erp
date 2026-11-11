@@ -2,7 +2,7 @@ import { useInsightAccess } from '../hooks/useInsightAccess'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, getReport, getReportOptions, exportReport, reportPrintUrl } from '../api'
-import type { AccessibleStore, AgendaTarget, ReportColumn, ReportData, ReportFilters, ReportKind, ReportOptions } from '../api'
+import type { AccessibleStore, AgendaOverdue, AgendaTarget, ReportColumn, ReportData, ReportFilters, ReportKind, ReportOptions } from '../api'
 import { displayDate, failure, signedDecimal } from './saleMoney'
 import './Reports.css'
 import AgendaDayDialog from './AgendaDayDialog'
@@ -30,6 +30,18 @@ function CompactReportCards({data,onDay,disabled}:{data:ReportData;onDay:(day:st
         aria-label={'Ver compromissos de '+displayDate(row.due_date)} onClick={()=>onDay(row.due_date)}>Ver compromissos</button>}
     </li>)}
   </ul>
+}
+
+function AgendaOverdueCards({data,today}:{data:AgendaOverdue;today:string}){
+  const cards=[['A receber em atraso',data.incoming],['A pagar em atraso',data.outgoing]] as const
+  return <section className="agenda-overdue" aria-label="Valores vencidos da unidade">
+    <h2>Valores vencidos da unidade</h2>
+    <p>Saldo em aberto com vencimento anterior a {displayDate(today)} (horário de São Paulo), em qualquer período.</p>
+    <div className="report-metrics">{cards.map(([label,balance])=><article className="erp-card report-metric-overdue" key={label}>
+      <span>{label}</span><strong>{currency(balance.amount)}</strong>
+      <small>{balance.count.toLocaleString('pt-BR')} {balance.count===1?'parcela em atraso':'parcelas em atraso'}</small>
+    </article>)}</div>
+  </section>
 }
 
 export default function Reports({store,onSavingChange,onOpenAgendaTarget,agendaReturn}:Props){
@@ -119,6 +131,7 @@ export default function Reports({store,onSavingChange,onOpenAgendaTarget,agendaR
     {draft.report==='movements'&&<><label>Direção<select aria-label="Direção dos movimentos no relatório" value={draft.direction} onChange={e=>change('direction',e.target.value as ReportFilters['direction'])}><option value="all">Entradas e saídas</option><option value="in">Entradas</option><option value="out">Saídas</option></select></label><label>Conta financeira<select aria-label="Conta no relatório" value={draft.account_id||''} onChange={e=>change('account_id',e.target.value?Number(e.target.value):null)}><option value="">Todas as contas</option>{options.accounts.map(a=><option key={a.id} value={a.id}>{a.name}{a.is_active?'':' · Inativa'}</option>)}</select></label></>}
     </div><div className="report-filter-footer"><span>{draft.report==='receivables'&&draft.all_dates?'Carteira completa, sem limite de vencimento.':'Período de até 366 dias.'} Fuso: São Paulo.</span><button className="erp-action-button" type="submit" disabled={!validFilters(draft)||loading}>Aplicar filtros</button></div></fieldset>{!validFilters(draft)&&<p className="report-warning">Confira o período, o número da venda e a antecedência do alerta (1 a 90 dias).</p>}{changed&&<p className="report-warning" role="status">Filtros alterados. Clique em Aplicar filtros para atualizar os resultados e liberar a exportação.</p>}</form>}
     {loading?<div className="erp-card" role="status">Calculando o relatório da unidade…</div>:data&&rights.access?.reports[data.filters.report]&&<>
+    {data.filters.report==='agenda'&&data.agenda_overdue&&<AgendaOverdueCards data={data.agenda_overdue} today={data.today} />}
     <div className="report-caption"><div><strong>{data.title}</strong><p>{data.filters.all_dates?'Todos os vencimentos':`${displayDate(data.filters.start)} a ${displayDate(data.filters.end)}`} · {data.basis}</p></div><span>Atualizado em {cell(data.generated_at,{key:'',label:'',kind:'datetime'},data.timezone)}</span></div>
     <div className="report-metrics">{data.summary.map(m=><article className={`erp-card report-metric-${m.key}`} key={m.key}><span>{m.label}</span><strong>{m.kind==='money'?currency(m.value):new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(BigInt(m.value))}</strong><small>Todos os resultados dos filtros aplicados</small></article>)}</div>
     {data.filters.report==='receivables'&&<section className="erp-card report-aging" aria-label="Atrasos e legenda de cores"><h2>Atrasos por faixa</h2><p>Valores em aberto de todos os resultados dos filtros. O total vencido já inclui o saldo acima de 90 dias.</p><div className="report-aging-grid">{data.aging?.map(bucket=><article key={bucket.key} className={`report-aging-item tone-${bucket.tone}`}><span>{bucket.label}</span><strong>{currency(bucket.amount)}</strong><small>{bucket.count} parcela(s)</small></article>)}</div><div className="report-legend"><span className="report-risk tone-green">Verde · Dentro do prazo</span><span className="report-risk tone-yellow">Amarelo · Vence em até {data.filters.warning_days??7} dias, incluindo hoje</span><span className="report-risk tone-red">Vermelho · 1 a 90 dias em atraso</span><span className="report-risk tone-black">Preto · Acima de 90 dias</span><span className="report-risk tone-gray">Cinza · Quitada</span></div><p>Classificação por saldo atual e data de hoje em São Paulo ({displayDate(data.today)}). Parcelas quitadas não entram nas faixas de atraso.</p></section>}
