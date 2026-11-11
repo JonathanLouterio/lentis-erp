@@ -8,7 +8,7 @@ import './FinanceWindows.css'
 import './Sales.css'
 import './Receivables.css'
 
-type Props = { store: AccessibleStore; userId: number; initialReceivableId?: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
+type Props = { store: AccessibleStore; userId: number; initialReceivableId?: number; onBackToAgenda?: () => void; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
 type Receipt = { request_id: string; account_id: number; method_id: number; amount: string; card_fee?: string }
 type PendingReceipt = { receivableId: number; payload: Receipt }
 const states = { pending: 'Pendente', partial: 'Parcial', paid: 'Recebida', cancelled: 'Cancelada' }
@@ -20,7 +20,7 @@ function ReceiptStatus({status}: {status: Receivable['status']}) {
   return <span className={`erp-sale-badge is-${tone}`}>{states[status]}</span>
 }
 
-export default function Receivables({ store, userId, initialReceivableId, onSavingChange, onDirtyChange }: Props) {
+export default function Receivables({ store, userId, initialReceivableId, onBackToAgenda, onSavingChange, onDirtyChange }: Props) {
   const storageKey = `lentis.receipt.${userId}.${store.id}`
   const [data, setData] = useState<ReceivablesPage>({ count: 0, results: [], next: null, previous: null })
   const [options, setOptions] = useState<PaymentOptions>({ methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" })
@@ -114,9 +114,10 @@ export default function Receivables({ store, userId, initialReceivableId, onSavi
     </>
   }
 
-  if (!access?.view || rights.error) return <section className="erp-card"><p>{rights.error || (rights.loading?'Conferindo permissões de recebimentos…':'Você não tem permissão de consultar parcelas. Solicite a permissão de consulta para selecionar um recebimento.')}</p><button className="erp-secondary-button" disabled={rights.loading} onClick={()=>setReload(v=>v+1)}>Atualizar acessos</button></section>
+  const backToAgenda = onBackToAgenda && <button type="button" className="erp-secondary-button" disabled={busy || !!pending} onClick={onBackToAgenda}>Voltar à Agenda</button>
+  if (!access?.view || rights.error) return <section className="erp-card"><p>{rights.error || (rights.loading?'Conferindo permissões de recebimentos…':'Você não tem permissão de consultar parcelas. Solicite a permissão de consulta para selecionar um recebimento.')}</p><button className="erp-secondary-button" disabled={rights.loading} onClick={()=>setReload(v=>v+1)}>Atualizar acessos</button>{backToAgenda}</section>
   return <section className="erp-sales-page erp-receivables-page">
-    <div className="erp-page-heading"><span className="erp-kicker">FINANCEIRO</span><h1>Recebimentos</h1><p>Parcelas do cliente e repasses de cartão da unidade {store.name}.</p></div>
+    <div className="erp-page-heading"><span className="erp-kicker">FINANCEIRO</span><h1>Recebimentos</h1><p>Parcelas do cliente e repasses de cartão da unidade {store.name}.</p>{backToAgenda}</div>
     {error && <p className="erp-alert" role="alert">{error}</p>}{success && <p className="erp-sales-success" role="status">{success}</p>}
 
     {access.balances && options.can_view_balances && <div className="erp-receiving-accounts">{options.accounts.map((account) => <div className="erp-card" key={account.id}><span className="erp-card-label">{account.name}</span><h2>{money.format(Number(account.balance))}</h2><p className="erp-sales-hint">Saldo dos recebimentos registrados no Lentis.</p></div>)}</div>}

@@ -10,14 +10,14 @@ import ExpenseTemplates from './ExpenseTemplates'
 import './FinanceWindows.css'
 import { usePurchaseAccess } from '../hooks/usePurchaseAccess'
 
-type Props = {store:AccessibleStore;userId:number;initialPurchaseId?:number;initialAgendaTarget?:{id:number;installmentId:number};onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
+type Props = {store:AccessibleStore;userId:number;initialPurchaseId?:number;initialAgendaTarget?:{id:number;installmentId:number};onBackToAgenda?:()=>void;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
 const empty:PayablesPage={count:0,next:null,previous:null,results:[],can_create:false,can_create_expense:false,can_cancel_expense:false,can_pay:false,can_reverse:false}
 const labels={pending:'Em aberto',partial:'Pago parcialmente',paid:'Quitado',cancelled:'Cancelado'}
 const titleName=(p:PayablePlan)=>p.source==='expense'?p.description:p.supplier_name
 const documentName=(p:PayablePlan)=>p.source==='expense'?`Despesa #${p.id} · ${p.category_label}`:`Compra #${p.purchase_id}`
 function currency(value:string|bigint){const cents=typeof value==='bigint'?value:signedDecimal(value);if(cents===null)return '—';const absolute=cents<0n?-cents:cents;return `${cents<0n?'− ':''}R$ ${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(absolute/100n)},${(absolute%100n).toString().padStart(2,'0')}`}
 
-export default function Payables({store,userId,initialPurchaseId,initialAgendaTarget,onSavingChange,onDirtyChange}:Props){
+export default function Payables({store,userId,initialPurchaseId,initialAgendaTarget,onBackToAgenda,onSavingChange,onDirtyChange}:Props){
   const storageKey=`lentis.payable.${userId}.${store.id}`
   const [pending,setPending]=useState<PayableAttempt|null>(()=>{try{return JSON.parse(sessionStorage.getItem(storageKey)||'null') as PayableAttempt|null}catch{return null}})
   const [rows,setRows]=useState(empty)
@@ -98,9 +98,10 @@ export default function Payables({store,userId,initialPurchaseId,initialAgendaTa
   function startReversal(p:PayablePayment){if(locked||!allowed())return;resetForm();setSuccess('');setReversing(p);setError('')}
   function submit(e:FormEvent){e.preventDefault();if(locked||!confirmed)return;if(reversing&&reason.trim())void send({kind:'reverse',paymentId:reversing.id,payload:{request_id:crypto.randomUUID(),reason}});else if(installment&&validPayment&&value!==null)void send({kind:'pay',installmentId:installment.id,payload:{request_id:crypto.randomUUID(),account_id:Number(accountId),method_id:Number(methodId),amount:decimalText(value),paid_on:paidOn,reason}})}
   const touch=()=>{setDirty(true);setConfirmed(false)}
-  if(!caps?.view)return <section className="erp-card"><h1>Contas a pagar</h1><p>{rights.loading?'Conferindo acessos…':rights.error||'Solicite permissão para consultar contas a pagar.'}</p></section>
+  const backToAgenda=onBackToAgenda&&<button type="button" className="erp-secondary-button" disabled={locked} onClick={onBackToAgenda}>Voltar à Agenda</button>
+  if(!caps?.view)return <section className="erp-card"><h1>Contas a pagar</h1><p>{rights.loading?'Conferindo acessos…':rights.error||'Solicite permissão para consultar contas a pagar.'}</p>{backToAgenda}</section>
   return <section className="payable-page">
-    <header className="payable-heading"><div><span className="erp-kicker">GESTÃO · {store.name}</span><h1>Contas a pagar</h1><p>Acompanhe vencimentos e pagamentos de despesas e compras.</p></div><div className="payable-heading-actions">{caps.manage_templates&&<button type="button" disabled={locked||!options} onClick={()=>{setDirty(false);setTemplates(true)}}>Modelos de despesas</button>}{caps.expense&&<button type="button" className="erp-action-button" disabled={locked||!options?.can_create_expense} onClick={newExpense}>Nova despesa</button>}<button type="button" className="erp-action-button" hidden={!caps.generate} disabled={locked||!options?.can_create} onClick={newPlan}>Gerar parcelas de compra</button></div></header>
+    <header className="payable-heading"><div><span className="erp-kicker">GESTÃO · {store.name}</span><h1>Contas a pagar</h1><p>Acompanhe vencimentos e pagamentos de despesas e compras.</p></div><div className="payable-heading-actions">{backToAgenda}{caps.manage_templates&&<button type="button" disabled={locked||!options} onClick={()=>{setDirty(false);setTemplates(true)}}>Modelos de despesas</button>}{caps.expense&&<button type="button" className="erp-action-button" disabled={locked||!options?.can_create_expense} onClick={newExpense}>Nova despesa</button>}<button type="button" className="erp-action-button" hidden={!caps.generate} disabled={locked||!options?.can_create} onClick={newPlan}>Gerar parcelas de compra</button></div></header>
     {error&&<p className="erp-alert" role="alert">{error}</p>}{success&&<p className="payable-success" role="status">{success}</p>}
 
     <div className="payable-toolbar"><label>Situação<select aria-label="Situação das contas a pagar" disabled={locked} value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option value="pending">Em aberto</option><option value="overdue">Vencidas</option><option value="paid">Quitadas</option><option value="cancelled">Canceladas</option><option value="all">Todas</option></select></label>
@@ -114,7 +115,7 @@ export default function Payables({store,userId,initialPurchaseId,initialAgendaTa
     {(expense || generator || selected || pending) && <FormDialog wide title={expense ? 'Nova despesa' : generator ? 'Gerar contas a pagar' : selected ? `Título #${selected.id} · ${titleName(selected)}` : 'Conferir envio pendente'}
       sectionLabel="FINANCEIRO · CONTAS A PAGAR" subtitle={store.name} busy={locked} dirty={(expense || generator || cancelling) && dirty} notice={error || success}
       onClose={()=>{setSelected(null);setExpense(false);setGenerator(false);setSource(null);resetForm();setError('');setSuccess('')}}
-      actions={generator && source && caps.generate && !pending && <button className="erp-action-button" type="submit" form="lentis-payable-generate" disabled={locked||rights.loading||!preview.length||!confirmed||!options?.can_create}>Confirmar geração das parcelas</button>}>
+      actions={generator && source && caps.generate && !pending ? <button className="erp-action-button" type="submit" form="lentis-payable-generate" disabled={locked||rights.loading||!preview.length||!confirmed||!options?.can_create}>Confirmar geração das parcelas</button> : selected && !expense && !generator ? backToAgenda : undefined}>
     {error&&!installment&&!reversing&&<p className="erp-alert" role="alert">{error}</p>}{success&&<p className="payable-success" role="status">{success}</p>}
     {(!installment&&!reversing || installment&&!caps.pay || reversing&&!caps.reverse) && <>{pending&&<div className="erp-card payable-pending"><h2>{busy?'Registrando operação…':'Conferir envio pendente'}</h2><p>{busy?'Aguarde a confirmação do servidor.':'A conexão não confirmou o resultado. Repita este mesmo envio para recuperar a operação sem registrar outro pagamento.'}</p><button type="button" className="erp-action-button" disabled={busy||rights.loading||!caps[pending.kind]} onClick={()=>void send(pending)}>Conferir / repetir envio</button></div>}</>}
     {expense && options && <div hidden={!!pending}>
