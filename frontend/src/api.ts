@@ -501,9 +501,10 @@ export function getPaymentOptions(storeId: number): Promise<PaymentOptions> {
 export function submitCheckout(storeId: number, data: CheckoutPayload): Promise<Sale> {
   return saleWrite(storeId, 'checkout/', 'POST', data)
 }
-export function getReceivables(storeId: number, page = 1, status = 'pending', debtor = ''): Promise<ReceivablesPage> {
+export function getReceivables(storeId: number, page = 1, status = 'pending', debtor = '', receivableId?: number): Promise<ReceivablesPage> {
   const query = new URLSearchParams({ store_id: String(storeId), page: String(page), status })
   if (debtor) query.set('debtor', debtor)
+  if (receivableId !== undefined) query.set('receivable_id', String(receivableId))
   return request(`/api/me/receivables/?${query}`)
 }
 export async function receiveInstallment(storeId: number, receivableId: number, data: {
@@ -763,7 +764,8 @@ export function getPayable(storeId:number,id:number):Promise<PayablePlan>{return
 export function getPayableOptions(storeId:number):Promise<PayableOptions>{return request(`/api/me/payables/options/?store_id=${storeId}`)}
 export async function submitPayable(storeId:number,attempt:PayableAttempt):Promise<PayablePlan>{const token=await getCsrfToken();const suffix=attempt.kind==='pay'?`installments/${attempt.installmentId}/pay/`:attempt.kind==='reverse'?`payments/${attempt.paymentId}/reverse/`:attempt.kind==='expense'?'expenses/':attempt.kind==='cancel_expense'?`expenses/${attempt.planId}/cancel/`:'';return request(`/api/me/payables/${suffix}?store_id=${storeId}`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify(attempt.payload)})}
 
-export type AgendaDayRow={row_id:string;direction:'Entrada'|'Saída';group:string;document:string;party:string;number:number;original:string;settled_amount:string;remaining_amount:string}
+export type AgendaDayRow={row_id:string;target_id:number;installment_id:number;direction:'Entrada'|'Saída';group:string;document:string;party:string;number:number;original:string;settled_amount:string;remaining_amount:string}
+export type AgendaTarget={kind:'receivable';id:number}|{kind:'payable';id:number;installmentId:number}
 export type AgendaDay=CashPage<AgendaDayRow>&{date:string;incoming:string;outgoing:string;net:string;store_id:number}
 export function getAgendaDay(storeId:number,date:string,page=1):Promise<AgendaDay>{
   const query=new URLSearchParams({store_id:String(storeId),date,page:String(page)})

@@ -286,7 +286,7 @@ Os itens desta seção descrevem evoluções futuras. Estoque negativo configur�
 
 - **Gestão → Relatórios → Agenda financeira** abre nos próximos 30 dias, incluindo hoje. É possível escolher outro período, inclusive vencimentos passados que continuam em aberto.
 - A agenda agrupa por dia os saldos a receber de clientes, repasses de cartão, compras a pagar e despesas operacionais. Considera baixas parciais, estornos e taxas de cartão já registradas. Vendas e despesas canceladas e parcelas quitadas não entram.
-- Em **Ver compromissos**, cada dia mostra as parcelas de clientes, operadoras, compras e despesas, com documento, responsável, valor original, valor já baixado e saldo atual. O detalhamento é paginado e não registra baixas. Seus totais incluem todas as páginas e refletem o saldo no momento da consulta.
+- Em **Ver compromissos**, cada dia mostra as parcelas de clientes, operadoras, compras e despesas, com documento, responsável, valor original, valor já baixado e saldo atual. O detalhamento é paginado. O atalho abre a parcela em Recebimentos ou destaca sua parcela no título de Contas a pagar, com os dados atuais e as permissões da unidade. Abrir o lançamento não registra baixa. Seus totais incluem todas as páginas e refletem o saldo no momento da consulta.
 - A diferença prevista é entradas menos saídas do período ou do dia. Não soma saldo bancário nem caixa físico. A consulta exige permissão de relatórios, contas a receber e contas a pagar na unidade; o CSV também exige exportação.
 
 ## Relatório de despesas por categoria

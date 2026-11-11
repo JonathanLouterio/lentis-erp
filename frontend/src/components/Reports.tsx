@@ -2,12 +2,12 @@ import { useInsightAccess } from '../hooks/useInsightAccess'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getReport, getReportOptions, exportReport, reportPrintUrl } from '../api'
-import type { AccessibleStore, ReportColumn, ReportData, ReportFilters, ReportKind, ReportOptions } from '../api'
+import type { AccessibleStore, AgendaTarget, ReportColumn, ReportData, ReportFilters, ReportKind, ReportOptions } from '../api'
 import { displayDate, failure, signedDecimal } from './saleMoney'
 import './Reports.css'
 import AgendaDayDialog from './AgendaDayDialog'
 
-type Props={store:AccessibleStore;onSavingChange:(value:boolean)=>void}
+type Props={store:AccessibleStore;onSavingChange:(value:boolean)=>void;onOpenAgendaTarget:(target:AgendaTarget)=>void}
 function currency(value:string){const cents=signedDecimal(value);if(cents===null)return '—';const amount=cents<0n?-cents:cents;return `${cents<0n?'− ':''}R$ ${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(amount/100n)},${(amount%100n).toString().padStart(2,'0')}`}
 function offsetDate(day:string,days:number){const date=new Date(`${day}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function defaults(report:ReportKind,start:string,end:string):ReportFilters{return {report,start:report==='agenda'?end:start,end:report==='agenda'?offsetDate(end,29):end,status:report==='receivables'?'all':'pending',debtor:'all',direction:'all',account_id:null,...(report==='receivables'?{all_dates:true,customer:'',sale_id:null,method:'all',risk:'all',aging:'all',warning_days:7}:{})}}
@@ -31,7 +31,7 @@ function CompactReportCards({data,onDay,disabled}:{data:ReportData;onDay:(day:st
   </ul>
 }
 
-export default function Reports({store,onSavingChange}:Props){
+export default function Reports({store,onSavingChange,onOpenAgendaTarget}:Props){
   const [options,setOptions]=useState<ReportOptions|null>(null)
   const [draft,setDraft]=useState<ReportFilters|null>(null)
   const [applied,setApplied]=useState<ReportFilters|null>(null)
@@ -102,6 +102,6 @@ export default function Reports({store,onSavingChange}:Props){
       aria-label={'Ver compromissos de '+displayDate(row.due_date)} onClick={()=>setAgendaDay(row.due_date)}>Ver compromissos</button></td>}</tr>)}</tbody></table></div>{compactReport&&<CompactReportCards data={data} onDay={setAgendaDay} disabled={changed||exporting} />}</>:<p className="report-empty">Nenhum registro corresponde aos filtros aplicados.</p>}<div className="report-pagination"><button type="button" disabled={loading||exporting||changed||!data.previous} onClick={()=>setPage(v=>v-1)}>Página anterior</button><span>Página {page} · {data.count} registro(s)</span><button type="button" disabled={loading||exporting||changed||!data.next} onClick={()=>setPage(v=>v+1)}>Próxima página</button></div><p className="report-note">O CSV inclui todas as páginas dos filtros aplicados, até {new Intl.NumberFormat('pt-BR').format(options.max_export_rows)} registros por arquivo. {data.filters.report==='receivables'&&`A impressão/PDF inclui todas as páginas, até ${options.max_print_rows} parcelas, e exige permissão de exportação. `}Se exceder esses limites, refine os filtros.</p></div>
     </>}
     </>}
-    {agendaDay&&<AgendaDayDialog key={store.id+'-'+agendaDay} storeId={store.id} storeName={store.name} date={agendaDay} onClose={()=>setAgendaDay(null)} />}
+    {agendaDay&&<AgendaDayDialog key={store.id+'-'+agendaDay} storeId={store.id} storeName={store.name} date={agendaDay} onOpenTarget={onOpenAgendaTarget} onClose={()=>setAgendaDay(null)} />}
   </section>
 }

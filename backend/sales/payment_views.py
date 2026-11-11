@@ -75,6 +75,10 @@ class ReceivablesView(SalesBaseView):
         ).prefetch_related('entries__account', 'entries__method', 'entries__created_by').annotate(
             received=Coalesce(Sum(F('entries__amount') + F('entries__card_fee')), Value(0), output_field=DecimalField(max_digits=28, decimal_places=2)),
         )
+        if 'receivable_id' in request.query_params:
+            target = serializers.IntegerField(min_value=1, max_value=9223372036854775807).run_validation(
+                request.query_params.get('receivable_id'))
+            queryset = queryset.filter(pk=target)
         state = request.query_params.get('status', 'pending')
         if state == 'pending':
             queryset = queryset.filter(payment__sale__status='completed', received__lt=F('amount'))

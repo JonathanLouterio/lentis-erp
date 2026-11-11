@@ -280,6 +280,9 @@ class ReportsTests(TestCase):
         last=detail(page_size=1,page=2)
         self.assertEqual((last['results'][0]['direction'],last['results'][0]['original'],last['results'][0]['settled_amount'],last['results'][0]['remaining_amount']),
                          ('Saída','100.00','40.00','60.00'))
+        self.assertEqual(row['target_id'], Receivable.objects.get(payment__sale_id=sale['id']).pk)
+        self.assertEqual((last['results'][0]['target_id'],last['results'][0]['installment_id']),
+                         (plan.pk,plan.installments.get().pk))
         self.assertEqual(last['incoming'],first['incoming'])
         self.assertEqual(PayablePayment.objects.count(),2)
         StoreMembership.objects.create(user=self.user,store=self.other,role='seller')
