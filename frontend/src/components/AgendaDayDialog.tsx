@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { getAgendaDay } from '../api'
-import type { AgendaDay } from '../api'
+import type { AgendaDay, AgendaTarget } from '../api'
 import FormDialog from './FormDialog'
 import { displayDate, failure, money } from './saleMoney'
 
-export default function AgendaDayDialog({storeId,storeName,date,onClose}:{
-  storeId:number;storeName:string;date:string;onClose:()=>void
+export default function AgendaDayDialog({storeId,storeName,date,onClose,onOpenTarget}:{
+  storeId:number;storeName:string;date:string;onClose:()=>void;onOpenTarget:(target:AgendaTarget)=>void
 }){
   const [page,setPage]=useState(1)
   const [reload,setReload]=useState(0)
@@ -21,7 +21,7 @@ export default function AgendaDayDialog({storeId,storeName,date,onClose}:{
   },[storeId,date,page,reload])
   return <FormDialog wide title={`Compromissos de ${displayDate(date)}`} subtitle={storeName}
     sectionLabel="GESTÃO · AGENDA FINANCEIRA" onClose={onClose}>
-    <p>Parcelas ainda em aberto neste vencimento. As baixas e os pagamentos são registrados nas telas de Recebimentos e Contas a pagar.</p>
+    <p>Parcelas ainda em aberto neste vencimento. Abra o lançamento para consultar os dados atuais.</p>
     {error&&<div role="alert" className="erp-alert"><p>{error}</p><button type="button" onClick={()=>setReload(value=>value+1)}>Tentar novamente</button></div>}
     {loading&&<p role="status">Carregando compromissos…</p>}
     {data&&<>
@@ -40,6 +40,13 @@ export default function AgendaDayDialog({storeId,storeName,date,onClose}:{
             <div><dt>Já baixado</dt><dd>{money.format(Number(row.settled_amount))}</dd></div>
             <div><dt>Em aberto</dt><dd>{money.format(Number(row.remaining_amount))}</dd></div>
           </dl>
+          <button type="button" className="agenda-day-open"
+            aria-label={'Abrir '+row.document+', parcela '+row.number+' em '+(row.direction==='Entrada'?'Recebimentos':'Contas a pagar')}
+            onClick={()=>onOpenTarget(row.direction==='Entrada'
+              ? {kind:'receivable',id:row.target_id}
+              : {kind:'payable',id:row.target_id,installmentId:row.installment_id})}>
+            {row.direction==='Entrada'?'Abrir em Recebimentos':'Abrir em Contas a pagar'}
+          </button>
         </li>)}
       </ul>
       {!data.count&&<p>Nenhum compromisso em aberto neste vencimento. A parcela pode ter sido quitada desde a última consulta.</p>}

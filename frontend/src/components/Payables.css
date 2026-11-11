@@ -38,3 +38,5 @@
 .payable-page .payable-template-box{border:1px solid var(--erp-border);border-radius:10px;padding:12px}
 .payable-template-picker{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
 @media(max-width:580px){.payable-template-picker{grid-template-columns:minmax(0,1fr)}}
+
+.payable-installment.is-from-agenda{border:1px solid var(--erp-border);border-radius:10px;padding:16px;background:rgba(59,130,246,.07)}

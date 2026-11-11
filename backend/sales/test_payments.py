@@ -294,6 +294,21 @@ class PaymentCheckoutTests(TestCase):
         self.product.refresh_from_db(); self.assertEqual(self.product.stock_quantity, Decimal('10'))
         self.receive(receivable, expected=400)
 
+    def test_receivable_id_filter_is_exact_and_scoped(self):
+        self.split_sale()
+        self.send(self.data(kind='credit', count=2, confirmed=False))
+        target = Receivable.objects.filter(debtor='operator').last()
+        path = '/api/me/receivables/'
+        query = {'store_id':self.store.pk,'status':'all','receivable_id':target.pk}
+        response = self.client.get(path,query)
+        self.assertEqual(response.status_code,200,response.data)
+        self.assertEqual([row['id'] for row in response.data['results']],[target.pk])
+        self.assertEqual(self.client.get(path,{**query,'receivable_id':'invalid'}).status_code,400)
+        StoreMembership.objects.create(user=self.user,store=self.other,role=StoreMembership.Role.SELLER)
+        result = self.client.get(path,{**query,'store_id':self.other.pk})
+        self.assertEqual(result.status_code,200,result.data)
+        self.assertEqual(result.data['results'],[])
+
     def test_receivables_are_scoped_and_filter_customer_or_operator(self):
         self.split_sale(); self.send(self.data(kind='credit', confirmed=False))
         url = f'/api/me/receivables/?store_id={self.store.pk}'

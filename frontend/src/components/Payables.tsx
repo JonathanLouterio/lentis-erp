@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, getPayables, getPayable, getPayableOptions, getPurchases, getPurchase, submitPayable } from '../api'
 import type { AccessibleStore, PayablePlan, PayableInstallment, PayablePayment, PayableAttempt, PayablesPage, PayableOptions, PurchasesPage, Purchase, PayableSource } from '../api'
@@ -10,19 +10,21 @@ import ExpenseTemplates from './ExpenseTemplates'
 import './FinanceWindows.css'
 import { usePurchaseAccess } from '../hooks/usePurchaseAccess'
 
-type Props = {store:AccessibleStore;userId:number;initialPurchaseId?:number;onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
+type Props = {store:AccessibleStore;userId:number;initialPurchaseId?:number;initialAgendaTarget?:{id:number;installmentId:number};onSavingChange:(v:boolean)=>void;onDirtyChange:(v:boolean)=>void}
 const empty:PayablesPage={count:0,next:null,previous:null,results:[],can_create:false,can_create_expense:false,can_cancel_expense:false,can_pay:false,can_reverse:false}
 const labels={pending:'Em aberto',partial:'Pago parcialmente',paid:'Quitado',cancelled:'Cancelado'}
 const titleName=(p:PayablePlan)=>p.source==='expense'?p.description:p.supplier_name
 const documentName=(p:PayablePlan)=>p.source==='expense'?`Despesa #${p.id} · ${p.category_label}`:`Compra #${p.purchase_id}`
 function currency(value:string|bigint){const cents=typeof value==='bigint'?value:signedDecimal(value);if(cents===null)return '—';const absolute=cents<0n?-cents:cents;return `${cents<0n?'− ':''}R$ ${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(absolute/100n)},${(absolute%100n).toString().padStart(2,'0')}`}
 
-export default function Payables({store,userId,initialPurchaseId,onSavingChange,onDirtyChange}:Props){
+export default function Payables({store,userId,initialPurchaseId,initialAgendaTarget,onSavingChange,onDirtyChange}:Props){
   const storageKey=`lentis.payable.${userId}.${store.id}`
   const [pending,setPending]=useState<PayableAttempt|null>(()=>{try{return JSON.parse(sessionStorage.getItem(storageKey)||'null') as PayableAttempt|null}catch{return null}})
   const [rows,setRows]=useState(empty)
   const [options,setOptions]=useState<PayableOptions|null>(null)
   const [selected,setSelected]=useState<PayablePlan|null>(null)
+  const agendaInstallmentRef=useRef<HTMLElement|null>(null)
+  const highlightedInstallment=selected && selected.id===initialAgendaTarget?.id ? initialAgendaTarget.installmentId : undefined
   const [page,setPage]=useState(1)
   const [status,setStatus]=useState('pending')
   const [listSource,setListSource]=useState<PayableSource>('all')
@@ -66,6 +68,14 @@ export default function Payables({store,userId,initialPurchaseId,onSavingChange,
   useEffect(()=>{let ignore=false;setLoading(true);void Promise.all([getPayables(store.id,page,status,undefined,listSource,category),getPayableOptions(store.id)]).then(([r,o])=>{if(!ignore){setRows(r);setOptions(o)}}).catch(e=>{if(!ignore){setRows(empty);setOptions(null);setSelected(null);setError(failure(e))}}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,page,status,listSource,category,reload])
   useEffect(()=>{if(!generator||!caps?.generate)return;let ignore=false;setPurchases(null);void getPurchases(store.id,purchasePage,'received').then(v=>{if(!ignore)setPurchases(v)}).catch(e=>{if(!ignore)setError(failure(e))});return()=>{ignore=true}},[store.id,purchasePage,generator,reload,caps?.generate])
   useEffect(()=>{if(initialPurchaseId&&!pending&&caps?.view)void openSource(initialPurchaseId)},[store.id,initialPurchaseId,caps?.view,caps?.generate])
+  useEffect(()=>{
+    if(initialAgendaTarget && !pending && caps?.view)void open(initialAgendaTarget.id)
+  },[store.id,initialAgendaTarget?.id,caps?.view])
+  useEffect(()=>{
+    if(highlightedInstallment===undefined)return
+    const frame=requestAnimationFrame(()=>agendaInstallmentRef.current?.focus())
+    return ()=>cancelAnimationFrame(frame)
+  },[highlightedInstallment])
   function resetForm(){setInstallment(null);setReversing(null);setCancelling(false);setReason('');setConfirmed(false);setDirty(false)}
   function allowed(){return !dirty||window.confirm('Descartar alterações não salvas desta operação?')}
   function accept(plan:PayablePlan){setSelected(plan);setExpense(false);setGenerator(false);setSource(null);resetForm()}
@@ -126,7 +136,9 @@ export default function Payables({store,userId,initialPurchaseId,onSavingChange,
       </form> : <button type="button" className="payable-refresh" disabled={locked} onClick={()=>{resetForm();setCancelling(true)}}>Cancelar despesa</button>)}
     </div>
 
-    <div className="erp-card"><h2>Parcelas e histórico</h2>{selected.installments?.map(i=><article className="payable-installment" key={i.id}><div className="payable-heading"><div><h3>Parcela {i.number} · {displayDate(i.due_date)}</h3><span className={i.overdue?'payable-overdue':''}>{i.overdue?'Vencida · ':''}{labels[i.status]}</span></div><div><strong>{currency(i.remaining)} em aberto</strong><small>Original {currency(i.amount)} · pago {currency(i.paid)}</small></div></div>{!cancelling&&i.status!=='paid'&&i.status!=='cancelled'&&caps.pay&&selected.can_pay&&<button type="button" className="erp-action-button" disabled={locked} onClick={()=>startPayment(i)}>Pagar parcela {i.number}</button>}{i.payments.length?<div className="payable-history">{i.payments.map(p=><div key={p.id}><div><strong>#{p.id} · {p.reversal_of?`Estorno do pagamento #${p.reversal_of}`:'Pagamento'} · {currency(p.amount)}</strong><span>{displayDate(p.paid_on)} · {p.method_name} · {p.account_name}</span><small>Registrado em {dateTime.format(new Date(p.created_at))} por {p.creator_username}{p.cash_posting_id?` · movimento de caixa #${p.cash_posting_id}`:''}</small><p>{p.reason}</p></div>{p.reversed?<span>Estornado</span>:!p.reversal_of&&caps.reverse&&selected.can_reverse&&<button type="button" disabled={locked} onClick={()=>startReversal(p)}>Estornar pagamento {p.id}</button>}</div>)}</div>:<p className="payable-note">Nenhum pagamento registrado.</p>}</article>)}</div>
+    <div className="erp-card"><h2>Parcelas e histórico</h2>{selected.installments?.map(i=><article className={'payable-installment'+(i.id===highlightedInstallment?' is-from-agenda':'')} key={i.id}
+      ref={i.id===highlightedInstallment?agendaInstallmentRef:undefined} tabIndex={i.id===highlightedInstallment?-1:undefined}
+      aria-label={i.id===highlightedInstallment?'Parcela '+i.number+' selecionada pela Agenda financeira':undefined}><div className="payable-heading"><div><h3>Parcela {i.number} · {displayDate(i.due_date)}</h3>{i.id===highlightedInstallment&&<small>Selecionada pela Agenda financeira</small>}<span className={i.overdue?'payable-overdue':''}>{i.overdue?'Vencida · ':''}{labels[i.status]}</span></div><div><strong>{currency(i.remaining)} em aberto</strong><small>Original {currency(i.amount)} · pago {currency(i.paid)}</small></div></div>{!cancelling&&i.status!=='paid'&&i.status!=='cancelled'&&caps.pay&&selected.can_pay&&<button type="button" className="erp-action-button" disabled={locked} onClick={()=>startPayment(i)}>Pagar parcela {i.number}</button>}{i.payments.length?<div className="payable-history">{i.payments.map(p=><div key={p.id}><div><strong>#{p.id} · {p.reversal_of?`Estorno do pagamento #${p.reversal_of}`:'Pagamento'} · {currency(p.amount)}</strong><span>{displayDate(p.paid_on)} · {p.method_name} · {p.account_name}</span><small>Registrado em {dateTime.format(new Date(p.created_at))} por {p.creator_username}{p.cash_posting_id?` · movimento de caixa #${p.cash_posting_id}`:''}</small><p>{p.reason}</p></div>{p.reversed?<span>Estornado</span>:!p.reversal_of&&caps.reverse&&selected.can_reverse&&<button type="button" disabled={locked} onClick={()=>startReversal(p)}>Estornar pagamento {p.id}</button>}</div>)}</div>:<p className="payable-note">Nenhum pagamento registrado.</p>}</article>)}</div>
     </>:<div className="erp-card"><h2>Agenda de pagamentos</h2><p>Selecione um título para consultar suas parcelas ou lance uma nova despesa.</p><p className="payable-note">Parcelas e pagamentos permanecem no histórico. Correções de pagamento são feitas por estorno, com justificativa.</p></div>}
     </div>}</FormDialog>}
     {(installment&&caps.pay||reversing&&caps.reverse) && <FormDialog

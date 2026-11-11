@@ -8,7 +8,7 @@ import './FinanceWindows.css'
 import './Sales.css'
 import './Receivables.css'
 
-type Props = { store: AccessibleStore; userId: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
+type Props = { store: AccessibleStore; userId: number; initialReceivableId?: number; onSavingChange: (value: boolean) => void; onDirtyChange: (value: boolean) => void }
 type Receipt = { request_id: string; account_id: number; method_id: number; amount: string; card_fee?: string }
 type PendingReceipt = { receivableId: number; payload: Receipt }
 const states = { pending: 'Pendente', partial: 'Parcial', paid: 'Recebida', cancelled: 'Cancelada' }
@@ -20,10 +20,11 @@ function ReceiptStatus({status}: {status: Receivable['status']}) {
   return <span className={`erp-sale-badge is-${tone}`}>{states[status]}</span>
 }
 
-export default function Receivables({ store, userId, onSavingChange, onDirtyChange }: Props) {
+export default function Receivables({ store, userId, initialReceivableId, onSavingChange, onDirtyChange }: Props) {
   const storageKey = `lentis.receipt.${userId}.${store.id}`
   const [data, setData] = useState<ReceivablesPage>({ count: 0, results: [], next: null, previous: null })
   const [options, setOptions] = useState<PaymentOptions>({ methods: [], accounts: [], can_receive: false, allow_negative_stock: false, discount_limit_percentage: "100.00", discount_policy_configured: false, can_approve_discount: false, discount_role: "" })
+  const [targetId, setTargetId] = useState(initialReceivableId)
   const [state, setState] = useState('pending')
   const [debtor, setDebtor] = useState('')
   const [page, setPage] = useState(1)
@@ -73,11 +74,11 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
     let ignore = false
     if (!access?.view) {setData({count:0,results:[],next:null,previous:null});setSelected(null);setHistory(null);setLoading(false);return}
     setLoading(true)
-    void Promise.all([getReceivables(store.id,page,state,debtor), getPaymentOptions(store.id)])
+    void Promise.all([getReceivables(store.id,page,targetId===undefined?state:'all',debtor,targetId), getPaymentOptions(store.id)])
       .then(([rows,nextOptions]) => { if (!ignore) { setData(rows); setOptions(nextOptions) } })
       .catch((err: unknown) => { if (!ignore) setError(failure(err)) }).finally(() => { if (!ignore) setLoading(false) })
     return () => { ignore = true }
-  }, [store.id,page,state,debtor,reload,access?.view,access?.receive,access?.balances])
+  }, [store.id,page,state,debtor,targetId,reload,access?.view,access?.receive,access?.balances])
 
   function preferredAccount(kind?: string) {
     return kind === 'cash'
@@ -119,8 +120,11 @@ export default function Receivables({ store, userId, onSavingChange, onDirtyChan
     {error && <p className="erp-alert" role="alert">{error}</p>}{success && <p className="erp-sales-success" role="status">{success}</p>}
 
     {access.balances && options.can_view_balances && <div className="erp-receiving-accounts">{options.accounts.map((account) => <div className="erp-card" key={account.id}><span className="erp-card-label">{account.name}</span><h2>{money.format(Number(account.balance))}</h2><p className="erp-sales-hint">Saldo dos recebimentos registrados no Lentis.</p></div>)}</div>}
-    <div className="erp-card"><div className="erp-sales-toolbar"><label>Situação<select aria-label="Situação" value={state} disabled={busy || !!pending} onChange={(event) => {setState(event.target.value);setPage(1)}}><option value="pending">A receber</option><option value="paid">Recebidas</option><option value="cancelled">Canceladas</option><option value="all">Todas</option></select></label><label>Responsável<select aria-label="Responsável" value={debtor} disabled={busy || !!pending} onChange={(event) => {setDebtor(event.target.value);setPage(1)}}><option value="">Todos</option><option value="customer">Cliente</option><option value="operator">Operadora de cartão</option></select></label><span>{data.count} parcelas</span><button className="erp-secondary-button" disabled={busy || loading} onClick={() => setReload((number)=>number+1)}>Atualizar</button></div>
-      {loading ? <p role="status">Carregando recebimentos…</p> : !data.results.length ? <p>Nenhuma parcela nesta situação.</p> : <>
+    <div className="erp-card"><div className="erp-sales-toolbar">{targetId!==undefined
+      ? <><strong>Parcela da Agenda financeira</strong><button type="button" className="erp-secondary-button" disabled={busy||!!pending}
+        onClick={()=>{setTargetId(undefined);setPage(1)}}>Mostrar lista de recebimentos</button></>
+      : <><label>Situação<select aria-label="Situação" value={state} disabled={busy || !!pending} onChange={(event) => {setState(event.target.value);setPage(1)}}><option value="pending">A receber</option><option value="paid">Recebidas</option><option value="cancelled">Canceladas</option><option value="all">Todas</option></select></label><label>Responsável<select aria-label="Responsável" value={debtor} disabled={busy || !!pending} onChange={(event) => {setDebtor(event.target.value);setPage(1)}}><option value="">Todos</option><option value="customer">Cliente</option><option value="operator">Operadora de cartão</option></select></label></>}<span>{data.count} parcela(s)</span><button className="erp-secondary-button" disabled={busy || loading} onClick={() => setReload((number)=>number+1)}>Atualizar</button></div>
+      {loading ? <p role="status">Carregando recebimentos…</p> : !data.results.length ? <p>{targetId!==undefined?'Parcela indisponível nesta unidade.':'Nenhuma parcela nesta situação.'}</p> : <>
         <div className="erp-customer-table-wrap erp-receipts-table">
           <table className="erp-customer-table">
             <thead><tr><th>Venda / parcela</th><th>Responsável</th><th>Vencimento</th><th>Valor</th><th>Recebido líquido</th><th>Saldo</th><th>Situação</th><th>Ação</th></tr></thead>

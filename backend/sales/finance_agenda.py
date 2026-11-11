@@ -79,9 +79,9 @@ def agenda_day_rows(store, day):
     incoming, outgoing = agenda_sources(store, day, day)
     inbound_total = incoming.aggregate(total=Sum('remaining'))['total'] or ZERO
     outbound_total = outgoing.aggregate(total=Sum('remaining'))['total'] or ZERO
-    fields = ['row_id','direction','group','document','party','number','original','settled_amount','remaining_amount']
+    fields = ['row_id','direction','group','document','party','number','original','settled_amount','remaining_amount','target_id','installment_id']
     incoming = incoming.annotate(
-        row_id=Concat(Value('REC-'),Cast('pk',CharField())),
+        row_id=Concat(Value('REC-'),Cast('pk',CharField())), target_id=F('pk'), installment_id=F('pk'),
         direction=Value('Entrada'), group=Case(When(debtor='operator',then=Value('Repasse de cartão')),default=Value('Cliente'),output_field=CharField()),
         document=Concat(Value('Venda #'),Cast('payment__sale_id',CharField())),
         party=Case(When(debtor='operator',then=Concat(Value('Operadora · '),F('payment__method_name'))),
@@ -89,7 +89,7 @@ def agenda_day_rows(store, day):
         original=F('amount'),settled_amount=F('settled'),remaining_amount=F('remaining'),
     )
     outgoing = outgoing.annotate(
-        row_id=Concat(Value('PAG-'),Cast('pk',CharField())),
+        row_id=Concat(Value('PAG-'),Cast('pk',CharField())), target_id=F('plan_id'), installment_id=F('pk'),
         direction=Value('Saída'), group=Case(When(plan__purchase__isnull=False,then=Value('Compra')),default=Value('Despesa'),output_field=CharField()),
         document=Case(When(plan__purchase__isnull=False,then=Concat(Value('Compra #'),Cast('plan__purchase_id',CharField()))),
                       default=Concat(Value('Despesa #'),Cast('plan_id',CharField())),output_field=CharField()),
