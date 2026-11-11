@@ -1,13 +1,14 @@
 import { useInsightAccess } from '../hooks/useInsightAccess'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { getReport, getReportOptions, exportReport, reportPrintUrl } from '../api'
+import { ApiError, getReport, getReportOptions, exportReport, reportPrintUrl } from '../api'
 import type { AccessibleStore, AgendaTarget, ReportColumn, ReportData, ReportFilters, ReportKind, ReportOptions } from '../api'
 import { displayDate, failure, signedDecimal } from './saleMoney'
 import './Reports.css'
 import AgendaDayDialog from './AgendaDayDialog'
 
-type Props={store:AccessibleStore;onSavingChange:(value:boolean)=>void;onOpenAgendaTarget:(target:AgendaTarget)=>void}
+export type AgendaReturn={filters:ReportFilters;page:number;date:string}
+type Props={store:AccessibleStore;onSavingChange:(value:boolean)=>void;onOpenAgendaTarget:(target:AgendaTarget,returnTo:AgendaReturn)=>void;agendaReturn?:AgendaReturn}
 function currency(value:string){const cents=signedDecimal(value);if(cents===null)return '—';const amount=cents<0n?-cents:cents;return `${cents<0n?'− ':''}R$ ${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(amount/100n)},${(amount%100n).toString().padStart(2,'0')}`}
 function offsetDate(day:string,days:number){const date=new Date(`${day}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function defaults(report:ReportKind,start:string,end:string):ReportFilters{return {report,start:report==='agenda'?end:start,end:report==='agenda'?offsetDate(end,29):end,status:report==='receivables'?'all':'pending',debtor:'all',direction:'all',account_id:null,...(report==='receivables'?{all_dates:true,customer:'',sale_id:null,method:'all',risk:'all',aging:'all',warning_days:7}:{})}}
@@ -31,7 +32,7 @@ function CompactReportCards({data,onDay,disabled}:{data:ReportData;onDay:(day:st
   </ul>
 }
 
-export default function Reports({store,onSavingChange,onOpenAgendaTarget}:Props){
+export default function Reports({store,onSavingChange,onOpenAgendaTarget,agendaReturn}:Props){
   const [options,setOptions]=useState<ReportOptions|null>(null)
   const [draft,setDraft]=useState<ReportFilters|null>(null)
   const [applied,setApplied]=useState<ReportFilters|null>(null)
@@ -51,8 +52,31 @@ export default function Reports({store,onSavingChange,onOpenAgendaTarget}:Props)
   const changed=!equal(draft,applied)
   const compactReport=data?.filters.report==='expenses'||data?.filters.report==='agenda'
   useEffect(()=>{onSavingChange(exporting);return()=>onSavingChange(false)},[exporting,onSavingChange])
-  useEffect(()=>{if(!anyReports)return;let ignore=false;setLoadingOptions(true);setError('');setOptions(null);setData(null);setApplied(null);setDraft(null);void getReportOptions(store.id).then(value=>{if(ignore)return;setOptions(value);if(value.reports[0]){const initial=defaults(value.reports[0].key,value.start,value.end);setDraft(initial);setApplied(initial);setPage(1)}}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoadingOptions(false)});return()=>{ignore=true}},[store.id,retryOptions,rightsKey,anyReports])
-  useEffect(()=>{if(!applied||!rights.access?.reports[applied.report])return;let ignore=false;setLoading(true);setError('');setData(null);void getReport(store.id,applied,page).then(value=>{if(!ignore)setData(value)}).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoading(false)});return()=>{ignore=true}},[store.id,applied,page,reload,rightsKey])
+  useEffect(()=>{
+    if(!anyReports)return
+    let ignore=false
+    setLoadingOptions(true);setError('');setOptions(null);setData(null);setApplied(null);setDraft(null);setAgendaDay(null)
+    void getReportOptions(store.id).then(value=>{
+      if(ignore)return
+      setOptions(value)
+      const resume=agendaReturn && value.reports.some(report=>report.key==='agenda') ? agendaReturn : undefined
+      const initial=resume?.filters ?? (value.reports[0] ? defaults(value.reports[0].key,value.start,value.end) : null)
+      setDraft(initial);setApplied(initial);setPage(resume?.page ?? 1);setAgendaDay(resume?.date ?? null)
+    }).catch(e=>{if(!ignore)setError(failure(e))}).finally(()=>{if(!ignore)setLoadingOptions(false)})
+    return()=>{ignore=true}
+  },[store.id,retryOptions,rightsKey,anyReports,agendaReturn])
+  useEffect(()=>{
+    if(!applied||!rights.access?.reports[applied.report])return
+    let ignore=false
+    setLoading(true);setError('');setData(null)
+    void getReport(store.id,applied,page).then(value=>{if(!ignore)setData(value)}).catch(e=>{
+      if(ignore)return
+      // A baixa pode ter removido a última linha da página anterior.
+      if(applied.report==='agenda'&&page>1&&e instanceof ApiError&&e.status===404){setPage(1);return}
+      setError(failure(e))
+    }).finally(()=>{if(!ignore)setLoading(false)})
+    return()=>{ignore=true}
+  },[store.id,applied,page,reload,rightsKey])
   function changeKind(kind:ReportKind){if(!applied||exporting||!options?.reports.some(r=>r.key===kind))return;const next=defaults(kind,applied.report==='agenda'?options.start:applied.start,kind==='agenda'||applied.report==='agenda'?options.end:applied.end);setDraft(next);setApplied(next);setPage(1);setSuccess('')}
   function change<K extends keyof ReportFilters>(key:K,value:ReportFilters[K]){if(!draft||exporting)return;setDraft({...draft,[key]:value});setSuccess('')}
   function period(preset:string){
@@ -102,6 +126,6 @@ export default function Reports({store,onSavingChange,onOpenAgendaTarget}:Props)
       aria-label={'Ver compromissos de '+displayDate(row.due_date)} onClick={()=>setAgendaDay(row.due_date)}>Ver compromissos</button></td>}</tr>)}</tbody></table></div>{compactReport&&<CompactReportCards data={data} onDay={setAgendaDay} disabled={changed||exporting} />}</>:<p className="report-empty">Nenhum registro corresponde aos filtros aplicados.</p>}<div className="report-pagination"><button type="button" disabled={loading||exporting||changed||!data.previous} onClick={()=>setPage(v=>v-1)}>Página anterior</button><span>Página {page} · {data.count} registro(s)</span><button type="button" disabled={loading||exporting||changed||!data.next} onClick={()=>setPage(v=>v+1)}>Próxima página</button></div><p className="report-note">O CSV inclui todas as páginas dos filtros aplicados, até {new Intl.NumberFormat('pt-BR').format(options.max_export_rows)} registros por arquivo. {data.filters.report==='receivables'&&`A impressão/PDF inclui todas as páginas, até ${options.max_print_rows} parcelas, e exige permissão de exportação. `}Se exceder esses limites, refine os filtros.</p></div>
     </>}
     </>}
-    {agendaDay&&<AgendaDayDialog key={store.id+'-'+agendaDay} storeId={store.id} storeName={store.name} date={agendaDay} onOpenTarget={onOpenAgendaTarget} onClose={()=>setAgendaDay(null)} />}
+    {agendaDay&&applied?.report==='agenda'&&<AgendaDayDialog key={store.id+'-'+agendaDay} storeId={store.id} storeName={store.name} date={agendaDay} onOpenTarget={target=>onOpenAgendaTarget(target,{filters:applied,page,date:agendaDay})} onClose={()=>setAgendaDay(null)} />}
   </section>
 }

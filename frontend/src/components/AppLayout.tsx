@@ -15,6 +15,7 @@ import type { SaleAccess } from '../api'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, createCustomer, createProduct, deleteCustomer, deleteProduct, getMyCustomers, getMyProducts, getMyStores, updateCustomer, updateProduct } from '../api'
+import type { AgendaReturn } from './Reports'
 import type { AccessibleStore, AgendaTarget, CurrentUser, Customer, CustomerPayload, Product, ProductPayload, ServiceOrderInitialQueue, ThemePreference } from '../api'
 import ThemeSelect from './ThemeSelect'
 import StockMovements from './StockMovements'
@@ -117,6 +118,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     setMenuOpen(false)
   }, [page])
   const [agendaTarget, setAgendaTarget] = useState<AgendaTarget>()
+  const [agendaReturn, setAgendaReturn] = useState<AgendaReturn>()
   const [payablePurchaseId, setPayablePurchaseId] = useState<number | undefined>(undefined)
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null)
   const [orderSaleId, setOrderSaleId] = useState<number | undefined>(undefined)
@@ -482,6 +484,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     if (!leaveSaleAllowed()) return
     setMenuOpen(false)
     setAgendaTarget(undefined)
+    setAgendaReturn(undefined)
     if (nextPage === 'Contas a pagar') setPayablePurchaseId(undefined)
     if (nextPage === 'Vendas') { setSalesStartNew(false); setDashboardSaleId(undefined) }
     if (nextPage === 'Ordens de serviço') { setOrderSaleId(undefined); setOrderQueue(undefined) }
@@ -489,12 +492,21 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     setPage(nextPage)
   }
 
-  function openAgendaTarget(target: AgendaTarget) {
+  function openAgendaTarget(target: AgendaTarget, returnTo: AgendaReturn) {
     if (!leaveSaleAllowed()) return
     setPayablePurchaseId(undefined)
     setAgendaTarget(target)
+    setAgendaReturn(returnTo)
     setOpenGroup('Gestão')
     setPage(target.kind === 'receivable' ? 'Financeiro' : 'Contas a pagar')
+  }
+
+  function returnToAgenda() {
+    if (savingSale || !leaveSaleAllowed()) return
+    setAgendaTarget(undefined)
+    setMenuOpen(false)
+    setOpenGroup('Gestão')
+    setPage('Relatórios')
   }
 
   function dashboardAction(action: DashboardAction, id?: number) {
@@ -523,7 +535,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
     setProducts([])
     setStockProductId('')
     setSalesStartNew(false); setDashboardSaleId(undefined)
-    setPayablePurchaseId(undefined); setAgendaTarget(undefined)
+    setPayablePurchaseId(undefined); setAgendaTarget(undefined); setAgendaReturn(undefined)
     setOrderSaleId(undefined); setOrderQueue(undefined); setQuoteDueOnly(false)
     setSelectedStoreId(storeId)
   }
@@ -658,7 +670,7 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
           ) : page === 'Caixa' ? (
             <CashRegister key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Financeiro' ? (
-            <Receivables key={selectedStore.id} store={selectedStore} userId={user.id} initialReceivableId={agendaTarget?.kind==='receivable'?agendaTarget.id:undefined} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+            <Receivables key={selectedStore.id} store={selectedStore} userId={user.id} initialReceivableId={agendaTarget?.kind==='receivable'?agendaTarget.id:undefined} onBackToAgenda={agendaTarget?.kind==='receivable'?returnToAgenda:undefined} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Transferências de estoque' && access?.transfers?.view ? (
             <Suspense fallback={<p role="status">Carregando transferências…</p>}>
               <StockTransfers key={selectedStore.id} store={selectedStore} userId={user.id}
@@ -729,12 +741,12 @@ export default function AppLayout({ user, busy, error, onLogout, onThemeSaved, o
           ) : page === 'Histórico do cliente' && historyCustomerId ? (
             <CustomerHistory key={`${selectedStore.id}.${historyCustomerId}`} store={selectedStore} customerId={historyCustomerId} onBack={() => setPage('Clientes')} onSale={(id) => { setSalesStartNew(false); setDashboardSaleId(id); setPage('Vendas'); setOpenGroup('Comercial') }} onOrder={(id) => { setOrderSaleId(id); setOrderQueue(undefined); setPage('Ordens de serviço'); setOpenGroup('Operação') }} />
           ) : page === 'Compras' ? (
-            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={purchaseRights.access?.payables.view ? id => { if (leaveSaleAllowed()) { setAgendaTarget(undefined); setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } } : undefined} />
+            <Purchases key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} onPayables={purchaseRights.access?.payables.view ? id => { if (leaveSaleAllowed()) { setAgendaTarget(undefined); setAgendaReturn(undefined); setPayablePurchaseId(id); setOpenGroup('Gestão'); setPage('Contas a pagar') } } : undefined} />
           ) : page === 'Relatórios' ? (
-            <Reports key={selectedStore.id} store={selectedStore} onSavingChange={setSavingSale} onOpenAgendaTarget={openAgendaTarget} />
+            <Reports key={selectedStore.id} store={selectedStore} onSavingChange={setSavingSale} onOpenAgendaTarget={openAgendaTarget} agendaReturn={agendaReturn} />
           ) : page === 'Contas a pagar' ? (
             <Payables key={selectedStore.id} store={selectedStore} userId={user.id} initialPurchaseId={payablePurchaseId}
-              initialAgendaTarget={agendaTarget?.kind==='payable'?agendaTarget:undefined} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
+              initialAgendaTarget={agendaTarget?.kind==='payable'?agendaTarget:undefined} onBackToAgenda={agendaTarget?.kind==='payable'?returnToAgenda:undefined} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Fornecedores' ? (
             <Suppliers key={selectedStore.id} store={selectedStore} userId={user.id} onSavingChange={setSavingSale} onDirtyChange={setSaleDirty} />
           ) : page === 'Clientes' ? (
